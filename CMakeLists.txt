@@ -26,9 +26,13 @@ SET(CMAKE_C_STANDARD 11)
 
 SET(CMAKE_EXPORT_COMPILE_COMMANDS true)
 
+SET(KLOVER_SRC_DIR ${PROJECT_SOURCE_DIR}/src)
+
 SET(COMPONENTS
     memory
 )
-add_subdirectory(${COMPONENTS})
 
-target_include_directories(${PROJECT_SOURCE_DIR})
+foreach(item ${COMPONENTS})
+    add_subdirectory(${KLOVER_SRC_DIR}/${item})
+endforeach()
+

@@ -19,9 +19,10 @@
 # under the License.
 #
 
-[workspace]
+[package]
+name = "klover"
+version = "0.1.0"
+edition = "2021"
 
-members = [
-    "thread",
-]
-
+[build_dependencies]
+bindgen = "0.65.1"
