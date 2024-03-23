@@ -19,8 +19,16 @@
 # under the License.
 #
 
-[workspace]
+cmake_minimum_required(VERSION 3.26)
+project(klover C)
 
-members = [
-    "thread",
-]
+SET(CMAKE_C_STANDARD 11)
+
+SET(CMAKE_EXPORT_COMPILE_COMMANDS true)
+
+SET(COMPONENTS
+    memory
+)
+add_subdirectory(${COMPONENTS})
+
+target_include_directories(${PROJECT_SOURCE_DIR})
