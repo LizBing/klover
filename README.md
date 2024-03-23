@@ -1,3 +1,3 @@
 # Klover Runtime  
-Another well-performing language runtime written in Rust.  
+Another well-performing language runtime written in Rust & C.  
 In memory of one of my best friends Clover...
