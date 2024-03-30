@@ -19,4 +19,13 @@
  * under the License.
  */
 
-pub mod runtime;
+#include "runtime/mutex.h"
+#include "runtime/threadCritical.h"
+
+static Mutex* _mtx;
+
+void ThreadCritical_init() { _mtx = new_Mutex(); }
+
+void ThreadCritical_begin() { Mutex_lock(_mtx); }
+
+void ThreadCritical_end() { Mutex_unlock(_mtx); }

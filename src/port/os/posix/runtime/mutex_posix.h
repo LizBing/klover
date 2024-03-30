@@ -19,4 +19,12 @@
  * under the License.
  */
 
-pub mod runtime;
+#ifndef RUNTIME_MUTEX_POSIX_H
+#define RUNTIME_MUTEX_POSIX_H
+
+#include <pthread.h>
+
+typedef pthread_mutex_t Mutex;
+
+#endif // RUNTIME_MUTEX_POSIX_H
+

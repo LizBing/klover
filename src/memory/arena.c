@@ -19,4 +19,11 @@
  * under the License.
  */
 
-pub mod runtime;
+#include "memory/allocation.h"
+#include "util/llist.h"
+
+static const int _pools = 4;
+
+struct Arena {
+    ;
+};

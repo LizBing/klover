@@ -19,4 +19,14 @@
  * under the License.
  */
 
-pub mod runtime;
+#ifndef RUNTIME_THREADCRITICAL_H
+#define RUNTIME_THREADCRITICAL_H
+
+// called when the universe is being constructed
+void ThreadCritical_init();
+
+void ThreadCritical_begin();
+void ThreadCritical_end();
+
+#endif // RUNTIME_THREADCRITICAL_H
+

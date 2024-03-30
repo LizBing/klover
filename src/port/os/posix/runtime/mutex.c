@@ -19,4 +19,22 @@
  * under the License.
  */
 
-pub mod runtime;
+#include "memory/allocation.h"
+#include "runtime/mutex.h"
+#include "util/globalDefinitions.h"
+
+Mutex* new_Mutex() {
+    Mutex* m = CHeap_alloc(sizeof(Mutex));
+    pthread_mutex_init(m, NULL);
+
+    return m;
+}
+
+void delete_Mutex(Mutex* this) {
+    pthread_mutex_destroy(this);
+    CHeap_free(this);
+}
+
+inline void Mutex_lock(Mutex* this) { pthread_mutex_lock(this); }
+inline void Mutex_unlock(Mutex* this) { pthread_mutex_unlock(this); }
+inline bool Mutex_try_lock(Mutex* this) { return pthread_mutex_trylock(this); }

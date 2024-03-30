@@ -19,4 +19,17 @@
  * under the License.
  */
 
-pub mod runtime;
+#include <stdlib.h>
+
+#include "memory/allocation.h"
+
+void* CHeap_alloc(size_t size) {
+    void* n = malloc(size);
+    assert(n, "C heap OOM");
+
+    return n;
+}
+
+void CHeap_free(void* n) { free(n); } 
+
+

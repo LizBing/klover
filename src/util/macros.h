@@ -19,4 +19,26 @@
  * under the License.
  */
 
-pub mod runtime;
+#ifndef UTIL_MACROS_H
+#define UTIL_MACROS_H
+
+#define STR(x) #x
+#define XSTR(x) STR(x)
+
+#define PASTE_TOKENS_AUX(x, y) x ## y
+#define PASTE_TOKENS(x, y) PASTE_TOKENS_AUX(x, y)
+
+#ifdef _LP64
+#define LP64_ONLY(x) x
+#define NOT_LP64(x)
+#else
+#define LP64_ONLY(x)
+#define NOT_LP64(x) x
+#endif
+
+#define OS_HEADER_STEM(basename) PASTE_TOKENS(basename, INCLUDE_SUFFIX_OS)
+
+#define OS_HEADER(basename) XSTR(OS_HEADER_STEM(basename).h)
+
+#endif // UTIL_MACROS_H
+

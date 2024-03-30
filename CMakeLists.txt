@@ -28,8 +28,16 @@ SET(CMAKE_EXPORT_COMPILE_COMMANDS true)
 
 SET(KLOVER_SRC_DIR ${PROJECT_SOURCE_DIR}/src)
 
+include(cmake/config.cmake)
+
+include_directories(
+    ${KLOVER_SRC_DIR} 
+    ${KLOVER_SRC_DIR}/port/os/${OS}
+)
+
 SET(COMPONENTS
     memory
+    runtime
 )
 
 foreach(item ${COMPONENTS})

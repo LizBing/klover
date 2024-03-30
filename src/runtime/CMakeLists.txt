@@ -19,9 +19,6 @@
 # under the License.
 #
 
-if(UNIX)
-    set(OS posix)
-endif()
-
-# add_definitions(-DOS_NAME=${OS})
-add_compile_definitions(INCLUDE_SUFFIX_OS=_${OS})
+aux_source_directory(. RUNTIME_SRC)
+aux_source_directory(${KLOVER_SRC_DIR}/port/os/${OS}/runtime RUNTIME_SRC)
+add_library(runtime ${RUNTIME_SRC})

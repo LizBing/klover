@@ -19,4 +19,18 @@
  * under the License.
  */
 
-pub mod runtime;
+#ifndef RUNTIME_MUTEX_H
+#define RUNTIME_MUTEX_H
+
+#include "util/globalDefinitions.h"
+
+#include OS_HEADER(runtime/mutex)
+
+Mutex* new_Mutex();
+void delete_Mutex(Mutex*);
+
+void Mutex_lock(Mutex*);
+void Mutex_unlock(Mutex*);
+bool Mutex_try_lock(Mutex*);
+
+#endif // RUNTIME_MUTEX_H
