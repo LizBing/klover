@@ -37,7 +37,6 @@
 #endif
 
 #define OS_HEADER_STEM(basename) PASTE_TOKENS(basename, INCLUDE_SUFFIX_OS)
-
 #define OS_HEADER(basename) XSTR(OS_HEADER_STEM(basename).h)
 
 #endif // UTIL_MACROS_H

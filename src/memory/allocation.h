@@ -24,7 +24,7 @@
 
 #include "util/globalDefinitions.h"
 
-void* CHeap_alloc(size_t);
+void* CHeap_alloc(size_t);  // zapped
 void CHeap_free(void*);
 
 // a hotspot-style Arena
@@ -46,6 +46,4 @@ void* Arena_alloc(Arena*, size_t);
 void Arena_try_free(Arena*, void*, size_t);
 void* Arena_realloc(Arena*, void*, size_t old_size, size_t new_size);
 
-
 #endif // MEMORY_ALLOCATION_H_
-

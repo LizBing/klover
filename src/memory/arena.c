@@ -22,7 +22,48 @@
 #include "memory/allocation.h"
 #include "util/llist.h"
 
-static const int _pools = 4;
+typedef struct Chunk Chunk;
+struct Chunk {
+    size_t _len;
+
+    Chunk* next;
+    byte start[0];
+};
+
+Chunk* new_Chunk(size_t len) {
+    Chunk* this = CHeap_alloc(sizeof(Chunk) + len); 
+    this->_len = len;
+
+    return this;
+}
+
+void delete_Chunk(Chunk* this) { CHeap_free(this); }
+
+inline size_t Chunk_length(Chunk* this) { return this->_len; }
+
+typedef struct {
+    Chunk* _first;
+    int _chunks;
+
+    size_t _size;   // size of a single managed chunk
+} ChunkPool;
+
+static const int _num_pools = 4;
+static ChunkPool _pools[_num_pools] = {
+    { ._size = ArenaChunk_tiny_size },
+    { ._size = ArenaChunk_init_size },
+    { ._size = ArenaChunk_medium_size },
+    { ._size = ArenaChunk_size }
+};
+
+ChunkPool* get_pool_for_size(size_t s) {
+    for (int i = 0; i < _num_pools; ++i) {
+        ChunkPool* p = _pools + i;
+        if (p->_size == s) return p;
+    }
+
+    return NULL;
+}
 
 struct Arena {
     ;

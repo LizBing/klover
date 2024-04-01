@@ -27,9 +27,9 @@
 typedef struct LListNode {
     struct LListNode* prev;
     struct LListNode* next;
-} LListNode, LList;
+} LListNode, LList, *LListIterator;
 
-static inline void LListNode_insert(LListNode* pos, LListNode* n) {
+static inline void LListNode_insert(LListIterator pos, LListNode* n) {
     LListNode* next = pos->next;
 
     n->next = next;
@@ -39,7 +39,7 @@ static inline void LListNode_insert(LListNode* pos, LListNode* n) {
     next->prev = n;
 }
 
-static inline void LListNode_erase(LListNode* pos) {
+static inline void LListNode_erase(LListIterator pos) {
     LListNode* next = pos->next;
     LListNode* prev = pos->prev;
 
@@ -85,7 +85,7 @@ static inline bool LList_empty(LList* this) {
 }
 
 static inline bool LList_iterate(LList* this, bool(*func)(LListNode*, void*), void* arg) {
-    for (LListNode* iter = LList_begin(this); iter != LList_end(this); iter = iter->next) 
+    for (LListIterator iter = LList_begin(this); iter != LList_end(this); iter = iter->next) 
         if (!func(iter, arg))
             return false;
     return true;
@@ -94,7 +94,7 @@ static inline bool LList_iterate(LList* this, bool(*func)(LListNode*, void*), vo
 static inline bool LList_doReservedIteration(
     LList* this, bool(*func)(LListNode*, void*), void* arg
 ) {
-    for (LListNode* iter = LList_last(this); iter != LList_end(this); iter = iter->prev)
+    for (LListIterator iter = LList_last(this); iter != LList_end(this); iter = iter->prev)
         if (!func(iter, arg))
             return false;
 

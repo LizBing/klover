@@ -30,6 +30,7 @@
 #include "util/macros.h"
 
 typedef const char* str;
+typedef int8_t byte;
 
 typedef intptr_t intx;
 typedef uintptr_t uintx;

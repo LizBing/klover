@@ -25,6 +25,7 @@
 // called when the universe is being constructed
 void ThreadCritical_init();
 
+// would be called by rust part. should not be inlined
 void ThreadCritical_begin();
 void ThreadCritical_end();
 

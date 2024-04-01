@@ -24,12 +24,10 @@
 #include "memory/allocation.h"
 
 void* CHeap_alloc(size_t size) {
-    void* n = malloc(size);
+    void* n = calloc(1, size);
     assert(n, "C heap OOM");
 
     return n;
 }
 
 void CHeap_free(void* n) { free(n); } 
-
-
