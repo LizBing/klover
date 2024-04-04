@@ -19,8 +19,16 @@
  * under the License.
  */
 
-pub mod gc;
-pub mod memory;
-pub mod runtime;
+#ifndef UTIL_ALIGN_H
+#define UTIL_ALIGN_H
 
-const ALIGNMENT: usize = 8;
+#define align_down(n, a) ((n) & ~(a - 1))
+#define align_up(n, a) (align_down((n) + a - 1, a))
+
+#define alignment_mask(a) (a - 1)
+
+#define is_aligned(n, a) ((n & alignment_mask(a)) == 0)
+  
+
+#endif // UTIL_ALIGN_H
+

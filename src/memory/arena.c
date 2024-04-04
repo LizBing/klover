@@ -20,7 +20,11 @@
  */
 
 #include "memory/allocation.h"
+#include "runtime/threadCritical.h"
+#include "util/align.h"
 #include "util/llist.h"
+
+static const int ARENA_ALIGNMENT = bytesPerWord;
 
 typedef struct Chunk Chunk;
 struct Chunk {
@@ -37,16 +41,41 @@ Chunk* new_Chunk(size_t len) {
     return this;
 }
 
-void delete_Chunk(Chunk* this) { CHeap_free(this); }
-
 inline size_t Chunk_length(Chunk* this) { return this->_len; }
 
 typedef struct {
-    Chunk* _first;
-    int _chunks;
-
+    Chunk* _top;
     size_t _size;   // size of a single managed chunk
 } ChunkPool;
+
+void ChunkPool_push(ChunkPool* this, Chunk* n) {
+    assert(this->_size == Chunk_length(n), "wrong pool");
+
+    ThreadCritical_begin();
+
+    n->next = this->_top;
+    this->_top = n;
+
+    ThreadCritical_end();
+}
+
+Chunk* ChunkPool_pop(ChunkPool* this) {
+    ThreadCritical_begin();
+
+    Chunk* n = this->_top;
+    if (n != NULL) 
+        this->_top = n->next;
+
+    ThreadCritical_end();
+
+    return n;
+}
+
+void ChunkPool_clear(ChunkPool* this) {
+    for (Chunk* iter = this->_top; iter != NULL; iter = iter->next)
+        CHeap_free(iter);
+    this->_top = NULL;
+}
 
 static const int _num_pools = 4;
 static ChunkPool _pools[_num_pools] = {
@@ -65,6 +94,25 @@ ChunkPool* get_pool_for_size(size_t s) {
     return NULL;
 }
 
+Chunk* allocate_chunk(size_t length) {
+    assert(is_aligned(length, ARENA_ALIGNMENT), "should be aligned");
+
+    ChunkPool* p = get_pool_for_size(length);
+    Chunk* c = NULL;
+    if (p != NULL)
+        c = ChunkPool_pop(p);
+    if (c == NULL)
+        c = new_Chunk(length);
+
+    return c;
+}
+
 struct Arena {
-    ;
+    Chunk* _bottom;
+    Chunk* _top;
+
+    byte* _begin;
+    byte* _end;
 };
+
+

@@ -29,6 +29,8 @@ void CHeap_free(void*);
 
 // a hotspot-style Arena
 typedef struct Arena Arena;
+typedef struct ArenaMark ArenaMark;
+
 typedef enum {
   ArenaChunk_slack = LP64_ONLY(40) NOT_LP64(24),
 
@@ -45,5 +47,11 @@ void delete_Arena(Arena*);
 void* Arena_alloc(Arena*, size_t);
 void Arena_try_free(Arena*, void*, size_t);
 void* Arena_realloc(Arena*, void*, size_t old_size, size_t new_size);
+
+ArenaMark* new_ArenaMark();
+void delete_ArenaMark(ArenaMark*);
+
+void Arena_mark(Arena*, ArenaMark*);
+void Arena_restore(Arena*, ArenaMark*);
 
 #endif // MEMORY_ALLOCATION_H_

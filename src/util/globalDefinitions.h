@@ -76,15 +76,12 @@ static const int bitsPerInt = 1 << logBitsPerInt;
 static const int bitsPerVMLong = 1 << logBitsPerVMLong;
 static const int bitsPerWord = 1 << logBitsPerWord;
 
-#define align_down(n, a) ((n) & ~(a - 1))
-#define align_up(n, a) (align_down((n) + a - 1, a))
-
 // Linux-style generic programming
 #define containerof(ptr, type, member) \
     ((type*)((intptr_t)ptr - (intptr_t)&((type*)0)->member))
 
 #define assert(expr, ...) do {\
-    if (!(expr)) { perror(__VA_ARGS__); }\
+    if (!(expr)) perror(__VA_ARGS__);\
 } while(false)
 
 

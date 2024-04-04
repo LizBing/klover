@@ -19,8 +19,5 @@
  * under the License.
  */
 
-pub mod gc;
-pub mod memory;
-pub mod runtime;
 
-const ALIGNMENT: usize = 8;
+

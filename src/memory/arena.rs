@@ -19,8 +19,40 @@
  * under the License.
  */
 
-pub mod gc;
-pub mod memory;
-pub mod runtime;
+use crate::memory::*;
+use std::mem::size_of;
 
-const ALIGNMENT: usize = 8;
+impl Chunk {
+    pub fn new(len: usize) -> &'static mut Chunk {
+        let c = CHeap_alloc::<Chunk>(size_of::<Chunk>() + len);
+        unsafe {
+            (*c)._len = len;
+
+            return &mut *c;
+        }
+    }
+
+    pub fn length(&self) -> usize { return self._len; }
+}
+
+struct ChunkPool {
+    _top: *mut Chunk,
+    _size: usize
+}
+
+unsafe impl Sync for ChunkPool {}
+
+const _num_pools: usize = 4;
+static _pools: [ChunkPool; _num_pools] = [];
+
+impl ChunkPool {
+    fn select(s: usize) -> Result<&'static ChunkPool, ()> {
+        for i in 0.._num_pools {
+            if _pools[i]._size == s {
+                return Ok(&_pools[i]);
+            }
+        }
+        return Err(());
+    }
+
+}

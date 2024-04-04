@@ -19,8 +19,53 @@
  * under the License.
  */
 
-pub mod gc;
-pub mod memory;
-pub mod runtime;
+pub mod arena;
 
-const ALIGNMENT: usize = 8;
+extern "C" {
+    fn CHeap_allocate(s: usize) -> *mut i8;
+    fn CHeap_dealloc(p: *mut i8);
+}
+
+pub fn CHeap_alloc<T>(s: usize) -> *mut T {
+    unsafe { return CHeap_allocate(s).cast(); }
+}
+
+pub fn CHeap_sized_alloc<T>() -> *mut T {
+    return CHeap_alloc(std::mem::size_of::<T>());
+}
+
+pub fn CHeap_free<T>(p: *mut T) {
+    unsafe { CHeap_dealloc(p.cast()); }
+}
+
+pub struct Obj<T> {
+    _ptr: *mut T,
+}
+
+impl<T> std::ops::Deref for Obj<T> {
+    type Target = T;
+
+    fn deref(&self) -> &T {
+        unsafe { return &*self._ptr; }
+    }
+}
+
+impl<T> std::ops::DerefMut for Obj<T> {
+    fn deref_mut(&mut self) -> &mut T {
+        unsafe { return &mut *self._ptr; }
+    }
+}
+
+struct Chunk {
+    _len: usize,
+
+    // only visible to 'ChunkPool'
+    next: *mut Chunk,
+}
+
+struct Arena {
+    _top: *mut Chunk,
+
+    _begin: *const u8,
+    _end: *const u8
+}
