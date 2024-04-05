@@ -19,57 +19,22 @@
  * under the License.
  */
 
-pub mod arena;
-
 extern "C" {
-    fn CHeap_allocate(s: usize) -> *mut i8;
-    fn CHeap_dealloc(p: *mut i8);
+    fn ThreadCritical_begin();
+    fn ThreadCritical_end();
 }
 
-pub struct AnyObj<T> {
-    _ptr: *mut T,
-}
+pub struct Guard; 
 
-impl<T> AnyObj<T> {
-    pub fn solve(&self) -> *mut T { return self._ptr; }
-}
-
-impl<T> std::ops::Deref for AnyObj<T> {
-    type Target = T;
-
-    fn deref(&self) -> &T {
-        unsafe { return &*self._ptr; }
+impl Guard {
+    pub fn new() -> Guard {
+        unsafe { ThreadCritical_begin(); }
+        return Guard;
     }
 }
 
-impl<T> std::ops::DerefMut for AnyObj<T> {
-    fn deref_mut(&mut self) -> &mut T {
-        unsafe { return &mut *self._ptr; }
-    }
-}
-
-pub fn CHeap_alloc<T>(s: usize) -> AnyObj<T> {
-    unsafe { return AnyObj { _ptr: CHeap_allocate(s).cast() }; };
-}
-
-impl<T> Drop for AnyObj<T> {
+impl Drop for Guard {
     fn drop(&mut self) {
-        unsafe { CHeap_dealloc(self.solve().cast()); }
+        unsafe { ThreadCritical_end(); }
     }
-}
-
-struct Chunk {
-    _len: usize,
-
-    // only visible to 'ChunkPool'
-    next: Option<AnyObj<Chunk>>,
-}
-
-
-
-pub struct Arena {
-    _top: Option<AnyObj<Chunk>>,
-
-    _begin: *const u8,
-    _end: *const u8
 }
