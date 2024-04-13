@@ -19,57 +19,67 @@
  * under the License.
  */
 
-pub mod arena;
-
 extern "C" {
-    fn CHeap_allocate(s: usize) -> *mut i8;
-    fn CHeap_dealloc(p: *mut i8);
+    fn CHeap_alloc(s: usize) -> *mut core::ffi::c_void;
+    fn CHeap_free(p: *mut core::ffi::c_void);
 }
 
-pub struct AnyObj<T> {
-    _ptr: *mut T,
-}
+struct CHeap;
+unsafe impl std::alloc::Allocator for CHeap {
+    fn allocate(&self, layout: std::alloc::Layout) 
+    -> Result<std::ptr::NonNull<[u8]>, std::alloc::AllocError> {
+        unsafe {
+            return Ok(
+                std::ptr::NonNull::new(CHeap_alloc(layout.size()) as *mut _)
+                .unwrap_unchecked()
+            );
+        }
+    }
 
-impl<T> AnyObj<T> {
-    pub fn solve(&self) -> *mut T { return self._ptr; }
-}
-
-impl<T> std::ops::Deref for AnyObj<T> {
-    type Target = T;
-
-    fn deref(&self) -> &T {
-        unsafe { return &*self._ptr; }
+    unsafe fn deallocate(&self, ptr: std::ptr::NonNull<u8>, 
+                         layout: std::alloc::Layout) {
+        CHeap_free(ptr.as_ptr() as *mut _);
     }
 }
 
-impl<T> std::ops::DerefMut for AnyObj<T> {
-    fn deref_mut(&mut self) -> &mut T {
-        unsafe { return &mut *self._ptr; }
+type KBox<T, A = CHeap> = Box<T, A>;
+
+type NativeArena = *const core::ffi::c_void;
+type ArenaMark = *const core::ffi::c_void;
+extern "C" {
+    fn new_Arena(init_size: usize) -> NativeArena;
+    fn delete_Arena(n: NativeArena);
+
+    fn Arena_alloc(this: NativeArena, size: usize)
+    -> *const core::ffi::c_void;
+}
+
+struct Arena {
+    _handle: NativeArena
+}
+
+impl Arena {
+    fn new(init_size: usize) -> Self {
+        return Arena {
+            _handle: unsafe { new_Arena(init_size) }
+        };
     }
 }
 
-pub fn CHeap_alloc<T>(s: usize) -> AnyObj<T> {
-    unsafe { return AnyObj { _ptr: CHeap_allocate(s).cast() }; };
-}
-
-impl<T> Drop for AnyObj<T> {
+impl Drop for Arena {
     fn drop(&mut self) {
-        unsafe { CHeap_dealloc(self.solve().cast()); }
+        unsafe { delete_Arena(self._handle); }
     }
 }
 
-struct Chunk {
-    _len: usize,
+unsafe impl std::alloc::Allocator for Arena {
+    unsafe fn deallocate(&self, ptr: std::ptr::NonNull<u8>, 
+                         layout: std::alloc::Layout) {}
 
-    // only visible to 'ChunkPool'
-    next: Option<AnyObj<Chunk>>,
+    fn allocate(&self, layout: std::alloc::Layout) 
+    -> Result<std::ptr::NonNull<[u8]>, std::alloc::AllocError> {
+        ;
+    }
 }
 
 
-
-pub struct Arena {
-    _top: Option<AnyObj<Chunk>>,
-
-    _begin: *const u8,
-    _end: *const u8
-}

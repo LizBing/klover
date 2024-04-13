@@ -31,7 +31,7 @@ struct Chunk {
     size_t _len;
 
     Chunk* next;
-    byte start[0];
+    byte begin[0];
 };
 
 Chunk* new_Chunk(size_t len) {
@@ -42,6 +42,7 @@ Chunk* new_Chunk(size_t len) {
 }
 
 inline size_t Chunk_length(Chunk* this) { return this->_len; }
+
 
 typedef struct {
     Chunk* _top;
@@ -94,6 +95,24 @@ ChunkPool* get_pool_for_size(size_t s) {
     return NULL;
 }
 
+
+void Chunk_chop(Chunk* this) {
+    Chunk* iter = this;
+    while (iter != NULL) {
+        Chunk* n = iter;
+        iter = n->next;
+
+        ChunkPool* p = get_pool_for_size(this->_len);        
+        if (p != NULL)
+            ChunkPool_push(p, n);
+        else CHeap_free(n);
+    }
+}
+
+inline void Chunk_next_chop(Chunk* this) {
+    Chunk_chop(this->next);
+}
+
 Chunk* allocate_chunk(size_t length) {
     assert(is_aligned(length, ARENA_ALIGNMENT), "should be aligned");
 
@@ -108,11 +127,27 @@ Chunk* allocate_chunk(size_t length) {
 }
 
 struct Arena {
-    Chunk* _bottom;
     Chunk* _top;
 
     byte* _begin;
     byte* _end;
 };
+
+Arena* new_Arena(size_t init_size) {
+    init_size = align_up(init_size, ARENA_ALIGNMENT);
+
+    Arena* this = CHeap_alloc(sizeof(Arena));
+
+    Chunk* n = allocate_chunk(init_size);
+    this->_top = n;
+
+    this->_begin = n->begin;
+    this->_end = n->begin + n->_len;
+}
+
+void delete_Arena(Arena* this) {
+    Chunk_chop(this->_top);
+    CHeap_free(this);
+}
 
 

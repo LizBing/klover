@@ -19,5 +19,5 @@
  * under the License.
  */
 
-pub mod api;
-pub mod interface;
+pub trait ManagedHeap {}
+
