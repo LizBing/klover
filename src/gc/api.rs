@@ -19,4 +19,36 @@
  * under the License.
  */
 
+use crate::gc::interface::*;
+
+// the base trait of all managed types
+pub trait Object {
+    fn size() -> usize;
+    fn iter() -> dyn Iterator<Item = crate::off_t>;
+}
+
+// ordinary object pointer
+struct oop<T: Object> {
+    _ptr: address
+}
+
+impl<T> oop<T> {
+    pub fn addr(&self) -> address {
+        return self._ptr;
+    }
+
+    ;
+}
+
+struct CompressedOop<T: Object> {
+    _ptr: compressed_addr
+}
+
+impl<T> CompressedOop<T> {
+    pub fn addr(&self) -> compressed_addr {
+        return self._ptr;
+    }
+
+    pub fn set_addr(&mut self) {}
+}
 

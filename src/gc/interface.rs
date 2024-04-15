@@ -19,5 +19,8 @@
  * under the License.
  */
 
+pub type address = usize;
+pub type compressed_addr = u32;
+
 pub trait ManagedHeap {}
 

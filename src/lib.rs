@@ -23,4 +23,5 @@ pub mod gc;
 pub mod memory;
 pub mod runtime;
 
-const ALIGNMENT: usize = 8;
+pub type byte = u8;
+pub type off_t = isize;
