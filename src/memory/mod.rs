@@ -19,9 +19,12 @@
  * under the License.
  */
 
+use core::ffi::c_void as void;
+use std::alloc::Layout;
+
 extern "C" {
-    fn CHeap_alloc(s: usize) -> *mut core::ffi::c_void;
-    fn CHeap_free(p: *mut core::ffi::c_void);
+    fn CHeap_alloc(s: usize) -> *const void;
+    fn CHeap_free(p: *const void);
 }
 
 struct CHeap;
@@ -30,28 +33,37 @@ unsafe impl std::alloc::Allocator for CHeap {
     -> Result<std::ptr::NonNull<[u8]>, std::alloc::AllocError> {
         unsafe {
             return Ok(
-                std::ptr::NonNull::new(CHeap_alloc(layout.size()) as *mut _)
+                std::ptr::NonNull::new_unchecked(
+                    CHeap_alloc(layout.size()) as _)
                 .unwrap_unchecked()
             );
         }
     }
 
+    fn allocate_zeroed(&self, layout: std::alloc::Layout) 
+    -> Result<std::ptr::NonNull<[u8]>, std::alloc::AllocError> {
+        return self.allocate(layout);
+    }
+
     unsafe fn deallocate(&self, ptr: std::ptr::NonNull<u8>, 
                          layout: std::alloc::Layout) {
-        CHeap_free(ptr.as_ptr() as *mut _);
+        CHeap_free(ptr.as_ptr() as _);
     }
 }
 
 type KBox<T, A = CHeap> = Box<T, A>;
 
-type NativeArena = *const core::ffi::c_void;
-type ArenaMark = *const core::ffi::c_void;
+type NativeArena = *const void;
+type NativeArenaMark = *const void;
 extern "C" {
     fn new_Arena(init_size: usize) -> NativeArena;
     fn delete_Arena(n: NativeArena);
 
-    fn Arena_alloc(this: NativeArena, size: usize)
-    -> *const core::ffi::c_void;
+    fn Arena_alloc(this: NativeArena, size: usize) -> *const void;
+    fn Arena_try_free(this: NativeArena, p: *const void, size: usize);
+    fn Arena_realloc(this: NativeArena, 
+                     p: *const void, old_size: usize, new_size: usize)
+    -> *const void;
 }
 
 struct Arena {
@@ -74,12 +86,63 @@ impl Drop for Arena {
 
 unsafe impl std::alloc::Allocator for Arena {
     unsafe fn deallocate(&self, ptr: std::ptr::NonNull<u8>, 
-                         layout: std::alloc::Layout) {}
+                         layout: std::alloc::Layout) {
+        Arena_try_free(self._handle, ptr.as_ptr() as _, layout.size());
+    }
 
     fn allocate(&self, layout: std::alloc::Layout) 
     -> Result<std::ptr::NonNull<[u8]>, std::alloc::AllocError> {
-        ;
+        unsafe {
+            return Ok(
+                std::ptr::NonNull::new_unchecked(
+                    Arena_alloc(self._handle, layout.size()) as _)
+                .unwrap_unchecked()
+            );
+        }
+    }
+
+    fn allocate_zeroed(&self, layout: std::alloc::Layout) 
+    -> Result<std::ptr::NonNull<[u8]>, std::alloc::AllocError> {
+        self.allocate(layout);
+    }
+
+    unsafe fn grow(
+            &self,
+            ptr: std::ptr::NonNull<u8>,
+            old_layout: std::alloc::Layout,
+            new_layout: std::alloc::Layout,
+        ) -> Result<std::ptr::NonNull<[u8]>, std::alloc::AllocError> {
+        return Ok(
+            std::ptr::NonNull::new_unchecked(
+                Arena_realloc(self._handle, ptr.as_ptr() as _, 
+                              old_layout.size(), new_layout.size()) as _
+            ).unwrap_unchecked()
+        );
+    }
+
+    unsafe fn grow_zeroed(
+            &self,
+            ptr: std::ptr::NonNull<u8>,
+            old_layout: Layout,
+            new_layout: Layout,
+        ) -> Result<std::ptr::NonNull<[u8]>, std::alloc::AllocError> {
+        return self.grow(ptr, old_layout, new_layout);
+    }
+
+    unsafe fn shrink(
+            &self,
+            ptr: std::ptr::NonNull<u8>,
+            old_layout: Layout,
+            new_layout: Layout,
+        ) -> Result<std::ptr::NonNull<[u8]>, std::alloc::AllocError> {
+        return Ok(
+            std::ptr::NonNull::new_unchecked(
+                Arena_realloc(self._handle, ptr.as_ptr() as _, 
+                              old_layout.size(), new_layout.size()) as _
+            ).unwrap_unchecked()
+        );
     }
 }
 
+struct ArenaMark {}
 
