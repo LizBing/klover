@@ -53,7 +53,7 @@ impl ClassFileParser {
         }
     }
 
-    pub fn parse(stream: &mut ClassFileStream) -> io::Result<Option<String>> {
+    pub fn parse(&mut self, stream: &mut ClassFileStream) -> io::Result<Option<String>> {
         let load_magic = stream.get_u4()?;
         if let Some(x) = ClassFileParser::verify_magic(load_magic) {
             return Ok(Some(x));
@@ -64,8 +64,6 @@ impl ClassFileParser {
         if let Some(x) = ClassFileParser::verify_version(load_minor, load_major) {
             return Ok(Some(x));
         }
-
-        ;
 
         Ok(None)
     }

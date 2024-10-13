@@ -21,7 +21,7 @@
 
 use std::{fs::File, io::{self, Read}};
 
-use super::{stream::ClassFileStream, GENERAL_MAJOR, LARGEST_MAJOR, MAGIC, SMALLEST_MAJOR, SPECIFIC_MINOR_0, SPECIFIC_MINOR_65535};
+use super::{parser::ClassFileParser, stream::ClassFileStream, GENERAL_MAJOR, LARGEST_MAJOR, MAGIC, SMALLEST_MAJOR, SPECIFIC_MINOR_0, SPECIFIC_MINOR_65535};
 
 pub struct ClassLoader {
     _file_path: String,
@@ -42,6 +42,12 @@ impl ClassLoader {
     }
 
     fn parse(&mut self) -> io::Result<Option<String>> {
+        let mut parser = ClassFileParser::new();
+        if let Some(x) = parser.parse(&mut self._stream)? {
+            return Ok(Some(x));
+        }
+        
+        Ok(None)
     }
 
 }
