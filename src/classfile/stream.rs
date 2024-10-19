@@ -57,4 +57,18 @@ impl ClassFileStream {
     pub fn get_u4(&mut self) -> io::Result<u32> {
         self.get::<u32>()
     }
+
+    pub fn get_byte_array(&mut self, size: usize) -> io::Result<Vec<u8>> {
+        let off = self._cursor;
+        self._cursor += size;
+
+        if off >= self._buffer.len() {
+            return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "Not enough data"))
+        }
+
+        let mut res = Vec::new();
+        res.copy_from_slice(&self._buffer[off..size]);
+
+        Ok(res)
+    }
 }

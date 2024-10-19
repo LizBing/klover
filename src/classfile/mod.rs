@@ -32,3 +32,5 @@ const LARGEST_MAJOR:        u16 =         65;
 const GENERAL_MAJOR:        u16 =         56;
 const SPECIFIC_MINOR_0:     u16 =          0;
 const SPECIFIC_MINOR_65535: u16 =      65535;
+
+const MAJOR_RANGE: std::ops::RangeInclusive<u16> = SMALLEST_MAJOR..=LARGEST_MAJOR;
