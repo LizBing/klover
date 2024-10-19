@@ -19,38 +19,14 @@
  * under the License.
  */
 
-use std::io::{self, Cursor, Read};
-use byteorder::{NetworkEndian, ReadBytesExt};
+use klover::classfile::*;
 
-pub struct ClassFileStream {
-    _cursor: Cursor<Vec<u8>>,
-}
+#[test]
+fn test_constant_loading() {
+    let path = String::from("./tests/java_files/HelloWorld/HelloWorld.class");
+    let mut loader = class_loader::ClassLoader::new(path).unwrap();
 
-impl ClassFileStream {
-    pub fn new(buffer: Vec<u8>) -> ClassFileStream {
-        ClassFileStream {
-            _cursor: Cursor::new(buffer)
-        }
-    }
-
-    pub fn get_u1(&mut self) -> io::Result<u8> {
-        self._cursor.read_u8()
-    }
-
-    pub fn get_u2(&mut self) -> io::Result<u16> {
-        self._cursor.read_u16::<NetworkEndian>()
-    }
-
-    pub fn get_u4(&mut self) -> io::Result<u32> {
-        self._cursor.read_u32::<NetworkEndian>()
-    }
-
-    pub fn get_byte_array(&mut self, size: usize) -> io::Result<Vec<u8>> {
-        let mut res = Vec::new();
-        res.reserve(size);
-        unsafe { res.set_len(size) };
-
-        self._cursor.read_exact(&mut res[..size])?;
-        Ok(res)
+    if let Some(x) = loader.parse().unwrap() {
+        panic!("{}", x);
     }
 }

@@ -67,14 +67,14 @@ impl ClassFileParser {
             return Ok(Some(x));
         }
 
-        self.load_constants(stream);
+        self.load_constants(stream)?;
 
         Ok(None)
     }
     
     fn verify_magic(n: u32) -> Option<String> {
         if n != MAGIC {
-            return Some(format!("Invaild magic: {}. Should be 0x{:X}", n, MAGIC));
+            return Some(format!("Invaild magic: 0x{:X}. Should be 0x{:X}", n, MAGIC));
         }
 
         None
@@ -85,7 +85,7 @@ impl ClassFileParser {
             return Some(format!("Invaild major version: {}. Should be [{}, {}].",
                                 major, SMALLEST_MAJOR, LARGEST_MAJOR));
         } else if major >= GENERAL_MAJOR && 
-                  (minor != SPECIFIC_MINOR_0 || minor != SPECIFIC_MINOR_65535) {
+                  !(minor == SPECIFIC_MINOR_0 || minor == SPECIFIC_MINOR_65535) {
             return Some(format!("Invaild minor version: {}. Should be {} or {}.",
                                 minor, SPECIFIC_MINOR_0, SPECIFIC_MINOR_65535));
         }

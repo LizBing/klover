@@ -20,7 +20,7 @@
  */
 
 mod access_flags;
-mod class_loader;
+pub mod class_loader;
 mod constant_pool;
 mod info_types;
 mod parser;

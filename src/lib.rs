@@ -19,7 +19,7 @@
  * under the License.
  */
 
-mod classfile;
+pub mod classfile;
 mod jni;
 mod util;
 

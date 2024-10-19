@@ -41,7 +41,7 @@ impl ClassLoader {
         })
     }
 
-    fn parse(&mut self) -> io::Result<Option<String>> {
+    pub fn parse(&mut self) -> io::Result<Option<String>> {
         let mut parser = ClassFileParser::new();
         if let Some(x) = parser.parse(&mut self._stream)? {
             return Ok(Some(x));
