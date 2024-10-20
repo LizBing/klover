@@ -19,8 +19,75 @@
  * under the License.
  */
 
-pub struct FieldInfo {}
+use std::io;
 
-pub struct MethodInfo {}
+use super::stream::ClassFileStream;
+
+pub trait InfoType: Sized {
+    fn extract(stream: &mut ClassFileStream) -> io::Result<Self>;
+
+    fn extract_vec(stream: &mut ClassFileStream, count: usize)
+        -> io::Result<Vec<Self>>
+    {
+        let mut res = Vec::new();
+        res.reserve_exact(count);
+
+        for _ in 0..count {
+            res.push(Self::extract(stream)?);
+        }
+
+        Ok(res)
+    }
+}
+
+pub struct FieldInfo {
+    _access_flags: u16,
+    _name_index: u16,
+    _desc_index: u16,
+    _attrs: Vec<AttributeInfo>
+}
+
+impl InfoType for FieldInfo {
+    fn extract(stream: &mut ClassFileStream) -> io::Result<Self> {
+        let mut res = FieldInfo {
+            _access_flags: stream.get_u2()?,
+            _name_index: stream.get_u2()?,
+            _desc_index: stream.get_u2()?,
+            _attrs: Vec::new()
+        };
+
+        let attrs_count = stream.get_u2()? as usize;
+        res._attrs = AttributeInfo::extract_vec(stream, attrs_count)?;
+
+        Ok(res)
+    }
+}
+
+pub struct MethodInfo {
+    _access_flags: u16,
+    _name_index: u16,
+    _desc_index: u16,
+    _attrs: Vec<AttributeInfo>
+}
+
+impl InfoType for MethodInfo {
+    fn extract(stream: &mut ClassFileStream) -> io::Result<Self> {
+        let mut res = MethodInfo {
+            _access_flags: stream.get_u2()?,
+            _name_index: stream.get_u2()?,
+            _desc_index: stream.get_u2()?,
+            _attrs: Vec::new()
+        };
+
+        let attrs_count = stream.get_u2()? as usize;
+        res._attrs = AttributeInfo::extract_vec(stream, attrs_count)?;
+
+        Ok(res)
+    }
+}
 
 pub struct AttributeInfo {}
+
+impl InfoType for AttributeInfo {
+    fn extract(stream: &mut ClassFileStream) -> io::Result<Self> {}
+}

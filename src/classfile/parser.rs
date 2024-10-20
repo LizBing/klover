@@ -21,13 +21,13 @@
 
 use std::io;
 
-use super::{constant_pool::ConstantPool, info_types::{AttributeInfo, FieldInfo, MethodInfo}, stream::ClassFileStream, MAJOR_RANGE};
+use super::{constant_pool::ConstantPool, info_types::{AttributeInfo, FieldInfo, InfoType, MethodInfo}, stream::{self, ClassFileStream}, MAJOR_RANGE};
 use super::{MAGIC, SMALLEST_MAJOR, LARGEST_MAJOR, SPECIFIC_MINOR_0, SPECIFIC_MINOR_65535, GENERAL_MAJOR};
 use super::constant_pool::*;
 use super::constant_pool::ConstantPoolEntry::*;
 
 pub struct ClassFileParser {
-    _access_flag:   u16,
+    _access_flags:   u16,
     _this_class:    u16,
     _super_class:   u16,
 
@@ -42,7 +42,7 @@ pub struct ClassFileParser {
 impl ClassFileParser {
     pub fn new() -> ClassFileParser {
         ClassFileParser {
-            _access_flag: 0,
+            _access_flags: 0,
             _this_class: 0,
             _super_class: 0,
 
@@ -55,19 +55,35 @@ impl ClassFileParser {
         }
     }
 
-    pub fn parse(&mut self, stream: &mut ClassFileStream) -> io::Result<Option<String>> {
+    // TODO: Add some verification code.
+    pub fn parse(&mut self, stream: &mut ClassFileStream) 
+        -> io::Result<Option<String>>
+    {
         let load_magic = stream.get_u4()?;
-        if let Some(x) = ClassFileParser::verify_magic(load_magic) {
+        if let Some(x) = Self::verify_magic(load_magic) {
             return Ok(Some(x));
         }
 
         let load_minor = stream.get_u2()?;
         let load_major = stream.get_u2()?;
-        if let Some(x) = ClassFileParser::verify_version(load_minor, load_major) {
+        if let Some(x) = Self::verify_version(load_minor, load_major) {
             return Ok(Some(x));
         }
 
-        self.load_constants(stream)?;
+        if let Some(x) = self.load_constants(stream)? {
+            return Ok(Some(x))
+        }
+
+        self._access_flags = stream.get_u2()?;
+        
+        self._this_class = stream.get_u2()?;
+        self._super_class = stream.get_u2()?;
+
+        self.load_interfaces(stream)?;
+
+        self._field_infos = self.load_infos(stream)?;
+        self._mthd_infos = self.load_infos(stream)?;
+        self._attr_infos = self.load_infos(stream)?;
 
         Ok(None)
     }
@@ -191,5 +207,25 @@ impl ClassFileParser {
         }
 
         Ok(None)
+    }
+
+    fn load_interfaces(&mut self, stream: &mut ClassFileStream)
+        -> io::Result<()>
+    {
+        let count = stream.get_u2()? as usize;
+        self._interfaces.reserve_exact(count);
+
+        for _ in 0..count {
+            self._interfaces.push(stream.get_u2()?);
+        }
+
+        Ok(())
+    }
+
+    fn load_infos<T: InfoType>(&mut self, stream: &mut ClassFileStream)
+        -> io::Result<Vec<T>>
+    {
+        let count = stream.get_u2()? as usize;
+        T::extract_vec(stream, count)
     }
 }

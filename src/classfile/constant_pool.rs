@@ -91,6 +91,10 @@ impl ConstantPool {
         }
     }
 
+    pub fn len(&self) -> usize {
+        self._array.len()
+    }
+
     pub fn store(&mut self, idx: u16, entry: ConstantPoolEntry) -> bool {
         let i = idx as usize;
         if i >= self._array.len() { return false; }
@@ -111,7 +115,7 @@ impl ConstantPool {
     }
 
     pub fn reserve(&mut self, size: usize) {
-        self._array.reserve(size);
+        self._array.reserve_exact(size);
     }
 
 }

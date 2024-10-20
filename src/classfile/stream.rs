@@ -47,7 +47,7 @@ impl ClassFileStream {
 
     pub fn get_byte_array(&mut self, size: usize) -> io::Result<Vec<u8>> {
         let mut res = Vec::new();
-        res.reserve(size);
+        res.reserve_exact(size);
         unsafe { res.set_len(size) };
 
         self._cursor.read_exact(&mut res[..size])?;
