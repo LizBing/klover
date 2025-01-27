@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024, Lei Zaakjyu. All rights reserved.
+ * Copyright (c) 2025, Lei Zaakjyu. All rights reserved.
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -13,23 +13,32 @@
  *
  * Unless required by applicable law or agreed to in writing
  * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS
+ * OF ANY KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
  * under the License.
  */
 
-use cafebabe;
-use std::{fs::File, io::Read};
+use std::os::raw::c_void;
+use phf::{phf_map, phf_set, Map, Set};
 
-#[test]
-fn test_classfile_parser() {
-    let path = String::from("./tests/java_files/HelloWorld/HelloWorld.class");
-    let mut file = File::open(path).unwrap();
 
-    let mut bs = Vec::new();
-    file.read_to_end(&mut bs).unwrap();
+type int = i32;
+type intx = isize;
+type uint = u32;
+type uintx = usize;
+type uint64_t = u64;
+type size_t = usize;
+type double = f64;
 
-    let klass = cafebabe::parse_class(&mut bs).unwrap();
-    println!("{:?}", klass);
+
+struct VMFlag {
+    _name: &'static str,
+    _type: &'static str,
+    _desc: &'static str,
+    _addr: *mut c_void
 }
+
+unsafe impl Sync for VMFlag {}
+
+include!("vmflag_map.rs");

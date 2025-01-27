@@ -19,7 +19,8 @@
  * under the License.
  */
 
-pub mod classfile;
+pub mod classloader;
 mod jni;
+mod runtime;
 mod util;
 

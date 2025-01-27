@@ -19,17 +19,4 @@
  * under the License.
  */
 
-const ACC_PUBLIC:       u16 = 0x0001;
-
-const ACC_FINAL:        u16 = 0x0010;
-const ACC_SUPER:        u16 = 0x0020;
-
-const ACC_INTERFACE:    u16 = 0x0200;
-const ACC_ABSTRACT:     u16 = 0x0400;
-
-const ACC_SYNTHETIC:    u16 = 0x1000;
-const ACC_ANNOTATION:   u16 = 0x2000;
-const ACC_ENUM:         u16 = 0x4000;
-const ACC_MODULE:       u16 = 0x8000;
-
 

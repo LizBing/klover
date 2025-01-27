@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024, Lei Zaakjyu. All rights reserved.
+ * Copyright (c) 2025, Lei Zaakjyu. All rights reserved.
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -19,18 +19,8 @@
  * under the License.
  */
 
-mod access_flags;
-pub mod class_loader;
-mod constant_pool;
-mod info_types;
-mod parser;
-mod stream;
+include!("build-sys/vmflag_map_ctor.rs");
 
-const MAGIC:                u32 = 0xCAFEBABE;
-const SMALLEST_MAJOR:       u16 =         45;
-const LARGEST_MAJOR:        u16 =         65;
-const GENERAL_MAJOR:        u16 =         56;
-const SPECIFIC_MINOR_0:     u16 =          0;
-const SPECIFIC_MINOR_65535: u16 =      65535;
-
-const MAJOR_RANGE: std::ops::RangeInclusive<u16> = SMALLEST_MAJOR..=LARGEST_MAJOR;
+fn main() {
+    construct_vmflag_maps();
+}

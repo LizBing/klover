@@ -19,34 +19,4 @@
  * under the License.
  */
 
-use std::{fs::File, io::{self, Read}};
-
-use super::{parser::ClassFileParser, stream::ClassFileStream};
-
-pub struct ClassLoader {
-    _file_path: String,
-    _stream: ClassFileStream,
-}
-
-impl ClassLoader {
-    pub fn new(path: String) -> io::Result<ClassLoader> {
-        let mut file = File::open(&path)?;
-
-        let mut buffer = Vec::<u8>::new();
-        file.read_to_end(&mut buffer)?;
-
-        Ok(ClassLoader {
-            _file_path: path,
-            _stream: ClassFileStream::new(buffer)
-        })
-    }
-
-    pub fn parse(&mut self) -> io::Result<Result<ClassFileParser, String>> {
-        let mut parser = ClassFileParser::new();
-        if let Some(x) = parser.parse(&mut self._stream)? {
-            return Ok(Err(x))
-        }
-
-        Ok(Ok(parser))
-    }
-}
+mod vmflags;

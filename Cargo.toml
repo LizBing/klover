@@ -3,5 +3,13 @@ name = "klover"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+crate-type = ["cdylib"]
+
 [dependencies]
 byteorder = "1.5.0"
+# cafebabe = { path = "../cafebabe/" }
+cafebabe = "0.8.0"
+phf = { version = "0.11", features = ["macros"] }
+
+[build-dependencies]

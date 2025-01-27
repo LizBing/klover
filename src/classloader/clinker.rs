@@ -19,17 +19,7 @@
  * under the License.
  */
 
-use cafebabe;
-use std::{fs::File, io::Read};
+// class linker
 
-#[test]
-fn test_classfile_parser() {
-    let path = String::from("./tests/java_files/HelloWorld/HelloWorld.class");
-    let mut file = File::open(path).unwrap();
+use std::{borrow::Cow, collections::HashMap};
 
-    let mut bs = Vec::new();
-    file.read_to_end(&mut bs).unwrap();
-
-    let klass = cafebabe::parse_class(&mut bs).unwrap();
-    println!("{:?}", klass);
-}

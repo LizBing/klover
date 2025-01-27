@@ -19,38 +19,39 @@
  * under the License.
  */
 
-use std::io::{self, Cursor, Read};
-use byteorder::{NetworkEndian, ReadBytesExt};
+use std::borrow::Cow;
 
-pub struct ClassFileStream {
-    _cursor: Cursor<Vec<u8>>,
+use cafebabe::ParseError;
+
+mod clinker;
+mod rt_constant_pool;
+
+pub struct ClassLoader<'a> {
+    _path: String,
+    _class_file: cafebabe::ClassFile<'a>,
 }
 
-impl ClassFileStream {
-    pub fn new(buffer: Vec<u8>) -> ClassFileStream {
-        ClassFileStream {
-            _cursor: Cursor::new(buffer)
-        }
+pub enum CLError {
+    Parser(ParseError),
+    Linker(String)
+}
+
+impl<'a> ClassLoader<'a> {
+    pub fn symbolic_ref(&self) -> &Cow<str> {
+        &self._class_file.this_class
     }
 
-    pub fn get_u1(&mut self) -> io::Result<u8> {
-        self._cursor.read_u8()
-    }
+    pub fn with_path(path: &'a str) -> Result<Self, CLError> {
+        let mut cl = ClassLoader {
+            _path: String::from(path),
+            _class_file: match cafebabe::parse_class(path.as_bytes()) {
+                Ok(res) => res,
+                Err(e) => {
+                    return Err(CLError::Parser(e));
+                }
+            },
+        };
 
-    pub fn get_u2(&mut self) -> io::Result<u16> {
-        self._cursor.read_u16::<NetworkEndian>()
-    }
-
-    pub fn get_u4(&mut self) -> io::Result<u32> {
-        self._cursor.read_u32::<NetworkEndian>()
-    }
-
-    pub fn get_byte_array(&mut self, size: usize) -> io::Result<Vec<u8>> {
-        let mut res = Vec::new();
-        res.reserve_exact(size);
-        unsafe { res.set_len(size) };
-
-        self._cursor.read_exact(&mut res[..size])?;
-        Ok(res)
+        Ok(cl)
     }
 }
