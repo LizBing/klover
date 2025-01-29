@@ -19,6 +19,8 @@
  * under the License.
  */
 
+use std::os::raw::c_void;
+
 // Integral types
 use i8 as jbyte;
 use i16 as jshort;
@@ -32,4 +34,5 @@ use f64 as jdouble;
 
 // Boolean type
 use u8 as jboolean;
+
 

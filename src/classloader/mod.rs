@@ -24,10 +24,9 @@ use std::borrow::Cow;
 use cafebabe::ParseError;
 
 mod clinker;
-mod rt_constant_pool;
+mod rtcp;
 
 pub struct ClassLoader<'a> {
-    _path: String,
     _class_file: cafebabe::ClassFile<'a>,
 }
 
@@ -43,7 +42,6 @@ impl<'a> ClassLoader<'a> {
 
     pub fn with_path(path: &'a str) -> Result<Self, CLError> {
         let mut cl = ClassLoader {
-            _path: String::from(path),
             _class_file: match cafebabe::parse_class(path.as_bytes()) {
                 Ok(res) => res,
                 Err(e) => {

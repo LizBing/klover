@@ -32,7 +32,7 @@ type size_t = usize;
 type double = f64;
 
 
-struct VMFlag {
+pub struct VMFlag {
     _name: &'static str,
     _type: &'static str,
     _desc: &'static str,
