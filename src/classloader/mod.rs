@@ -23,7 +23,7 @@ use std::borrow::Cow;
 
 use cafebabe::ParseError;
 
-mod clinker;
+mod class_linker;
 mod rtcp;
 
 pub struct ClassLoader<'a> {
