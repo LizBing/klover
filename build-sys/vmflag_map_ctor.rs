@@ -50,12 +50,12 @@
                  buffer.push(
                      format!(
  r#"
- const Flag_{}: VMFlag = VMFlag {{
-     _name: "{}",
-     _type: "{}",
-     _desc: "{}",
-     _addr: unsafe {{ &mut {} as *mut {} as *mut c_void }}
- }};"#,
+const Flag_{}: VMFlag = VMFlag {{
+    _name: "{}",
+    _type: "{}",
+    _desc: "{}",
+    _addr: unsafe {{ &mut {} as *mut {} as *mut c_void }}
+}};"#,
  
                          stringify!($flag_name),
                          stringify!($flag_name),
@@ -72,7 +72,7 @@
              buffer.push(format!("pub static {}: Map<&str, &VMFlag> = phf_map! {{\n", stringify!($category_name)));
              $(
                  buffer.push(format!(
-                     "   \"{}\" => &Flag_{},\n",
+                     "    \"{}\" => &Flag_{},\n",
                      stringify!($flag_name),
                      stringify!($flag_name)
                  ));

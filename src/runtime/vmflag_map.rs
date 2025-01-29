@@ -2,13 +2,13 @@
 
 pub static mut exampleFlag: bool = true;
 
- const Flag_exampleFlag: VMFlag = VMFlag {
-     _name: "exampleFlag",
-     _type: "bool",
-     _desc: "Example.",
-     _addr: unsafe { &mut exampleFlag as *mut bool as *mut c_void }
- };
+const Flag_exampleFlag: VMFlag = VMFlag {
+    _name: "exampleFlag",
+    _type: "bool",
+    _desc: "Example.",
+    _addr: unsafe { &mut exampleFlag as *mut bool as *mut c_void }
+};
 
 pub static RUNTIME_FLAGS: Map<&str, &VMFlag> = phf_map! {
-   "exampleFlag" => &Flag_exampleFlag,
+    "exampleFlag" => &Flag_exampleFlag,
 };
