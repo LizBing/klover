@@ -7,9 +7,18 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
+bit-set = "0.8.0"
+bitfield-struct = "0.10"
+bitflags = "2.8.0"
 byteorder = "1.5.0"
+
 # cafebabe = { path = "../cafebabe/" }
 cafebabe = "0.8.0"
+
+# mmtk = { path = "../mmtk-core" }
+mmtk = "0.30.0"
+
+nix = "0.29.0"
 phf = { version = "0.11", features = ["macros"] }
 
 [build-dependencies]

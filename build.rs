@@ -19,7 +19,7 @@
  * under the License.
  */
 
-include!("build-sys/vmflag_map_ctor.rs");
+include!("build-sys/vmflag_config.rs");
 
 fn main() {
     construct_vmflag_maps();

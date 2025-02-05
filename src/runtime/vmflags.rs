@@ -20,16 +20,16 @@
  */
 
 use std::os::raw::c_void;
-use phf::{phf_map, phf_set, Map, Set};
+use phf::{phf_map, Map};
 
-
-type int = i32;
-type intx = isize;
-type uint = u32;
-type uintx = usize;
-type uint64_t = u64;
-type size_t = usize;
-type double = f64;
+type int        = i32;
+type intx       = isize;
+type uint       = u32;
+type uintx      = usize;
+type uint64_t   = u64;
+type size_t     = usize;
+type double     = f64;
+type cstr       = str;
 
 
 pub struct VMFlag {

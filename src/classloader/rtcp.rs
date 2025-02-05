@@ -21,4 +21,46 @@
 
 // Runtime Constant Pool
 
+use bit_set::BitSet;
 
+pub enum RtcpEntry {
+    Utf8(String),
+    Integer(i32),
+    Float(f32),
+    Long(i64),
+    Double(f64),
+    ClassRef(String),
+    // Additional constant types as needed
+}
+
+pub struct RuntimeConstantPool {
+    constants: Vec<RtcpEntry>,
+    resolved: BitSet,
+}
+
+impl RuntimeConstantPool {
+    pub fn new(capacity: usize) -> Self {
+        RuntimeConstantPool {
+            constants: Vec::with_capacity(capacity),
+            resolved: BitSet::with_capacity(capacity),
+        }
+    }
+
+    pub fn add_entry(&mut self, entry: RtcpEntry) -> usize {
+        let index = self.constants.len();
+        self.constants.push(entry);
+        index
+    }
+
+    pub fn get_entry(&self, index: usize) -> Option<&RtcpEntry> {
+        self.constants.get(index)
+    }
+
+    pub fn mark_resolved(&mut self, index: usize) {
+        self.resolved.insert(index);
+    }
+
+    pub fn is_resolved(&self, index: usize) -> bool {
+        self.resolved.contains(index)
+    }
+}

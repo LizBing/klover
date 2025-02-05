@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024, Lei Zaakjyu. All rights reserved.
+ * Copyright (c) 2025, Lei Zaakjyu. All rights reserved.
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -470,61 +470,3 @@ pub struct JNIInvokeInterface_ {
 }
 
 type JavaVM = *mut JNIInvokeInterface_;
-
-pub const JNI_VERSION_1_1:  jint = 0x00010001;
-pub const JNI_VERSION_1_2:  jint = 0x00010002;
-pub const JNI_VERSION_1_4:  jint = 0x00010004;
-pub const JNI_VERSION_1_6:  jint = 0x00010006;
-pub const JNI_VERSION_1_8:  jint = 0x00010008;
-pub const JNI_VERSION_9:    jint = 0x00090000;
-pub const JNI_VERSION_10:   jint = 0x000a0000;
-pub const JNI_VERSION_19:   jint = 0x00130000;
-pub const JNI_VERSION_20:   jint = 0x00140000;
-pub const JNI_VERSION_21:   jint = 0x00150000;
-
-#[no_mangle]
-extern "C" fn JNI_GetDefaultJavaVMInitArgs(args: *mut JavaVMInitArgs) {
-    unsafe {
-        (*args).version = JNI_VERSION_1_8;
-        (*args).nOptions = 0;
-        (*args).options = std::ptr::null_mut();
-        
-        // Klover initially ignores unrecognized options,
-        // in order to adapt to VM options of other JVMs.
-        (*args).ignoreUnrecognized = JNI_TRUE;
-    }
-}
-
-#[no_mangle]
-extern "C" fn JNI_CreateJavaVM(
-    pvm: *mut JavaVM,
-    penv: *mut JNIEnv,
-    args: *mut JavaVMInitArgs,
-) -> jint {
-    // to be implemented
-
-    JNI_OK
-}
-
-#[no_mangle]
-extern "C" fn JNI_GetCreatedJavaVMs(
-    vms: *mut JavaVM,
-    n_vms: jint,
-    n_vms_out: *mut jint,
-) -> jint {
-    // to be implemented
-
-    JNI_OK
-}
-
-#[no_mangle]
-extern "C" fn JNI_OnLoad(vm: *mut JavaVM, reserved: *mut c_void) -> jint {
-    // to be implemented
-
-    JNI_VERSION_1_8
-}
-
-#[no_mangle]
-extern "C" fn JNI_OnUnload(vm: *mut JavaVM, reserved: *mut c_void) {
-    // to be implemented
-}

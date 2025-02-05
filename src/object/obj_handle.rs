@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024, Lei Zaakjyu. All rights reserved.
+ * Copyright (c) 2025, Lei Zaakjyu. All rights reserved.
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -19,11 +19,16 @@
  * under the License.
  */
 
-pub(crate) mod classloader;
-mod interpreter;
-pub(crate) mod jni;
-pub(crate) mod memory;
-pub(crate) mod object;
-pub(crate) mod runtime;
-pub(crate) mod util;
+use crate::util::global_defs::address;
+
+use super::obj_desc::ObjDesc;
+
+#[repr(C)]
+pub struct ObjHandle {
+    _obj_ptr: *mut ObjDesc
+}
+
+impl ObjHandle {
+}
+
 

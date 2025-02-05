@@ -19,4 +19,6 @@
  * under the License.
  */
 
-mod vmflags;
+pub mod frame;
+pub mod os;
+pub mod vmflags;

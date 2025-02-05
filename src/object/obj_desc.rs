@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024, Lei Zaakjyu. All rights reserved.
+ * Copyright (c) 2025, Lei Zaakjyu. All rights reserved.
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -19,11 +19,35 @@
  * under the License.
  */
 
-pub(crate) mod classloader;
-mod interpreter;
-pub(crate) mod jni;
-pub(crate) mod memory;
-pub(crate) mod object;
-pub(crate) mod runtime;
-pub(crate) mod util;
+use crate::util::global_defs::{address, word_t};
+
+use super::mark_word::MarkWord;
+
+#[repr(C)]
+pub struct ObjDesc {
+    _mark_word: MarkWord,
+    _data: [word_t; 0]
+}
+
+#[repr(C)]
+pub struct ArrayObjDesc {
+    _super: ObjDesc,
+    _data: [word_t; 0]
+}
+
+impl ArrayObjDesc {
+    pub fn as_obj(&mut self) -> &mut ObjDesc {
+        unsafe { &mut *(self as *mut _ as *mut _) }
+    }
+}
+
+impl ArrayObjDesc {
+    pub fn length(&self) -> i32 {
+        unsafe { *(&self._data as *const _ as *const _) }
+    }
+
+    pub fn set_length(&mut self, n: i32) {
+        unsafe { *(&mut self._data as *mut _ as *mut _) = n }
+    }
+}
 
