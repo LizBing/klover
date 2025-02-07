@@ -25,3 +25,10 @@ macro_rules! is_aligned {
         ($n % $alignment == 0) 
     };
 }
+
+#[macro_export]
+macro_rules! is_page_aligned {
+    ($n:expr) => {
+        crate::is_aligned!($n, crate::runtime::os::get_page_size())
+    };
+}

@@ -19,4 +19,27 @@
  * under the License.
  */
 
-// We instantly use crate nix for now.
+// os extension
+
+use std::sync::atomic::{AtomicI32, Ordering};
+
+use nix::libc::{sysconf, _SC_PAGE_SIZE};
+
+use crate::memory::mem_region::MemRegion;
+
+pub fn get_page_size() -> usize {
+    unsafe { sysconf(_SC_PAGE_SIZE) as _ }
+}
+
+pub fn pretouch_region(mr: &MemRegion) {
+    mr.assert_page_alignment();
+
+    let page_size = get_page_size();
+    let mut iter = mr.begin();
+    while iter < mr.end() {
+        let atom = unsafe { &mut *(iter as *mut AtomicI32) };
+        atom.fetch_add(0, Ordering::Relaxed);
+
+        iter += page_size;
+    }
+}

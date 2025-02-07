@@ -23,15 +23,14 @@ use std::os::raw::c_void;
 
 use nix::libc::{mmap, mprotect, MAP_ANON, MAP_FAILED, MAP_FIXED, MAP_PRIVATE, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE};
 
-use crate::{is_aligned, util::global_defs::address};
+use crate::{is_aligned, runtime::os::{self, pretouch_region}, util::global_defs::address};
+
+use super::mem_region::MemRegion;
 
 pub struct VirtSpace {
-    _begin: address,
-    _end: address,
-    _page_size: usize,
+    _region: MemRegion,
 
     _commit_top: address,
-
     _executable: bool
 }
 
@@ -46,10 +45,10 @@ fn commit_region(start: address, size: usize, exec: bool) -> bool {
 }
 
 impl VirtSpace {
-    pub fn new(size: usize,
+    pub fn new(base: address,
+               size: usize,
                align: usize,
                page_size: usize,
-               base: address,
                init_commit: usize,
                executable: bool,
                pretouch: bool
@@ -64,24 +63,36 @@ impl VirtSpace {
         }
 
         let mut vs = VirtSpace {
-            _begin: 0,
-            _end: 0,
-            _page_size: page_size,
+            _region: MemRegion::new(),
             _commit_top: 0,
             _executable: executable
         };
 
-        unsafe { vs._begin = mmap(base as *mut c_void, size, PROT_NONE, flags, -1, 0) as address; }
-        if vs._begin == MAP_FAILED as address {
+        let begin = unsafe { mmap(base as *mut c_void, size, PROT_NONE, flags, -1, 0) as address };
+        if begin == MAP_FAILED as address {
             return Err(String::from("failed to mmap"));
         }
 
-        vs._end = vs._begin + size;
-        vs._commit_top = vs._begin + init_commit;
+        vs._region.init_with_size(begin, size);
+        vs._commit_top = begin + init_commit;
 
-        commit_region(vs._begin, init_commit, executable);
+        commit_region(begin, init_commit, executable);
+
+        if pretouch {
+            pretouch_region(&vs.committed_region());
+        }
 
         Ok(vs)
+    }
+}
+
+impl VirtSpace {
+    pub fn mr(&self) -> &MemRegion {
+        &self._region
+    }
+
+    pub fn committed_region(&self) -> MemRegion {
+        MemRegion::with_end(self.mr().begin(), self._commit_top)
     }
 }
 

@@ -19,4 +19,5 @@
  * under the License.
  */
 
+pub mod mem_region;
 pub mod virt_space;
