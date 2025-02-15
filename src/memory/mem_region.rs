@@ -28,14 +28,14 @@ pub struct MemRegion {
 
 impl MemRegion {
     pub fn new() -> Self {
-        MemRegion {
+        Self {
             _begin: 0,
             _end: 0
         }
     }
 
     pub fn with_size(begin: address, size: usize) -> Self {
-        MemRegion::with_end(begin, begin + size)
+        Self::with_end(begin, begin + size)
     }
 
     pub fn with_end(begin: address, end: address) -> Self {
@@ -50,7 +50,7 @@ impl MemRegion {
     }
 
     pub fn init_with_end(&mut self, begin: address, end: address) {
-        assert!(end >= begin, "bad memory region");
+        debug_assert!(end >= begin, "bad memory region");
 
         self._begin = begin;
         self._end = end;
@@ -59,7 +59,7 @@ impl MemRegion {
 
 impl Clone for MemRegion {
     fn clone(&self) -> Self {
-        MemRegion {
+        Self {
             _begin: self._begin,
             _end: self._end
         }
@@ -68,7 +68,7 @@ impl Clone for MemRegion {
 
 impl MemRegion {
     pub fn assert_page_alignment(&self) {
-        is_page_aligned!(self._begin);
+        debug_assert!(is_page_aligned!(self._begin));
     }
 }
 
