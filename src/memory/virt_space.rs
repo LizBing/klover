@@ -21,9 +21,8 @@
 
 use std::os::raw::c_void;
 
-use nix::libc::{mmap, mprotect, MAP_ANON, MAP_FAILED, MAP_FIXED, MAP_PRIVATE, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE};
 
-use crate::{is_aligned, runtime::os::{self, pretouch_region}, util::global_defs::address};
+use crate::{is_aligned, runtime::os::{self, memadv_free, memmap, memprot, pretouch_region}, util::global_defs::address};
 
 use super::mem_region::MemRegion;
 
@@ -35,13 +34,16 @@ pub struct VirtSpace {
 }
 
 fn commit_region(start: address, size: usize, exec: bool) -> bool {
-    let mut prot = PROT_READ | PROT_WRITE;
-    if exec {
-        prot |= PROT_EXEC;
-    }
+    memprot(MemRegion::with_size(start, size), true, exec)
+}
 
-    let res = unsafe { mprotect(start as *mut _, size, prot) };
-    return res == 0;
+fn uncommit_region(start: address, size: usize) -> bool {
+    let mr = MemRegion::with_size(start, size);
+
+    let res = memprot(mr.clone(), false, false);
+    if res == false { return false; }
+
+    memadv_free(mr.clone())
 }
 
 impl VirtSpace {
@@ -52,31 +54,24 @@ impl VirtSpace {
                init_commit: usize,
                executable: bool,
                pretouch: bool
-        )
-    -> Result<Self, String> {
-        assert!(is_aligned!(base, page_size) && is_aligned!(size, page_size),
-                "should be aligned.");
+        ) -> Result<Self, String> {
+        debug_assert!(is_aligned!(base, page_size) && is_aligned!(size, page_size),
+                      "should be aligned.");
 
-        let mut flags = MAP_ANON | MAP_PRIVATE;
-        if base != 0 {
-            flags |= MAP_FIXED;
-        }
-
-        let mut vs = VirtSpace {
+        let mut vs = Self {
             _region: MemRegion::new(),
             _commit_top: 0,
             _executable: executable
         };
 
-        let begin = unsafe { mmap(base as *mut c_void, size, PROT_NONE, flags, -1, 0) as address };
-        if begin == MAP_FAILED as address {
-            return Err(String::from("failed to mmap"));
+        match memmap(base, size) {
+            Some(x) => vs._region = x,
+            None => return Err(String::from("out of memory"))
         }
 
-        vs._region.init_with_size(begin, size);
-        vs._commit_top = begin + init_commit;
+        vs._commit_top = vs._region.begin() + init_commit;
 
-        commit_region(begin, init_commit, executable);
+        commit_region(vs._commit_top, init_commit, executable);
 
         if pretouch {
             pretouch_region(&vs.committed_region());
@@ -87,12 +82,31 @@ impl VirtSpace {
 }
 
 impl VirtSpace {
-    pub fn mr(&self) -> &MemRegion {
-        &self._region
+    pub fn mr(&self) -> MemRegion {
+        self._region.clone()
     }
 
     pub fn committed_region(&self) -> MemRegion {
         MemRegion::with_end(self.mr().begin(), self._commit_top)
+    }
+}
+
+impl VirtSpace {
+    pub fn expand_by(&mut self, size: usize, exec: bool) -> bool {
+        debug_assert!(self.mr().end() >= self._commit_top + size, "out of space");
+
+        let prev_comt = self._commit_top;
+        self._commit_top += size;
+
+        commit_region(prev_comt, size, exec)
+    }
+
+    pub fn shrink_by(&mut self, size: usize) -> bool {
+        debug_assert!(self.mr().begin() <= self._commit_top - size, "out of space");
+
+        self._commit_top -= size;
+
+        uncommit_region(self._commit_top, size)
     }
 }
 
