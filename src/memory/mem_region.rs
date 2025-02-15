@@ -57,6 +57,15 @@ impl MemRegion {
     }
 }
 
+impl Clone for MemRegion {
+    fn clone(&self) -> Self {
+        MemRegion {
+            _begin: self._begin,
+            _end: self._end
+        }
+    }
+}
+
 impl MemRegion {
     pub fn assert_page_alignment(&self) {
         is_page_aligned!(self._begin);
