@@ -21,4 +21,5 @@
 
 pub mod frame;
 pub mod os;
+pub mod universe;
 pub mod vmflags;

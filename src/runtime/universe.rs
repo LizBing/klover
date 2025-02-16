@@ -19,31 +19,8 @@
  * under the License.
  */
 
-#[macro_export]
-macro_rules! OneBit {
-    () => { 0x1 }
+use crate::metaspace::klass_pool::KlassPool;
+
+pub struct Universe {
+    _klass_pool: KlassPool
 }
-
-pub type intx = isize;
-pub type uintx = usize;
-
-pub type word_t = uintx;
-pub type address = uintx;
-
-pub const LOG_BITS_PER_BYTE: i32 = 3;
-pub const BITS_PER_BYTE: i32 = OneBit!() << LOG_BITS_PER_BYTE;
-
-pub const LOG_BYTES_PER_SHORT: i32 = 1;
-pub const LOG_BYTES_PER_INT: i32 = 2;
-pub const LOG_BYTES_PER_ARCH: i32 = 3;
-
-pub const BYTES_PER_SHORT: i32 = OneBit!() << LOG_BYTES_PER_SHORT;
-pub const BYTES_PER_ARCH: i32 = OneBit!() << LOG_BYTES_PER_ARCH;
-
-pub const LOG_BITS_PER_ARCH: i32 = LOG_BITS_PER_BYTE + LOG_BYTES_PER_ARCH;
-
-pub const BITS_PER_ARCH: i32 = OneBit!() << LOG_BITS_PER_ARCH;
-
-pub const K: usize = 1024;
-pub const M: usize = K * K;
-pub const G: usize = M * K;

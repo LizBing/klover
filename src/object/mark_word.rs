@@ -31,6 +31,10 @@ pub enum LockType {
     Marked      = 0b11
 }
 
+// Since the klass ptr would be made only 28 bits,
+// we have to firstly compress it down to 32 bits,
+// keep its alignment as 128(2^3 * 2^4) bytes.
+
 const LOCK_BITS:            i32 = 2;
 const SELF_FWDED_TAG_BIT:   i32 = 1;
 const AGE_BITS:             i32 = 4;

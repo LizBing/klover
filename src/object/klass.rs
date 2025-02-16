@@ -19,4 +19,16 @@
  * under the License.
  */
 
-pub struct Klass {}
+use crate::{class_loader::rtcp::RuntimeConstantPool, util::lock_free_stack::NextPtr};
+
+pub struct Klass {
+    // used for lock free stack
+    _next_ptr: *const Klass,
+    _rtcp: RuntimeConstantPool
+}
+
+impl NextPtr<Klass> for Klass {
+    fn next_ptr(&mut self) -> &mut *const Klass {
+        &mut self._next_ptr
+    }
+}

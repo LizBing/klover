@@ -19,6 +19,8 @@
  * under the License.
  */
 
+use std::ops::Rem;
+
 #[macro_export]
 macro_rules! is_aligned {
     ($n: expr, $alignment: expr) => {
@@ -30,5 +32,19 @@ macro_rules! is_aligned {
 macro_rules! is_page_aligned {
     ($n:expr) => {
         crate::is_aligned!($n, crate::runtime::os::get_page_size())
+    };
+}
+
+#[macro_export]
+macro_rules! align_up {
+    ($n: expr, $a: expr) => {
+        (($n + (($a) - 1)) & !(($a) - 1))
+    };
+}
+
+#[macro_export]
+macro_rules! align_down {
+    ($n: expr, $a: expr) => {
+        ($n & !(($a) - 1))
     };
 }
