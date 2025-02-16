@@ -40,23 +40,20 @@ fn commit_region(start: address, size: usize, exec: bool) -> bool {
 fn uncommit_region(start: address, size: usize) -> bool {
     let mr = MemRegion::with_size(start, size);
 
-    let res = memprot(mr.clone(), false, false);
+    let res = memprot(mr, false, false);
     if res == false { return false; }
 
-    memadv_free(mr.clone())
+    memadv_free(mr)
 }
 
 impl VirtSpace {
     pub fn new(base: address,
                size: usize,
-               align: usize,
-               page_size: usize,
                init_commit: usize,
                executable: bool,
                pretouch: bool
         ) -> Result<Self, String> {
-        debug_assert!(is_aligned!(base, page_size) && is_aligned!(size, page_size),
-                      "should be aligned.");
+        assert!(is_aligned!(size, os::get_page_size()), "should be aligned");
 
         let mut vs = Self {
             _region: MemRegion::new(),
@@ -83,7 +80,7 @@ impl VirtSpace {
 
 impl VirtSpace {
     pub fn mr(&self) -> MemRegion {
-        self._region.clone()
+        self._region
     }
 
     pub fn committed_region(&self) -> MemRegion {
@@ -93,6 +90,7 @@ impl VirtSpace {
 
 impl VirtSpace {
     pub fn expand_by(&mut self, size: usize, exec: bool) -> bool {
+        assert!(is_aligned!(size, os::get_page_size()), "should be aligned");
         debug_assert!(self.mr().end() >= self._commit_top + size, "out of space");
 
         let prev_comt = self._commit_top;
@@ -102,6 +100,7 @@ impl VirtSpace {
     }
 
     pub fn shrink_by(&mut self, size: usize) -> bool {
+        assert!(is_aligned!(size, os::get_page_size()), "should be aligned");
         debug_assert!(self.mr().begin() <= self._commit_top - size, "out of space");
 
         self._commit_top -= size;

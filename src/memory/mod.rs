@@ -19,5 +19,7 @@
  * under the License.
  */
 
+pub mod basic_allocator;
+pub mod compressed_space;
 pub mod mem_region;
 pub mod virt_space;

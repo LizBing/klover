@@ -66,6 +66,8 @@ impl Clone for MemRegion {
     }
 }
 
+impl Copy for MemRegion {}
+
 impl MemRegion {
     pub fn assert_page_alignment(&self) {
         debug_assert!(is_page_aligned!(self._begin));
