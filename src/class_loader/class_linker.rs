@@ -19,12 +19,7 @@
  * under the License.
  */
 
-pub(crate) mod class_loader;
-mod interpreter;
-pub(crate) mod jni;
-pub(crate) mod memory;
-pub(crate) mod metaspace;
-pub(crate) mod object;
-pub(crate) mod runtime;
-pub(crate) mod util;
+// class linker
+
+use std::{borrow::Cow, collections::HashMap};
 

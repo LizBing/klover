@@ -19,12 +19,40 @@
  * under the License.
  */
 
-pub(crate) mod class_loader;
-mod interpreter;
-pub(crate) mod jni;
-pub(crate) mod memory;
-pub(crate) mod metaspace;
-pub(crate) mod object;
-pub(crate) mod runtime;
-pub(crate) mod util;
+use std::borrow::Cow;
 
+use cafebabe::ParseError;
+
+mod class_linker;
+pub mod rtcp;
+
+pub struct ClassLoader<'a> {
+    _class_file: cafebabe::ClassFile<'a>,
+}
+
+pub enum CLError {
+    Parser(ParseError),
+    Linker(String)
+}
+
+impl<'a> ClassLoader<'a> {
+    pub fn symbolic_ref(&self) -> &Cow<str> {
+        &self._class_file.this_class
+    }
+
+    pub fn with_path(path: &'a str) -> Result<Self, CLError> {
+        let mut cl = ClassLoader {
+            _class_file: match cafebabe::parse_class(path.as_bytes()) {
+                Ok(res) => res,
+                Err(e) => {
+                    return Err(CLError::Parser(e));
+                }
+            },
+        };
+
+        Ok(cl)
+    }
+}
+
+impl<'a> ClassLoader<'a> {
+}
