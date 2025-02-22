@@ -23,7 +23,7 @@
 
 use std::sync::atomic::{AtomicI32, Ordering};
 
-use nix::libc::{madvise, mmap, mprotect, sysconf, MADV_FREE, MAP_ANON, MAP_FAILED, MAP_FIXED, MAP_PRIVATE, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE, _SC_PAGE_SIZE};
+use nix::libc::{madvise, mmap, mprotect, munmap, sysconf, MADV_FREE, MAP_ANON, MAP_FAILED, MAP_FIXED, MAP_PRIVATE, PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE, _SC_PAGE_SIZE};
 
 use crate::{memory::mem_region::MemRegion, util::global_defs::address};
 
@@ -38,6 +38,10 @@ pub fn memmap(addr: address, size: usize) -> Option<MemRegion> {
     if res == MAP_FAILED { return None; }
 
     Some(MemRegion::with_size(res as _, size))
+}
+
+pub fn memunmap(mr: MemRegion) -> bool {
+    unsafe { munmap(mr.begin() as *mut _, mr.size()) == 0 }
 }
 
 pub fn memprot(mr: MemRegion, accessible: bool, executable: bool) -> bool {
@@ -67,7 +71,7 @@ pub fn pretouch_region(mr: &MemRegion) {
     let page_size = get_page_size();
     let mut iter = mr.begin();
     while iter < mr.end() {
-        let atom = unsafe { &mut *(iter as *mut AtomicI32) };
+        let atom = unsafe { &*(iter as *const AtomicI32) };
         atom.fetch_add(0, Ordering::Relaxed);
 
         iter += page_size;

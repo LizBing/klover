@@ -19,11 +19,8 @@
  * under the License.
  */
 
-use std::os::raw::c_void;
 
-
-use crate::{is_aligned, runtime::os::{self, memadv_free, memmap, memprot, pretouch_region}, util::global_defs::address};
-
+use crate::{is_aligned, runtime::os, util::global_defs::address};
 use super::mem_region::MemRegion;
 
 pub struct VirtSpace {
@@ -34,16 +31,16 @@ pub struct VirtSpace {
 }
 
 fn commit_region(start: address, size: usize, exec: bool) -> bool {
-    memprot(MemRegion::with_size(start, size), true, exec)
+    os::memprot(MemRegion::with_size(start, size), true, exec)
 }
 
 fn uncommit_region(start: address, size: usize) -> bool {
     let mr = MemRegion::with_size(start, size);
 
-    let res = memprot(mr, false, false);
+    let res = os::memprot(mr, false, false);
     if res == false { return false; }
 
-    memadv_free(mr)
+    os::memadv_free(mr)
 }
 
 impl VirtSpace {
@@ -61,7 +58,7 @@ impl VirtSpace {
             _executable: executable
         };
 
-        match memmap(base, size) {
+        match os::memmap(base, size) {
             Some(x) => vs._region = x,
             None => return Err(String::from("out of memory"))
         }
@@ -71,10 +68,16 @@ impl VirtSpace {
         commit_region(vs._commit_top, init_commit, executable);
 
         if pretouch {
-            pretouch_region(&vs.committed_region());
+            os::pretouch_region(&vs.committed_region());
         }
 
         Ok(vs)
+    }
+}
+
+impl Drop for VirtSpace {
+    fn drop(&mut self) {
+        assert!(os::memunmap(self.mr()));
     }
 }
 
