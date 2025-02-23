@@ -38,7 +38,7 @@ pub enum LockType {
 const LOCK_BITS:            i32 = 2;
 const SELF_FWDED_TAG_BIT:   i32 = 1;
 const AGE_BITS:             i32 = 4;
-const HASH_BITS:            i32 = 29;
+const HASH_BITS:            i32 = 31;
 const KLASS_PTR_BITS:       i32 = BITS_PER_ARCH -
                                   LOCK_BITS -
                                   SELF_FWDED_TAG_BIT -
@@ -57,11 +57,11 @@ const AGE_MASK:             uintx = (OneBit!() << AGE_BITS)           - 1;
 const HASH_MASK:            uintx = (OneBit!() << HASH_BITS)          - 1;
 const KLASS_PTR_MASK:       uintx = (OneBit!() << KLASS_PTR_BITS)     - 1;
 
-const LOCK_MASK_IN_PLACE:           uintx = LOCK_MASK          << LOCK_SHIFT;
+const LOCK_MASK_IN_PLACE:           uintx = LOCK_MASK           << LOCK_SHIFT;
 const SELF_FWDED_TAG_MASK_IN_PLACE: uintx = SELF_FWDED_TAG_MASK << SELF_FWDED_TAG_SHIFT;
-const AGE_MASK_IN_PLACE:            uintx = AGE_MASK           << AGE_SHIFT;
-const HASH_MASK_IN_PLACE:           uintx = HASH_MASK          << HASH_SHIFT;
-const KLASS_PTR_MASK_IN_PLACE:      uintx = KLASS_PTR_MASK    << KLASS_PTR_SHIFT;
+const AGE_MASK_IN_PLACE:            uintx = AGE_MASK            << AGE_SHIFT;
+const HASH_MASK_IN_PLACE:           uintx = HASH_MASK           << HASH_SHIFT;
+const KLASS_PTR_MASK_IN_PLACE:      uintx = KLASS_PTR_MASK      << KLASS_PTR_SHIFT;
 
 #[repr(C)]
 pub struct MarkWord {
