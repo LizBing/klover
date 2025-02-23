@@ -19,8 +19,20 @@
  * under the License.
  */
 
-use crate::metaspace::klass_pool::KlassPool;
+use std::borrow::Cow;
 
-pub struct Universe {
-    _klass_pool: KlassPool
+use dashmap::{DashMap, DashSet};
+
+use crate::{metaspace::klass_mem_pool::KlassMemPool, object::klass::Klass};
+
+pub struct Universe<'a> {
+    _klass_mem_pool: KlassMemPool<'a>,
+    _str_pool: DashSet<Cow<'a, str>>,
+    _klasses: DashMap<Cow<'a, str>, &'a Klass<'a>>
+}
+
+impl<'a> Universe<'a> {
+    pub fn new() -> Result<Self, String> {
+        Err(String::new())
+    }
 }

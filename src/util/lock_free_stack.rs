@@ -22,7 +22,7 @@
 use std::{ptr::null_mut, sync::atomic::{AtomicPtr, Ordering}};
 
 pub trait NextPtr<T> {
-    fn next_ptr(&mut self) -> &mut *const T;
+    fn next_ptr(&mut self) -> *mut *const T;
 }
 
 pub struct LockFreeStack<T: NextPtr<T>> {
@@ -41,7 +41,7 @@ impl<T: NextPtr<T>> LockFreeStack<T> {
     pub fn push(&self, n: &mut T) {
         let mut exp = self._top.load(Ordering::SeqCst);
         loop {
-            *n.next_ptr() = exp;
+            unsafe { *n.next_ptr() = exp; }
             match self._top.compare_exchange(exp, n as *mut _, Ordering::SeqCst, Ordering::SeqCst) {
                 Ok(_) => break,
                 Err(x) => exp = x
@@ -53,7 +53,7 @@ impl<T: NextPtr<T>> LockFreeStack<T> {
         let mut exp = self._top.load(Ordering::SeqCst);
         loop {
             if exp == null_mut() { return None; }
-            let new_top = *unsafe { (*exp).next_ptr() };
+            let new_top = unsafe { *(*exp).next_ptr() };
 
             match self._top.compare_exchange(exp, new_top as *mut _, Ordering::SeqCst, Ordering::SeqCst) {
                 Ok(_) => break,

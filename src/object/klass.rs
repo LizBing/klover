@@ -19,16 +19,20 @@
  * under the License.
  */
 
+use cafebabe::ClassFile;
+
 use crate::{class_loader::rtcp::RuntimeConstantPool, util::lock_free_stack::NextPtr};
 
-pub struct Klass {
+pub struct Klass<'a> {
     // used for lock free stack
-    _next_ptr: *const Klass,
-    _rtcp: RuntimeConstantPool
+    _next_ptr: *const Klass<'a>,
+
+    _class_file: ClassFile<'a>,
+    _rtcp: RuntimeConstantPool,
 }
 
-impl NextPtr<Klass> for Klass {
-    fn next_ptr(&mut self) -> &mut *const Klass {
+impl<'a> NextPtr<Klass<'a>> for Klass<'a> {
+    fn next_ptr(&mut self) -> *mut *const Klass<'a> {
         &mut self._next_ptr
     }
 }

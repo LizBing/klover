@@ -28,15 +28,15 @@ const KP_SLOT_ALIGNMENT: usize = 128;
 const KP_SLOT_SIZE: usize = align_up!(size_of::<Klass>(), KP_SLOT_ALIGNMENT);
 const KP_VM_SPACE_SIZE: usize = 8 * G;
 
-pub struct KlassMemPool {
-    _reuse: LockFreeStack<Klass>,
+pub struct KlassMemPool<'a> {
+    _reuse: LockFreeStack<Klass<'a>>,
     _bumper: UnsafeCell<BumpAllocator>,
     _space: RefCell<CompressedSpace>,
 
     _mtx: Mutex<()>,
 }
 
-impl KlassMemPool {
+impl<'a> KlassMemPool<'a> {
     pub fn new() -> Result<Self, String> {
         let mut res = Self {
             _reuse: LockFreeStack::new(),
@@ -52,8 +52,8 @@ impl KlassMemPool {
     }
 }
 
-impl KlassMemPool {
-    pub fn alloc(&self) -> Option<&mut Klass> {
+impl<'a> KlassMemPool<'a> {
+    pub fn alloc(&self) -> Option<&'a mut Klass> {
         if let Some(x) = self._reuse.pop() {
             return Some(x);
         }
@@ -90,7 +90,7 @@ impl KlassMemPool {
         Some(unsafe { &mut *(res as *mut _) })
     }
 
-    pub fn free(&self, n: &mut Klass) {
+    pub fn free(&self, n: &mut Klass<'a>) {
         self._reuse.push(n);
     }
 }
