@@ -19,4 +19,4 @@
  * under the License.
  */
 
-pub mod klass_pool;
+pub mod klass_mem_pool;

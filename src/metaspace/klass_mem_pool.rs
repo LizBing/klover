@@ -21,13 +21,14 @@
 
 use std::{cell::{RefCell, UnsafeCell}, sync::Mutex};
 
-use crate::{align_up, memory::{basic_allocator::BumpAllocator, compressed_space::CompressedSpace, virt_space::VirtSpace}, object::klass::{self, Klass}, util::{global_defs::{G, M}, lock_free_stack::LockFreeStack}};
+use crate::{align_up, memory::{basic_allocator::BumpAllocator, compressed_space::CompressedSpace, virt_space::VirtSpace}, object::klass::Klass, util::{global_defs::{G, M}, lock_free_stack::LockFreeStack}};
 
 const KP_EXPAND_SIZE: usize = 16 * M;
 const KP_SLOT_ALIGNMENT: usize = 128;
 const KP_SLOT_SIZE: usize = align_up!(size_of::<Klass>(), KP_SLOT_ALIGNMENT);
+const KP_VM_SPACE_SIZE: usize = 8 * G;
 
-pub struct KlassPool {
+pub struct KlassMemPool {
     _reuse: LockFreeStack<Klass>,
     _bumper: UnsafeCell<BumpAllocator>,
     _space: RefCell<CompressedSpace>,
@@ -35,12 +36,12 @@ pub struct KlassPool {
     _mtx: Mutex<()>,
 }
 
-impl KlassPool {
+impl KlassMemPool {
     pub fn new() -> Result<Self, String> {
         let mut res = Self {
             _reuse: LockFreeStack::new(),
             _bumper: UnsafeCell::new(BumpAllocator::new()),
-            _space: RefCell::new(CompressedSpace::new(0, 32 * G, KP_EXPAND_SIZE, false, true)?),
+            _space: RefCell::new(CompressedSpace::new(0, KP_VM_SPACE_SIZE, KP_EXPAND_SIZE, false, true)?),
             _mtx: Mutex::new(()),
         };
 
@@ -51,7 +52,7 @@ impl KlassPool {
     }
 }
 
-impl KlassPool {
+impl KlassMemPool {
     pub fn alloc(&self) -> Option<&mut Klass> {
         if let Some(x) = self._reuse.pop() {
             return Some(x);
