@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024, Lei Zaakjyu. All rights reserved.
+ * Copyright (c) 2025, Lei Zaakjyu. All rights reserved.
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -19,13 +19,24 @@
  * under the License.
  */
 
-pub(crate) mod class_loader;
-pub(crate) mod code;
-pub(crate) mod interpreter;
-pub(crate) mod jni;
-pub(crate) mod memory;
-pub(crate) mod metaspace;
-pub(crate) mod object;
-pub(crate) mod runtime;
-pub(crate) mod util;
+use super::bytecodes::Opcode;
 
+pub struct Executor<'a> {
+    _code: &'a [u8]
+}
+
+impl<'a> Executor<'a> {
+    pub fn execute(&self) {
+        let mut pc = 0;
+
+        loop {
+            if pc > self._code.len() { break; }
+
+            match self._code[pc] {
+                Opcode::_aaload => {},
+
+                _ => {}
+            }
+        }
+    }
+}
