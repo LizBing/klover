@@ -19,14 +19,15 @@
  * under the License.
  */
 
-use std::{cell::{RefCell, UnsafeCell}, sync::Mutex};
+use std::{cell::{RefCell, UnsafeCell}, ptr::null_mut, sync::Mutex};
 
-use crate::{align_up, memory::{basic_allocator::BumpAllocator, compressed_space::CompressedSpace, virt_space::VirtSpace}, object::klass::Klass, util::{global_defs::{G, M}, lock_free_stack::LockFreeStack}};
+use crate::{align_up, memory::{basic_allocator::BumpAllocator, compressed_space::CompressedSpace, virt_space::VirtSpace}, object::{klass::Klass, mark_word, obj_desc}, util::{global_defs::{self, G, M}, lock_free_stack::LockFreeStack}};
 
 const KP_EXPAND_SIZE: usize = 16 * M;
 const KP_SLOT_ALIGNMENT: usize = 128;
 const KP_SLOT_SIZE: usize = align_up!(size_of::<Klass>(), KP_SLOT_ALIGNMENT);
-const KP_VM_SPACE_SIZE: usize = 8 * G;
+const LOG_KP_SLOT_SIZE: usize = global_defs::log2(KP_SLOT_SIZE);
+const KP_VM_SPACE_SIZE: usize = 1 << LOG_KP_SLOT_SIZE + mark_word::KLASS_PTR_BITS as usize;
 
 pub struct KlassMemPool<'a> {
     _reuse: LockFreeStack<Klass<'a>>,
@@ -53,45 +54,46 @@ impl<'a> KlassMemPool<'a> {
 }
 
 impl<'a> KlassMemPool<'a> {
-    pub fn alloc(&self) -> Option<&'a mut Klass> {
-        if let Some(x) = self._reuse.pop() {
-            return Some(x);
-        }
+    pub fn alloc(&self) -> Box<Klass<'a>> {
+        unsafe {
+            if let Some(x) = self._reuse.pop() {
+                return Box::from_raw(x);
+            }
 
-        if let Some(x) = self.alloc_fast_path() {
-            return Some(x);
+            let res = self.alloc_fast_path();
+            if res != null_mut() { return Box::from_raw(res) }; 
+        
+            Box::from_raw(self.alloc_slow_path())
         }
-
-        self.alloc_slow_path()
     }
 
-    fn alloc_fast_path(&self) -> Option<&mut Klass> {
-        let bumper = unsafe { &mut *self._bumper.get() };
+    fn alloc_fast_path(&self) -> *mut Klass<'a> {
+        let bumper = unsafe { &*self._bumper.get() };
 
         let res = bumper.par_alloc(KP_SLOT_SIZE);
-        if res == 0 { return None; }
+        if res == 0 { return null_mut(); }
 
-        Some(unsafe { &mut *(res as *mut _) })
+        res as _
     }
 
-    fn alloc_slow_path(&self) -> Option<&mut Klass> {
+    fn alloc_slow_path(&self) -> *mut Klass<'a> {
         let _ign = self._mtx.lock().unwrap();
 
         let bumper = unsafe { &mut *self._bumper.get() };
         let mut res = bumper.par_alloc(KP_SLOT_SIZE);
         if res == 0 {
-            self._space.borrow_mut().vs_mut().expand_by(KP_EXPAND_SIZE, false);
-            bumper.expand_by(KP_EXPAND_SIZE);
+            if self._space.borrow_mut().vs_mut().expand_by(KP_EXPAND_SIZE, false) {
+                res = bumper.expand_and_par_alloc(KP_EXPAND_SIZE, KP_SLOT_SIZE);
+            }
 
-            res = bumper.par_alloc(KP_SLOT_SIZE);
-            if res == 0 { return None; }
+            if res == 0 { return null_mut(); }
         }
 
-        Some(unsafe { &mut *(res as *mut _) })
+        res as _
     }
 
-    pub fn free(&self, n: &mut Klass<'a>) {
-        self._reuse.push(n);
+    pub fn free(&self, n: Box<Klass<'a>>) {
+        unsafe { self._reuse.push(&mut *Box::into_raw(n)); }
     }
 }
 

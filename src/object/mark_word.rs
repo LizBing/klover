@@ -39,11 +39,11 @@ const LOCK_BITS:            i32 = 2;
 const SELF_FWDED_TAG_BIT:   i32 = 1;
 const AGE_BITS:             i32 = 4;
 const HASH_BITS:            i32 = 31;
-const KLASS_PTR_BITS:       i32 = BITS_PER_ARCH -
-                                  LOCK_BITS -
-                                  SELF_FWDED_TAG_BIT -
-                                  AGE_BITS -
-                                  HASH_BITS;
+pub const KLASS_PTR_BITS:       i32 = BITS_PER_ARCH -
+                                      LOCK_BITS -
+                                      SELF_FWDED_TAG_BIT -
+                                      AGE_BITS -
+                                      HASH_BITS;
 
 const LOCK_SHIFT:           i32 = 0;
 const SELF_FWDED_TAG_SHIFT: i32 = LOCK_SHIFT + LOCK_BITS;

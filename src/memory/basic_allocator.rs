@@ -74,6 +74,7 @@ impl BumpAllocator {
 }
 
 impl BumpAllocator {
+    /*
     pub fn alloc(&mut self, size: usize) -> address {
         let top = self._top.get_mut();
 
@@ -85,17 +86,17 @@ impl BumpAllocator {
 
         res
     }
+    */
 
     pub fn par_alloc(&self, size: usize) -> address {
-        let mut res = 0;
+        let mut res = self._top.load(Ordering::SeqCst);
 
         loop {
-            res = self._top.load(Ordering::SeqCst);
             let new_top = res + size;
 
             if new_top > self._mr.end() { return 0; }
 
-            match self._top.compare_exchange(res, new_top, Ordering::SeqCst, Ordering::SeqCst) {
+            match self._top.compare_exchange_weak(res, new_top, Ordering::SeqCst, Ordering::SeqCst) {
                 Ok(_) => break,
                 Err(x) => res = x
             }
@@ -109,6 +110,23 @@ impl BumpAllocator {
     pub fn expand_by(&mut self, size: usize) {
         let new_end = self._mr.end() + size;
         self._mr.set_end(new_end);
+    }
+
+    pub fn expand_and_par_alloc(&mut self, exp_size: usize, alloc_size: usize) -> address {
+        let mut res = self._top.load(Ordering::SeqCst);
+
+        loop {
+            let new_top = res + alloc_size;
+
+            match self._top.compare_exchange_weak(res, new_top, Ordering::SeqCst, Ordering::SeqCst) {
+                Ok(_) => break,
+                Err(x) => res = x
+            }
+        }
+
+        self.expand_by(exp_size);
+
+        res
     }
 }
 

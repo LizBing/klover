@@ -28,7 +28,7 @@ pub struct Klass<'a> {
     _next_ptr: *const Klass<'a>,
 
     _class_file: ClassFile<'a>,
-    _rtcp: RuntimeConstantPool,
+    _rtcp: RuntimeConstantPool<'a>,
 }
 
 impl<'a> NextPtr<Klass<'a>> for Klass<'a> {

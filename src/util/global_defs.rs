@@ -47,3 +47,10 @@ pub const BITS_PER_ARCH: i32 = OneBit!() << LOG_BITS_PER_ARCH;
 pub const K: usize = 1024;
 pub const M: usize = K * K;
 pub const G: usize = M * K;
+
+pub const fn log2(x: usize) -> usize {
+    if x <= 1 { 0 }
+    else {
+        1 + log2(x >> 1)
+    }
+}

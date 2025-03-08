@@ -42,7 +42,7 @@ impl<T: NextPtr<T>> LockFreeStack<T> {
         let mut exp = self._top.load(Ordering::SeqCst);
         loop {
             unsafe { *n.next_ptr() = exp; }
-            match self._top.compare_exchange(exp, n as *mut _, Ordering::SeqCst, Ordering::SeqCst) {
+            match self._top.compare_exchange_weak(exp, n as *mut _, Ordering::SeqCst, Ordering::SeqCst) {
                 Ok(_) => break,
                 Err(x) => exp = x
             }
@@ -55,7 +55,7 @@ impl<T: NextPtr<T>> LockFreeStack<T> {
             if exp == null_mut() { return None; }
             let new_top = unsafe { *(*exp).next_ptr() };
 
-            match self._top.compare_exchange(exp, new_top as *mut _, Ordering::SeqCst, Ordering::SeqCst) {
+            match self._top.compare_exchange_weak(exp, new_top as *mut _, Ordering::SeqCst, Ordering::SeqCst) {
                 Ok(_) => break,
                 Err(x) => exp = x
             }
