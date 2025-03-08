@@ -19,7 +19,7 @@
  * under the License.
  */
 
-use super::bytecodes::Opcode;
+use super::bytecodes::opcode;
 
 pub struct Executor<'a> {
     _code: &'a [u8]
@@ -27,16 +27,6 @@ pub struct Executor<'a> {
 
 impl<'a> Executor<'a> {
     pub fn execute(&self) {
-        let mut pc = 0;
-
-        loop {
-            if pc > self._code.len() { break; }
-
-            match self._code[pc] {
-                Opcode::_aaload => {},
-
-                _ => {}
-            }
-        }
+        
     }
 }
