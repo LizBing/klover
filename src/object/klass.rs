@@ -23,12 +23,15 @@ use cafebabe::ClassFile;
 
 use crate::{class_loader::rtcp::RuntimeConstantPool, util::lock_free_stack::NextPtr};
 
+enum RtField {}
+
 pub struct Klass<'a> {
     // used for lock free stack
     _next_ptr: *const Klass<'a>,
 
-    _class_file: ClassFile<'a>,
+    // _class_file: ClassFile<'a>,
     _rtcp: RuntimeConstantPool<'a>,
+    
 }
 
 impl<'a> NextPtr<Klass<'a>> for Klass<'a> {

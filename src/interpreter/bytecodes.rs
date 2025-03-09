@@ -226,4 +226,6 @@ pub mod opcode {
     pub const _GOTO_W: u8               = 200; // 0xc8
     pub const _JSR_W: u8                = 201; // 0xc9
     pub const _BREAKPOINT: u8           = 202; // 0xca
+
+    pub const NUM_OF_JAVA_CODES: u8     = 203;
 }

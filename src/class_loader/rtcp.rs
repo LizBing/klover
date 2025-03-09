@@ -21,46 +21,49 @@
 
 // Runtime Constant Pool
 
+use std::borrow::Cow;
+
 use bit_set::BitSet;
 
-pub enum RtConstantPoolEntry {
-    Utf8(String),
+use crate::object::klass::Klass;
+
+pub enum RtConstantPoolEntry<'a> {
+    Utf8(Cow<'a, str>),
     Integer(i32),
     Float(f32),
     Long(i64),
     Double(f64),
-    ClassRef(String),
+    ClassRef(Box<Klass<'a>>),
     // Additional constant types as needed
 }
 
-pub struct RuntimeConstantPool {
-    constants: Vec<RtConstantPoolEntry>,
-    resolved: BitSet,
+pub struct RuntimeConstantPool<'a> {
+    _constants: Vec<RtConstantPoolEntry<'a>>,
+    _resolved: BitSet,
 }
 
-impl RuntimeConstantPool {
+impl<'a> RuntimeConstantPool<'a> {
     pub fn new(capacity: usize) -> Self {
         RuntimeConstantPool {
-            constants: Vec::with_capacity(capacity),
-            resolved: BitSet::with_capacity(capacity),
+            _constants: Vec::with_capacity(capacity),
+            _resolved: BitSet::with_capacity(capacity),
         }
     }
 
-    pub fn add_entry(&mut self, entry: RtConstantPoolEntry) -> usize {
-        let index = self.constants.len();
-        self.constants.push(entry);
-        index
+    pub fn add_entry(&mut self, index: usize, entry: RtConstantPoolEntry<'a>) {
+        self._constants[index] = entry;
+        self.mark_resolved(index);
     }
 
-    pub fn get_entry(&self, index: usize) -> Option<&RtConstantPoolEntry> {
-        self.constants.get(index)
+    pub fn get_entry(&self, index: usize) -> &RtConstantPoolEntry {
+        &self._constants[index]
     }
 
     pub fn mark_resolved(&mut self, index: usize) {
-        self.resolved.insert(index);
+        self._resolved.insert(index);
     }
 
     pub fn is_resolved(&self, index: usize) -> bool {
-        self.resolved.contains(index)
+        self._resolved.contains(index)
     }
 }

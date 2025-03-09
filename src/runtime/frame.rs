@@ -19,5 +19,5 @@
  * under the License.
  */
 
-#[repr(C)]
-pub(super) struct InterpreterFrame {}
+pub trait Frame {
+}

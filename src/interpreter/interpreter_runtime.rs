@@ -19,35 +19,9 @@
  * under the License.
  */
 
-use std::u8;
+use crate::runtime::frame::Frame;
 
-use super::bytecodes::opcode;
-
-pub struct Executor {
-    _pc: u16,
-    _sp: u16,
-    _bp: u16
+pub(super) struct InterpreterFrame {
 }
 
-impl Executor {
-    pub fn execute(&mut self, code: &[u8]) -> Option<String> {
-        let rpc = &mut self._pc;
-        let rsp = &mut self._sp;
-        let rbp = &mut self._bp;
-
-        loop {
-            let opc = code[*rpc as usize];
-            match opc {
-                opcode::_NOP => {}
-                opcode::_AALOAD => {}
-
-                _ => { return Some(format!("illegal code: {:#X}", opc)); }
-            }
-        }
-    }
-}
-
-// helpers
-impl Executor {
-
-}
+impl Frame for InterpreterFrame {}

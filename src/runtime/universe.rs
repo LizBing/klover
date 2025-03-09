@@ -28,7 +28,7 @@ use crate::{metaspace::klass_mem_pool::KlassMemPool, object::klass::Klass};
 pub struct Universe<'a> {
     _klass_mem_pool: KlassMemPool<'a>,
     _str_pool: DashSet<Cow<'a, str>>,
-    _klasses: DashMap<Cow<'a, str>, &'a Klass<'a>>
+    _klasses: DashMap<Cow<'a, str>, Box<Klass<'a>>>
 }
 
 impl<'a> Universe<'a> {
