@@ -19,12 +19,4 @@
  * under the License.
  */
 
-pub struct CodeBlob<'a> {
-    _code: &'a [u8],
-}
-
-impl<'a> CodeBlob<'a> {
-    fn foo(&self) {
-    }
-}
-
+pub mod oop_map;

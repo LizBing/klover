@@ -19,35 +19,108 @@
  * under the License.
  */
 
-use std::u8;
+use std::{ptr::null, u8};
 
-use super::bytecodes::opcode;
+use cafebabe::{attributes::CodeData, bytecode::Opcode};
 
-pub struct Executor {
+use crate::{runtime::frame::Frame, util::global_defs::address};
+
+pub struct InterpreterRegisters<'a> {
     _pc: u16,
-    _sp: u16,
-    _bp: u16
+    _sp: address,
+    _bp: Option<&'a Frame<'a>>
 }
 
-impl Executor {
-    pub fn execute(&mut self, code: &[u8]) -> Option<String> {
-        let rpc = &mut self._pc;
-        let rsp = &mut self._sp;
-        let rbp = &mut self._bp;
-
-        loop {
-            let opc = code[*rpc as usize];
-            match opc {
-                opcode::_NOP => {}
-                opcode::_AALOAD => {}
-
-                _ => { return Some(format!("illegal code: {:#X}", opc)); }
-            }
+impl<'a> InterpreterRegisters<'a> {
+    fn new() -> Self {
+        Self {
+            _pc: 0,
+            _sp: 0,
+            _bp: None
         }
     }
 }
 
-// helpers
-impl Executor {
+impl<'a> InterpreterRegisters<'a> {
+    fn alloca_sized<T: Sized>(&mut self) -> &'a mut T {
+        unimplemented!()
+    }
+}
 
+impl<'a> Clone for InterpreterRegisters<'a> {
+    fn clone(&self) -> Self {
+        Self {
+            _pc: self._pc,
+            _sp: self._sp,
+            _bp: self._bp
+        }
+    }
+}
+
+pub struct Executor<'a> {
+    _registers: InterpreterRegisters<'a>,
+    _code_data: &'a CodeData<'a>,
+    _stack: Box<[u8]>
+}
+
+impl<'a> Executor<'a> {
+    pub fn new(cd: &CodeData) -> Result<Self, String> {
+        unimplemented!()
+    }
+}
+
+// forwarding
+impl<'a> Executor<'a> {
+    fn rpc(&mut self) -> &mut u16 {
+        &mut self._registers._pc
+    }
+
+    fn rsp(&mut self) -> &mut address {
+        &mut self._registers._sp
+    }
+
+    fn rbp(&mut self) -> &mut Option<&'a Frame<'a>> {
+        &mut self._registers._bp
+    }
+}
+
+impl<'a> Executor<'a> {
+    pub fn execute(&mut self) -> Option<String> {
+        let code = self._code_data.bytecode.as_ref().unwrap();
+        loop {
+            let opc = &code.opcodes[*self.rpc() as usize];
+            match opc.1 {
+                Opcode::Aaload => { () }
+
+                _ => break,
+            }
+
+            *self.rpc() += 1;
+        }
+
+        None
+    }
+}
+
+impl<'a> Executor<'a> {
+    fn create_frame(&mut self) {
+        let tmp_regs = self._registers.clone();
+        let frame = self._registers.alloca_sized::<Frame>();
+        frame.init(tmp_regs, self._code_data);
+
+        *self.rbp() = Some(frame);
+    }
+
+    fn unwind(&mut self) -> bool {
+        match *self.rbp() {
+            Some(x) => {
+                self._registers = x.last_regs();
+                self._code_data = x.last_code_data();
+
+                true
+            }
+
+            None => false
+        }
+    }
 }

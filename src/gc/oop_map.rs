@@ -19,34 +19,41 @@
  * under the License.
  */
 
-use cafebabe::attributes::CodeData;
+use std::{ptr::null_mut, sync::atomic::{AtomicPtr, Ordering}};
 
-use crate::{interpreter::executor::InterpreterRegisters, util::global_defs::address};
-
-pub struct Frame<'a> {
-    _last_regs: InterpreterRegisters<'a>,
-    _last_code_data: &'a CodeData<'a>
+pub struct OopMap {
+    _offsets: AtomicPtr<Vec<usize>>,
 }
 
-impl<'a> Frame<'a> {
-    pub fn init(&mut self, regs: InterpreterRegisters<'a>, cd: &'a CodeData) {
-        *self = Self {
-            _last_regs: regs,
-            _last_code_data: cd
+impl OopMap {
+    pub fn new() -> Self {
+        OopMap {
+            _offsets: AtomicPtr::new(null_mut()),
+        }
+    }
+}
+
+impl OopMap {
+    pub fn resolve(&self, offsets: Vec<usize>) -> bool {
+        if self.is_resolved() { return false; }
+
+        let b = Box::new(offsets);
+        match self._offsets.compare_exchange(null_mut(), Box::into_raw(b), Ordering::SeqCst, Ordering::SeqCst) {
+            Ok(_) => true,
+            Err(_) => false
         }
     }
 
-    pub fn last_regs(&self) -> InterpreterRegisters {
-        self._last_regs.clone()
-    }
-
-    pub fn last_code_data(&self) -> &CodeData {
-        self._last_code_data
+    pub fn is_resolved(&self) -> bool {
+        self._offsets.load(Ordering::SeqCst) != null_mut()
     }
 }
 
-impl<'a> Drop for Frame<'a> {
-    fn drop(&mut self) {
-        panic!("Should not reach here.")
+impl OopMap {
+    pub fn iter(&self) -> std::slice::Iter<'_, usize> {
+        assert!(self.is_resolved(), "Should not iterate a unresolved oop map.");
+
+        let v = unsafe { &**self._offsets.as_ptr() };
+        v.iter()
     }
 }

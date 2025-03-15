@@ -19,9 +19,25 @@
  * under the License.
  */
 
-use crate::runtime::frame::Frame;
+use cafebabe::attributes::CodeData;
 
-pub(super) struct InterpreterFrame {
+use crate::gc::oop_map::OopMap;
+
+pub struct Method<'a> {
+    _i: &'a i32,
+
+    _oop_map: OopMap,
+    _code_data: Option<&'a CodeData<'a>>
 }
 
-impl Frame for InterpreterFrame {}
+
+impl<'a> Method<'a> {
+    pub fn oop_map(&self) -> &OopMap {
+        &self._oop_map
+    }
+
+    pub fn code_data(&self) -> Option<&CodeData<'a>> {
+        self._code_data
+    }
+}
+

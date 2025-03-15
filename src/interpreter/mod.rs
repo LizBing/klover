@@ -19,6 +19,4 @@
  * under the License.
  */
 
-pub mod bytecodes;
 pub mod executor;
-mod interpreter_runtime;

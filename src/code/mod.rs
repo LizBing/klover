@@ -19,4 +19,4 @@
  * under the License.
  */
 
-pub mod code_blob;
+pub mod method;
