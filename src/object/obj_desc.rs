@@ -51,3 +51,9 @@ impl ArrayObjDesc {
     }
 }
 
+impl ArrayObjDesc {
+    pub fn get<T: Sized>(&self, idx: i32) -> T {
+        unimplemented!()
+    }
+}
+

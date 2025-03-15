@@ -30,6 +30,10 @@ pub type uintx = usize;
 pub type word_t = uintx;
 pub type address = uintx;
 
+pub const fn addr_cast<'a, T>(n: address) -> &'a mut T {
+    unsafe { &mut *(n as *mut _) }
+}
+
 pub const LOG_BITS_PER_BYTE: i32 = 3;
 pub const BITS_PER_BYTE: i32 = OneBit!() << LOG_BITS_PER_BYTE;
 

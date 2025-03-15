@@ -23,7 +23,7 @@ use std::{ptr::null, u8};
 
 use cafebabe::{attributes::CodeData, bytecode::Opcode};
 
-use crate::{runtime::frame::Frame, util::global_defs::address};
+use crate::{object::obj_desc::ArrayObjDesc, runtime::frame::Frame, util::global_defs::{addr_cast, address}};
 
 pub struct InterpreterRegisters<'a> {
     _pc: u16,
@@ -85,12 +85,32 @@ impl<'a> Executor<'a> {
 }
 
 impl<'a> Executor<'a> {
+    fn stack_pop<T: Sized>(&mut self) -> T {
+        unimplemented!()
+    }
+
+    fn stack_push<T: Sized>(&mut self, n: T) {
+        unimplemented!()
+    }
+
     pub fn execute(&mut self) -> Option<String> {
         let code = self._code_data.bytecode.as_ref().unwrap();
         loop {
             let opc = &code.opcodes[*self.rpc() as usize];
             match opc.1 {
-                Opcode::Aaload => { () }
+                Opcode::Aaload => {
+                    let index = self.stack_pop::<i32>();
+                    let arrayref = self.stack_pop::<address>();
+
+                    // barrier
+                    // null check
+
+                    let arr = addr_cast::<ArrayObjDesc>(arrayref);
+                    let value = arr.get::<address>(index);
+                    self.stack_push(value);
+                }
+
+                Opcode::Aastore => {}
 
                 _ => break,
             }
