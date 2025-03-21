@@ -38,7 +38,7 @@ macro_rules! declare_vm_flags {
             $(
                 buffer.push(
                     format!(
-                        "pub static mut {}: {} = {};\n",
+                        "pub const {}: {} = {};\n",
                         stringify!($flag_name),
                         stringify!($type),
                         stringify!($default_value)
@@ -54,7 +54,7 @@ const Flag_{}: VMFlag = VMFlag {{
     _name: "{}",
     _type: "{}",
     _desc: "{}",
-    _addr: unsafe {{ &mut {} as *mut {} as *mut c_void }}
+    _addr: &{} as *const _ as *mut _
 }};"#,
 
                         stringify!($flag_name),
@@ -62,7 +62,6 @@ const Flag_{}: VMFlag = VMFlag {{
                         stringify!($type),
                         $description,
                         stringify!($flag_name),
-                        stringify!($type)
                     )
                 );
 
@@ -94,8 +93,9 @@ fn construct_vmflag_maps() {
     let maps = vec![
         declare_vm_flags!(
             [RUNTIME_FLAGS]
-            (bool, exampleFlag, true, "Example."),
-            (int, test, 114514, "testing")
+            (bool, ExampleFlag, true, "Example."),
+            (int, Test, 114514, "testing"),
+            (bool, CompressedPtr, false, "Compressed pointers.")
         ),
     ];
 
