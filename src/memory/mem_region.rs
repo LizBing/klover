@@ -19,7 +19,7 @@
  * under the License.
  */
 
-use crate::{is_page_aligned, util::global_defs::address};
+use crate::{is_page_aligned, util::global_defs::{address, word_t}};
 
 pub struct MemRegion {
     _begin: address,
@@ -83,8 +83,16 @@ impl MemRegion {
         self._end
     }
 
+    pub fn last_word(&self) -> address {
+        self.end() - size_of::<word_t>()
+    }
+
     pub fn size(&self) -> usize {
         self.end() - self.begin()
+    }
+
+    pub fn contains(&self, addr: address) -> bool {
+        addr >= self.begin() && addr < self.end()
     }
 
     pub fn set_begin(&mut self, n: address) {

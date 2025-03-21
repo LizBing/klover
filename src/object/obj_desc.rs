@@ -46,13 +46,17 @@ impl ArrayObjDesc {
         unsafe { *(&self._data as *const _ as *const _) }
     }
 
-    pub fn set_length(&mut self, n: i32) {
-        unsafe { *(&mut self._data as *mut _ as *mut _) = n }
+    pub fn set_length(&self, n: i32) {
+        unimplemented!()
     }
 }
 
 impl ArrayObjDesc {
     pub fn get<T: Sized>(&self, idx: i32) -> T {
+        unimplemented!()
+    }
+
+    pub fn put<T: Sized>(&self, idx: i32, n: T) {
         unimplemented!()
     }
 }

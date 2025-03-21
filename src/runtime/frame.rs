@@ -21,7 +21,7 @@
 
 use cafebabe::attributes::CodeData;
 
-use crate::{interpreter::executor::InterpreterRegisters, util::global_defs::address};
+use crate::interpreter::interpreter_runtime::InterpreterRegisters;
 
 pub struct Frame<'a> {
     _last_regs: InterpreterRegisters<'a>,

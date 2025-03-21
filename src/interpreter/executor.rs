@@ -19,128 +19,106 @@
  * under the License.
  */
 
-use std::{ptr::null, u8};
-
 use cafebabe::{attributes::CodeData, bytecode::Opcode};
 
-use crate::{object::obj_desc::ArrayObjDesc, runtime::frame::Frame, util::global_defs::{addr_cast, address}};
+use crate::{memory::mem_region::MemRegion, object::obj_desc::ArrayObjDesc, runtime::{frame::Frame, vmflags::CompressedPtr}, util::global_defs::{addr_cast, address}};
 
-pub struct InterpreterRegisters<'a> {
-    _pc: u16,
-    _sp: address,
-    _bp: Option<&'a Frame<'a>>
-}
-
-impl<'a> InterpreterRegisters<'a> {
-    fn new() -> Self {
-        Self {
-            _pc: 0,
-            _sp: 0,
-            _bp: None
-        }
-    }
-}
-
-impl<'a> InterpreterRegisters<'a> {
-    fn alloca_sized<T: Sized>(&mut self) -> &'a mut T {
-        unimplemented!()
-    }
-}
-
-impl<'a> Clone for InterpreterRegisters<'a> {
-    fn clone(&self) -> Self {
-        Self {
-            _pc: self._pc,
-            _sp: self._sp,
-            _bp: self._bp
-        }
-    }
-}
+use super::interpreter_runtime::{InterpreterRegisters, InterpreterStack};
 
 pub struct Executor<'a> {
-    _registers: InterpreterRegisters<'a>,
+    _regs: InterpreterRegisters<'a>,
     _code_data: &'a CodeData<'a>,
-    _stack: Box<[u8]>
+    _stack: InterpreterStack<'a>
 }
 
 impl<'a> Executor<'a> {
-    pub fn new(cd: &CodeData) -> Result<Self, String> {
-        unimplemented!()
-    }
-}
-
-// forwarding
-impl<'a> Executor<'a> {
-    fn rpc(&mut self) -> &mut u16 {
-        &mut self._registers._pc
+    pub fn new(cd: &'a CodeData) -> Self {
+        Self {
+            _regs: InterpreterRegisters::new(),
+            _code_data: cd,
+            _stack: InterpreterStack::new()
+        }
     }
 
-    fn rsp(&mut self) -> &mut address {
-        &mut self._registers._sp
-    }
-
-    fn rbp(&mut self) -> &mut Option<&'a Frame<'a>> {
-        &mut self._registers._bp
+    pub fn init(&'a mut self, stack_size: usize) {
+        self._stack.init(stack_size, &mut self._regs);
     }
 }
 
 impl<'a> Executor<'a> {
-    fn stack_pop<T: Sized>(&mut self) -> T {
-        unimplemented!()
-    }
-
-    fn stack_push<T: Sized>(&mut self, n: T) {
-        unimplemented!()
-    }
-
-    pub fn execute(&mut self) -> Option<String> {
+    pub fn execute(&mut self) -> Result<(), String> {
         let code = self._code_data.bytecode.as_ref().unwrap();
-        loop {
-            let opc = &code.opcodes[*self.rpc() as usize];
-            match opc.1 {
-                Opcode::Aaload => {
-                    let index = self.stack_pop::<i32>();
-                    let arrayref = self.stack_pop::<address>();
+        let rpc = &mut self._regs.pc;
 
-                    // barrier
+        loop {
+            let opc = &code.opcodes[*rpc as usize];
+            match &opc.1 {
+                Opcode::Aaload => {
+                    let index = self._stack.pop()?;
+                    let arrayref = self._stack.pop_ptr()?;
+
                     // null check
+                    // barrier
 
                     let arr = addr_cast::<ArrayObjDesc>(arrayref);
-                    let value = arr.get::<address>(index);
-                    self.stack_push(value);
+                    let value = arr.get(index);
+                    self._stack.push_ptr(value)?;
                 }
 
-                Opcode::Aastore => {}
+                Opcode::Aastore => {
+                    let value = self._stack.pop()?;
+                    let index = self._stack.pop()?;
+                    let arrayref = self._stack.pop_ptr()?;
+
+                    // null check
+                    // barrier
+
+                    let arr = addr_cast::<ArrayObjDesc>(arrayref);
+                    arr.put::<address>(index, value);
+                }
+
+                Opcode::AconstNull => {
+                    self._stack.push(0 as address)?;
+                }
+
+                Opcode::Aload(index) => {
+                    // resolve oop map
+                    // ...
+                }
+
+                Opcode::Anewarray(t) => {
+                    // ...
+                } 
+
+                Opcode::Areturn => {
+                    // ...
+                }
+
+                Opcode::Arraylength => {
+                    let arrayref = self._stack.pop_ptr()?;
+
+                    // null check
+                    // barrier
+
+                    let arr = addr_cast::<ArrayObjDesc>(arrayref);
+                    self._stack.push(arr.length())?;
+                }
+
+                Opcode::Astore(index) => {
+                    // resolve oop map
+                    // ...
+                }
+
+                Opcode::Athrow => {
+                    // ...
+                }
 
                 _ => break,
             }
 
-            *self.rpc() += 1;
+            *rpc += 1;
         }
 
-        None
-    }
-}
-
-impl<'a> Executor<'a> {
-    fn create_frame(&mut self) {
-        let tmp_regs = self._registers.clone();
-        let frame = self._registers.alloca_sized::<Frame>();
-        frame.init(tmp_regs, self._code_data);
-
-        *self.rbp() = Some(frame);
-    }
-
-    fn unwind(&mut self) -> bool {
-        match *self.rbp() {
-            Some(x) => {
-                self._registers = x.last_regs();
-                self._code_data = x.last_code_data();
-
-                true
-            }
-
-            None => false
-        }
+        Ok(())
     }
 }
