@@ -41,8 +41,9 @@ pub const LOG_BYTES_PER_SHORT: i32 = 1;
 pub const LOG_BYTES_PER_INT: i32 = 2;
 pub const LOG_BYTES_PER_ARCH: i32 = 3;
 
-pub const BYTES_PER_SHORT: i32 = OneBit!() << LOG_BYTES_PER_SHORT;
-pub const BYTES_PER_ARCH: i32 = OneBit!() << LOG_BYTES_PER_ARCH;
+pub const BYTES_PER_SHORT: usize = OneBit!() << LOG_BYTES_PER_SHORT;
+pub const BYTES_PER_INT: usize = OneBit!() << LOG_BYTES_PER_INT;
+pub const BYTES_PER_ARCH: usize = OneBit!() << LOG_BYTES_PER_ARCH;
 
 pub const LOG_BITS_PER_ARCH: i32 = LOG_BITS_PER_BYTE + LOG_BYTES_PER_ARCH;
 

@@ -19,58 +19,74 @@
  * under the License.
  */
 
+use std::cell::UnsafeCell;
+
 use cafebabe::{attributes::CodeData, bytecode::Opcode};
 
-use crate::{memory::mem_region::MemRegion, object::obj_desc::ArrayObjDesc, runtime::{frame::Frame, vmflags::CompressedPtr}, util::global_defs::{addr_cast, address}};
+use crate::{ object::{klass::Klass, obj_desc::ArrayObjDesc}, util::global_defs::{addr_cast, address}};
 
 use super::interpreter_runtime::{InterpreterRegisters, InterpreterStack};
 
 pub struct Executor<'a> {
-    _regs: InterpreterRegisters<'a>,
+    _regs: UnsafeCell<InterpreterRegisters<'a>>,
     _code_data: &'a CodeData<'a>,
-    _stack: InterpreterStack<'a>
+    _stack: InterpreterStack<'a>,
 }
 
 impl<'a> Executor<'a> {
     pub fn new(cd: &'a CodeData) -> Self {
         Self {
-            _regs: InterpreterRegisters::new(),
+            _regs: UnsafeCell::new(InterpreterRegisters::new()),
             _code_data: cd,
             _stack: InterpreterStack::new()
         }
     }
 
     pub fn init(&'a mut self, stack_size: usize) {
-        self._stack.init(stack_size, &mut self._regs);
+        self._stack.init(stack_size, self._regs.get_mut());
     }
 }
 
 impl<'a> Executor<'a> {
-    pub fn execute(&mut self) -> Result<(), String> {
+    fn regs(&self) -> &mut InterpreterRegisters<'a> {
+        unsafe { &mut *(self._regs.get()) }
+    }
+}
+
+impl<'a> Executor<'a> {
+    fn throw_exception(&mut self, e: &Klass) {
+        unimplemented!()
+    }
+
+    fn pop_valid_ptr(&self) -> address {
+        unimplemented!()
+    }
+}
+
+impl<'a> Executor<'a> {
+    pub fn execute(&self) -> Result<(), String> {
         let code = self._code_data.bytecode.as_ref().unwrap();
-        let rpc = &mut self._regs.pc;
+        let rpc = &mut self.regs().pc;
 
         loop {
             let opc = &code.opcodes[*rpc as usize];
             match &opc.1 {
                 Opcode::Aaload => {
-                    let index = self._stack.pop()?;
-                    let arrayref = self._stack.pop_ptr()?;
+                    let index = self._stack.pop();
+                    let arrayref = self.pop_valid_ptr();
 
-                    // null check
                     // barrier
 
                     let arr = addr_cast::<ArrayObjDesc>(arrayref);
                     let value = arr.get(index);
-                    self._stack.push_ptr(value)?;
+                    self._stack.push_ptr(value);
                 }
 
                 Opcode::Aastore => {
-                    let value = self._stack.pop()?;
-                    let index = self._stack.pop()?;
-                    let arrayref = self._stack.pop_ptr()?;
+                    let value = self._stack.pop();
+                    let index = self._stack.pop();
+                    let arrayref = self.pop_valid_ptr();
 
-                    // null check
                     // barrier
 
                     let arr = addr_cast::<ArrayObjDesc>(arrayref);
@@ -78,7 +94,7 @@ impl<'a> Executor<'a> {
                 }
 
                 Opcode::AconstNull => {
-                    self._stack.push(0 as address)?;
+                    self._stack.push(0 as address);
                 }
 
                 Opcode::Aload(index) => {
@@ -95,13 +111,13 @@ impl<'a> Executor<'a> {
                 }
 
                 Opcode::Arraylength => {
-                    let arrayref = self._stack.pop_ptr()?;
+                    let arrayref = self.pop_valid_ptr();
 
                     // null check
                     // barrier
 
                     let arr = addr_cast::<ArrayObjDesc>(arrayref);
-                    self._stack.push(arr.length())?;
+                    self._stack.push(arr.length());
                 }
 
                 Opcode::Astore(index) => {
