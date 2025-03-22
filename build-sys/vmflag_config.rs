@@ -38,7 +38,7 @@ macro_rules! declare_vm_flags {
             $(
                 buffer.push(
                     format!(
-                        "pub const {}: {} = {};\n",
+                        "pub static {}: {} = {};\n",
                         stringify!($flag_name),
                         stringify!($type),
                         stringify!($default_value)
