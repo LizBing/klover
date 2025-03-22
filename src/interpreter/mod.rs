@@ -21,3 +21,20 @@
 
 pub mod executor;
 pub mod interpreter_runtime;
+
+use crate::{runtime::vmflags::CompressedPtr, util::global_defs::{BYTES_PER_ARCH, BYTES_PER_INT}};
+
+static mut STACK_SLOT_SIZE: usize = 0;
+
+pub fn init() {
+    unsafe {
+        STACK_SLOT_SIZE = {
+            if CompressedPtr { BYTES_PER_INT }
+            else { BYTES_PER_ARCH }
+        }
+    }
+}
+
+fn stack_slot_size() -> usize {
+    unsafe { STACK_SLOT_SIZE }
+}

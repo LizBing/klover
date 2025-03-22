@@ -23,7 +23,7 @@ use std::borrow::Cow;
 
 use dashmap::{DashMap, DashSet};
 
-use crate::{metaspace::klass_mem_pool::KlassMemPool, object::klass::Klass};
+use crate::{metaspace::klass_mem_pool::KlassMemPool, object::klass::Klass, util::global_defs::{address, naddr}};
 
 pub struct Universe<'a> {
     _klass_mem_pool: KlassMemPool<'a>,
@@ -34,5 +34,15 @@ pub struct Universe<'a> {
 impl<'a> Universe<'a> {
     pub fn new() -> Result<Self, String> {
         Err(String::new())
+    }
+}
+
+impl<'a> Universe<'a> {
+    pub fn reslove_compressed_ptr(n: naddr) -> address {
+        unimplemented!()
+    }
+
+    pub fn compress_ptr(n: address) -> naddr {
+        unimplemented!()
     }
 }

@@ -29,6 +29,7 @@ pub type uintx = usize;
 
 pub type word_t = uintx;
 pub type address = uintx;
+pub type naddr = u32;
 
 pub const fn addr_cast<'a, T>(n: address) -> &'a mut T {
     unsafe { &mut *(n as *mut _) }
@@ -39,10 +40,12 @@ pub const BITS_PER_BYTE: i32 = OneBit!() << LOG_BITS_PER_BYTE;
 
 pub const LOG_BYTES_PER_SHORT: i32 = 1;
 pub const LOG_BYTES_PER_INT: i32 = 2;
-pub const LOG_BYTES_PER_ARCH: i32 = 3;
+pub const LOG_BYTES_PER_LONG: i32 = 3;
+pub const LOG_BYTES_PER_ARCH: i32 = 3;  // for x64 machines
 
 pub const BYTES_PER_SHORT: usize = OneBit!() << LOG_BYTES_PER_SHORT;
 pub const BYTES_PER_INT: usize = OneBit!() << LOG_BYTES_PER_INT;
+pub const BYTES_PER_LONG: usize = OneBit!() << LOG_BYTES_PER_LONG;
 pub const BYTES_PER_ARCH: usize = OneBit!() << LOG_BYTES_PER_ARCH;
 
 pub const LOG_BITS_PER_ARCH: i32 = LOG_BITS_PER_BYTE + LOG_BYTES_PER_ARCH;
