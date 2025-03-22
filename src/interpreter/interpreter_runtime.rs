@@ -53,32 +53,45 @@ impl<'a> Clone for InterpreterRegisters<'a> {
 
 type PushAndPopPtr<'a> = (fn(&InterpreterStack<'a>, address), fn(&InterpreterStack<'a>) -> address);
 
+static mut PUSH_AND_POP_PTR: (address, address) = (0, 0);
 
+pub(super) fn init() {
+    unsafe {
+        PUSH_AND_POP_PTR = {
+            if CompressedPtr {
+                (
+                    InterpreterStack::push_compressed_ptr as _,
+                    InterpreterStack::pop_compressed_ptr as _,
+                )
+            } else {
+                (
+                    InterpreterStack::push_raw_ptr as _,
+                    InterpreterStack::pop_raw_ptr as _
+                )
+            }
+        }
+    }
+}
+
+fn push_and_pop_ptr<'a>() -> PushAndPopPtr<'a> {
+    unsafe {
+        *(&PUSH_AND_POP_PTR as *const _ as *const _)
+    }
+}
 
 pub(super) struct InterpreterStack<'a> {
     _regs: UnsafeCell<Option<&'a mut InterpreterRegisters<'a>>>,
     _mr: MemRegion,
 
     _locals: UnsafeCell<address>,
-    _push_and_pop_ptr: PushAndPopPtr<'a>
 }
 
 impl<'a> InterpreterStack<'a> {
-    // helper
-    fn select_push_and_pop_ptr_funcs() -> PushAndPopPtr<'a> {
-        if CompressedPtr {
-            (Self::push_compressed_ptr, Self::pop_compressed_ptr)
-        } else {
-            (Self::push_raw_ptr, Self::pop_raw_ptr)
-        }
-    }
-
     pub fn new() -> Self {
         Self {
             _regs: UnsafeCell::new(None),
             _mr: MemRegion::new(),
             _locals: UnsafeCell::new(0),
-            _push_and_pop_ptr: Self::select_push_and_pop_ptr_funcs()
         }
     }
 
@@ -143,11 +156,11 @@ impl<'a> InterpreterStack<'a> {
     }
 
     pub fn push_ptr(&self, n: address) {
-        self._push_and_pop_ptr.0(self, n)
+        push_and_pop_ptr().0(self, n)
     }
 
     pub fn pop_ptr(&self) -> address {
-        self._push_and_pop_ptr.1(self)
+        push_and_pop_ptr().1(self)
     }
 
     fn cal_addr_of_local(&self, index: u16) -> address {
