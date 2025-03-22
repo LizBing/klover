@@ -33,7 +33,7 @@ pub struct Universe<'a> {
 
 impl<'a> Universe<'a> {
     pub fn new() -> Result<Self, String> {
-        Err(String::new())
+        unimplemented!()
     }
 }
 

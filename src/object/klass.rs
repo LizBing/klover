@@ -28,13 +28,21 @@ enum RtField {}
 pub struct Klass<'a> {
     // used for lock free stack
     _next_ptr: *const Klass<'a>,
-
     _class_file: ClassFile<'a>,
+
+    // size of one element if this is a array klass
+    _size_of_instance: usize,
 }
 
 impl<'a> NextPtr<Klass<'a>> for Klass<'a> {
     fn next_ptr(&mut self) -> *mut *const Klass<'a> {
         &mut self._next_ptr
+    }
+}
+
+impl<'a> Klass<'a> {
+    fn size_of_instance(&self) -> usize {
+        self._size_of_instance
     }
 }
 

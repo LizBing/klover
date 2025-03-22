@@ -164,15 +164,19 @@ impl<'a> InterpreterStack<'a> {
     }
 
     fn cal_addr_of_local(&self, index: u16) -> address {
-        unimplemented!()
+        unsafe {
+            *(self._locals.get()) + stack_slot_size() * index as usize
+        }
     }
 
-    pub fn get_local<T: Copy>(&self, index: u16) -> T {
-        unimplemented!()
+    pub fn load_local<T: Copy>(&self, index: u16) -> T {
+        *addr_cast(self.cal_addr_of_local(index))
     }
 
-    pub fn store_local<T: Sized>(&self, index: u16, n: T) {
-        unimplemented!()
+    pub fn store_local<T>(&self, index: u16, n: T) {
+        unsafe {
+            *addr_cast(self.cal_addr_of_local(index)) = n
+        }
     }
 
     // helper functions

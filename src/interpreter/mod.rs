@@ -33,6 +33,8 @@ pub fn init() {
             else { BYTES_PER_ARCH }
         }
     }
+
+    interpreter_runtime::init();
 }
 
 fn stack_slot_size() -> usize {

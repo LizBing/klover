@@ -52,11 +52,11 @@ impl ArrayObjDesc {
 }
 
 impl ArrayObjDesc {
-    pub fn get<T: Sized>(&self, idx: i32) -> T {
+    pub fn get<T: Sized>(&self, idx: i32) -> Option<T> {
         unimplemented!()
     }
 
-    pub fn put<T: Sized>(&self, idx: i32, n: T) {
+    pub fn put<T: Sized>(&self, idx: i32, n: T) -> bool {
         unimplemented!()
     }
 }
