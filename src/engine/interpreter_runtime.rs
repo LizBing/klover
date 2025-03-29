@@ -21,9 +21,9 @@
 
 use std::cell::{Cell, UnsafeCell};
 use cafebabe::attributes::CodeData;
-use crate::{align_up, memory::mem_region::MemRegion, runtime::frame::Frame, util::global_defs::{addr_cast, address, BYTES_PER_INT, BYTES_PER_LONG}};
+use crate::{align_up, code::method::Method, jni::jvalue, memory::mem_region::MemRegion, runtime::frame::Frame, util::global_defs::{addr_cast, address, BYTES_PER_INT}};
 
-const OPSTACK_SLOT_SIZE:    usize = BYTES_PER_LONG;
+const OPSTACK_SLOT_SIZE:    usize = size_of::<jvalue>();
 const LOCALVAR_SLOT_SIZE:   usize = BYTES_PER_INT;
 
 pub struct InterpreterRegisters<'a> {
@@ -148,14 +148,14 @@ impl<'a> InterpreterStack<'a> {
         self._locals.set(bp as *const _ as address - Self::cal_mem_size_of_locals(cd));
     }
 
-    // If we are about to invoke a native method, we do not create a new frame.
-    // Instead, use Self::alloca for interpreter stack allocation then.
     // We merely assume that the opcode is safe to run, so we do the assertion
     // of never-overflowing here.
-    pub fn create_frame(&self, cd: &'a CodeData) -> Result<(), String> {
+    pub fn create_frame(&self, mthd: &'a Method) -> Result<(), String> {
         let old_regs = self.regs().clone();
+        let cd = mthd.code_data().unwrap();
+
         let f = addr_cast::<Frame>(self.alloca(Self::cal_frame_size(cd))?);
-        f.init(old_regs, cd);
+        f.init(old_regs, mthd);
 
         // assert frame available
         let frame_edge = self.regs().sp - Self::cal_mem_size_of_opstack(cd);
@@ -167,13 +167,26 @@ impl<'a> InterpreterStack<'a> {
         Ok(())
     }
 
-    pub fn unwind(&self) -> Option<&CodeData> {
+    // including compiled code
+    pub fn create_frame_for_native(&self, mthd: &'a Method) -> Result<(), String> {
+        let old_regs = self.regs().clone();
+
+        let f = addr_cast::<Frame>(self.alloca(size_of::<Frame>())?);
+        f.init(old_regs, mthd);
+
+        self.regs().bp = Some(f);
+        
+        Ok(())
+    }
+
+    pub fn unwind(&self) -> Option<&'a Method<'a>> {
         match self.regs().bp {
             Some(x) => {
+                let mthd = x.last_method();
                 *self.regs() = x.last_regs();
-                self.set_base_of_locals(x, x.last_code_data());
+                self.set_base_of_locals(x, mthd.code_data().unwrap());
 
-                Some(x.last_code_data())
+                Some(mthd)
             },
 
             None => None

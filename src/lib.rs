@@ -22,7 +22,7 @@
 pub(crate) mod class_loader;
 pub(crate) mod code;
 pub(crate) mod gc;
-pub(crate) mod interpreter;
+pub(crate) mod engine;
 pub(crate) mod jni;
 pub(crate) mod memory;
 pub(crate) mod metaspace;

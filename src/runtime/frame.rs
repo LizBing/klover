@@ -19,20 +19,18 @@
  * under the License.
  */
 
-use cafebabe::attributes::CodeData;
-
-use crate::interpreter::interpreter_runtime::InterpreterRegisters;
+use crate::{code::method::Method, engine::interpreter_runtime::InterpreterRegisters};
 
 pub struct Frame<'a> {
     _last_regs: InterpreterRegisters<'a>,
-    _last_code_data: &'a CodeData<'a>
+    _last_mthd: &'a Method<'a>
 }
 
 impl<'a> Frame<'a> {
-    pub fn init(&mut self, regs: InterpreterRegisters<'a>, cd: &'a CodeData) {
+    pub fn init(&mut self, regs: InterpreterRegisters<'a>, mthd: &'a Method) {
         *self = Self {
             _last_regs: regs,
-            _last_code_data: cd
+            _last_mthd: mthd
         }
     }
 
@@ -40,8 +38,8 @@ impl<'a> Frame<'a> {
         self._last_regs.clone()
     }
 
-    pub fn last_code_data(&self) -> &CodeData {
-        self._last_code_data
+    pub fn last_method(&self) -> &Method {
+        self._last_mthd
     }
 }
 

@@ -24,8 +24,6 @@ use cafebabe::attributes::CodeData;
 use crate::gc::oop_map::OopMap;
 
 pub struct Method<'a> {
-    _i: &'a i32,
-
     _oop_map: OopMap,
     _code_data: Option<&'a CodeData<'a>>
 }

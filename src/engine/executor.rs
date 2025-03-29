@@ -19,25 +19,25 @@
  * under the License.
  */
 
-use std::cell::UnsafeCell;
+use std::cell::{Cell, UnsafeCell};
 
-use cafebabe::{attributes::CodeData, bytecode::Opcode};
+use cafebabe::bytecode::Opcode;
 
-use crate::{ jni::{jbyte, jchar, jdouble, jfloat, jint, jlong}, object::{klass::Klass, obj_desc::ArrayObjDesc}, util::global_defs::{addr_cast, address}};
+use crate::{ code::method::Method, jni::{jbyte, jchar, jdouble, jfloat, jint, jlong}, object::{klass::Klass, obj_desc::{ArrayObjDesc, ObjDesc}}, util::global_defs::{addr_cast, address}};
 
 use super::interpreter_runtime::{InterpreterRegisters, InterpreterStack};
 
 pub struct Executor<'a> {
     _regs: UnsafeCell<InterpreterRegisters<'a>>,
-    _code_data: &'a CodeData<'a>,
+    _mthd: Cell<&'a Method<'a>>,
     _stack: InterpreterStack<'a>,
 }
 
 impl<'a> Executor<'a> {
-    pub fn new(cd: &'a CodeData) -> Self {
+    pub fn new(mthd: &'a Method<'a>) -> Self {
         Self {
             _regs: UnsafeCell::new(InterpreterRegisters::new()),
-            _code_data: cd,
+            _mthd: Cell::new(mthd),
             _stack: InterpreterStack::new()
         }
     }
@@ -58,29 +58,105 @@ impl<'a> Executor<'a> {
         unimplemented!()
     }
 
-    fn pop_valid_ptr(&self) -> address {
+    fn pop_valid_obj<T>(&self) -> Option<&T> {
         unimplemented!()
     }
 
-    fn array_load<T>(&self) { unimplemented!() }
+    fn array_load<T>(&self) -> Option<()> {
+        let index = self._stack.pop();
+        let arrayref = self.pop_valid_obj::<ArrayObjDesc>()?;
 
-    fn array_load_ptr(&self) { unimplemented!() }
+        let opt = arrayref.get::<T>(index);
+        if let None = opt {
+            // todo: throw ArrayIndexOutOfBoundsException.
+        }
 
-    fn array_store<T>(&self) { unimplemented!() }
+        let value = opt.unwrap();
+        self._stack.push(value);
 
-    fn array_store_ptr(&self) { unimplemented!() }
+        None
+    }
 
-    fn local_load<T>(&self, index: u16) { unimplemented!() }
+    fn array_load_ptr(&self) -> Option<()> {
+        let index = self._stack.pop();
+        let arrayref = self.pop_valid_obj::<ArrayObjDesc>()?;
 
-    fn local_load_ptr(&self, index: u16) { unimplemented!() }
+        let opt = arrayref.get_ptr(index);
+        if let None = opt {
+            // todo: throw ArrayIndexOutOfBoundsException.
+        }
 
-    fn local_store<T>(&self, index: u16) { unimplemented!() }
+        let value = opt.unwrap();
+        self._stack.push(value);
 
-    fn local_store_ptr(&self, index: u16) { unimplemented!() }
+        None
+    }
 
-    fn return_v<T>(&self) { unimplemented!() }
+    fn array_store<T: Copy>(&self) -> Option<()> {
+        let value = self._stack.pop::<T>();
+        let index = self._stack.pop();
+        let arrayref = self.pop_valid_obj::<ArrayObjDesc>()?;
 
-    // fn return_ptr(&self) { unimplemented!() }
+        if !arrayref.put(index, value) {
+            // todo: throw ArrayIndexOutOfBoundsException.
+        }
+
+        None
+    }
+
+    fn array_store_ptr(&self) -> Option<()> {
+        let value = self._stack.pop::<address>();
+        let index = self._stack.pop();
+        let arrayref = self.pop_valid_obj::<ArrayObjDesc>()?;
+
+        if !arrayref.put_ptr(index, value) {
+            // todo: throw ArrayIndexOutOfBoundsException.
+        }
+
+        None
+    }
+
+    fn local_load<T: Copy>(&self, index: u16) {
+        let value = self._stack.load_local::<T>(index);
+        self._stack.push(value);
+    }
+
+    fn local_load_ptr(&self, index: u16) {
+        let objectref = self._stack.load_local::<address>(index);
+
+        // todo: barrier, resolve oop map.
+
+        self._stack.push(objectref);
+    }
+
+    fn local_store<T: Copy>(&self, index: u16) {
+        let value = self._stack.pop::<T>();
+        self._stack.store_local(index, value);
+    }
+
+    fn local_store_ptr(&self, index: u16) {
+        let objectref = self._stack.pop::<address>();
+
+        // todo: barrier, reslove oop map.
+
+        self._stack.store_local(index, objectref);
+    }
+
+    // Returning false means that this stack is empty.
+    fn return_v<T: Copy>(&self) -> bool {
+        let value = self._stack.pop::<T>();
+
+        match self._stack.unwind() {
+            Some(mthd) => {
+                self._mthd.set(mthd);
+                self._stack.push(value);
+            },
+
+            _ => return false
+        }
+
+        true
+    }
 
     fn dup(&self) { unimplemented!() }
 
@@ -126,8 +202,8 @@ impl<'a> Executor<'a> {
 }
 
 impl<'a> Executor<'a> {
-    pub fn execute(&self) -> Result<(), String> {
-        let code = self._code_data.bytecode.as_ref().unwrap();
+    pub fn interpret(&self) -> Result<(), String> {
+        let mut code = self._mthd.get().code_data().unwrap().bytecode.as_ref().unwrap();
         let rpc = &mut self.regs().pc;
 
         loop {
@@ -154,17 +230,17 @@ impl<'a> Executor<'a> {
                 } 
 
                 Opcode::Areturn => {
-                    // self.return_ptr();
-                    self.return_v::<address>();
+                    if !self.return_v::<address>() { break; }
                 }
 
                 Opcode::Arraylength => {
-                    let arrayref = self.pop_valid_ptr();
+                    || -> Option<()> {
+                        let arrayref = self.pop_valid_obj::<ArrayObjDesc>()?;
+                        let value = arrayref.length();
+                        self._stack.push(value);
 
-                    // barrier
-
-                    let arr = addr_cast::<ArrayObjDesc>(arrayref);
-                    self._stack.push(arr.length());
+                        None
+                    } ();
                 }
 
                 Opcode::Astore(index) => {
@@ -463,6 +539,30 @@ impl<'a> Executor<'a> {
                     // ...
                 }
 
+                Opcode::IfIcmpeq(offs) => {
+                    // ...
+                }
+
+                Opcode::IfIcmpne(offs) => {
+                    // ...
+                }
+
+                Opcode::IfIcmplt(offs) => {
+                    // ...
+                }
+
+                Opcode::IfIcmpge(offs) => {
+                    // ...
+                }
+                
+                Opcode::IfIcmpgt(offs) => {
+                    // ...
+                }
+
+                Opcode::IfIcmple(offs) => {
+                    // ...
+                }
+
                 Opcode::Ifeq(offs) => {
                     // ...
                 }
@@ -725,6 +825,10 @@ impl<'a> Executor<'a> {
                     // ...
                 }
 
+                Opcode::Ret(index) => {
+                    // ...
+                }
+
                 Opcode::Return => {
                     break;
                 }
@@ -748,7 +852,23 @@ impl<'a> Executor<'a> {
                     self._stack.push(value1);
                 }
 
-                _ => break,
+                Opcode::Tableswitch(rt) => {
+                    // ...
+                }
+
+                // reserved codes
+
+                Opcode::Breakpoint => {
+                    // ...
+                }
+
+                Opcode::Impdep1 => {
+                    // ...
+                }
+
+                Opcode::Impdep2 => {
+                    // ...
+                }
             }
 
             *rpc += 1;

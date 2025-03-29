@@ -21,5 +21,3 @@
 
 pub mod executor;
 pub mod interpreter_runtime;
-
-use crate::{runtime::vmflags::CompressedPtr, util::global_defs::{BYTES_PER_ARCH, BYTES_PER_INT}};

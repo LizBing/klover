@@ -56,7 +56,15 @@ impl ArrayObjDesc {
         unimplemented!()
     }
 
+    pub fn get_ptr(&self, idx: i32) -> Option<address> {
+        unimplemented!()
+    }
+
     pub fn put<T: Sized>(&self, idx: i32, n: T) -> bool {
+        unimplemented!()
+    }
+
+    pub fn put_ptr(&self, idx: i32, n: address) -> bool {
         unimplemented!()
     }
 }
