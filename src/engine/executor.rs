@@ -21,7 +21,7 @@
 
 use std::cell::{Cell, UnsafeCell};
 
-use cafebabe::bytecode::Opcode;
+use cafebabe::bytecode::{ByteCode, Opcode};
 
 use crate::{ code::method::Method, jni::{jbyte, jchar, jdouble, jfloat, jint, jlong}, object::{klass::Klass, obj_desc::{ArrayObjDesc, ObjDesc}}, util::global_defs::{addr_cast, address}};
 
@@ -38,7 +38,7 @@ impl<'a> Executor<'a> {
         Self {
             _regs: UnsafeCell::new(InterpreterRegisters::new()),
             _mthd: Cell::new(mthd),
-            _stack: InterpreterStack::new()
+            _stack: InterpreterStack::new(),
         }
     }
 
@@ -50,6 +50,10 @@ impl<'a> Executor<'a> {
 impl<'a> Executor<'a> {
     fn regs(&self) -> &mut InterpreterRegisters<'a> {
         unsafe { &mut *(self._regs.get()) }
+    }
+
+    fn code(&self) -> &ByteCode {
+        self._mthd.get().code_data().unwrap().bytecode.as_ref().unwrap()
     }
 }
 
@@ -143,13 +147,25 @@ impl<'a> Executor<'a> {
     }
 
     // Returning false means that this stack is empty.
-    fn return_v<T: Copy>(&self) -> bool {
+    fn return_with_value<T: Copy>(&self) -> bool {
         let value = self._stack.pop::<T>();
 
         match self._stack.unwind() {
             Some(mthd) => {
                 self._mthd.set(mthd);
                 self._stack.push(value);
+            },
+
+            _ => return false
+        }
+
+        true
+    }
+    
+    fn return_void(&self) -> bool {
+        match self._stack.unwind() {
+            Some(mthd) => {
+                self._mthd.set(mthd);
             },
 
             _ => return false
@@ -203,7 +219,7 @@ impl<'a> Executor<'a> {
 
 impl<'a> Executor<'a> {
     pub fn interpret(&self) -> Result<(), String> {
-        let mut code = self._mthd.get().code_data().unwrap().bytecode.as_ref().unwrap();
+        let mut code = self.code();
         let rpc = &mut self.regs().pc;
 
         loop {
@@ -230,7 +246,10 @@ impl<'a> Executor<'a> {
                 } 
 
                 Opcode::Areturn => {
-                    if !self.return_v::<address>() { break; }
+                    if self.return_with_value::<address>() {
+                        code = self.code();
+                        continue;
+                    }
                 }
 
                 Opcode::Arraylength => {
@@ -336,7 +355,10 @@ impl<'a> Executor<'a> {
                 }
 
                 Opcode::Dreturn => {
-                    self.return_v::<jdouble>();
+                    if self.return_with_value::<jdouble>() {
+                        code = self.code();
+                        continue;
+                    }
                 }
 
                 Opcode::Dstore(index) => {
@@ -436,7 +458,10 @@ impl<'a> Executor<'a> {
                 }
 
                 Opcode::Freturn => {
-                    self.return_v::<jfloat>();
+                    if self.return_with_value::<jfloat>() {
+                        code = self.code();
+                        continue;
+                    }
                 }
 
                 Opcode::Fstore(index) => {
@@ -644,7 +669,10 @@ impl<'a> Executor<'a> {
                 }
 
                 Opcode::Ireturn => {
-                    self.return_v::<jint>();
+                    if self.return_with_value::<jint>() {
+                        code = self.code();
+                        continue;
+                    }
                 }
 
                 Opcode::Ishl => {
@@ -756,7 +784,10 @@ impl<'a> Executor<'a> {
                 }
 
                 Opcode::Lreturn => {
-                    self.return_v::<jlong>();
+                    if self.return_with_value::<jlong>() {
+                        code = self.code();
+                        continue;
+                    }
                 }
 
                 Opcode::Lshl => {
@@ -830,7 +861,10 @@ impl<'a> Executor<'a> {
                 }
 
                 Opcode::Return => {
-                    break;
+                    if self.return_void() {
+                        code = self.code();
+                        continue;
+                    }
                 }
 
                 Opcode::Saload => {
