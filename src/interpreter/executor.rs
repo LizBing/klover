@@ -43,7 +43,7 @@ impl<'a> Executor<'a> {
     }
 
     pub fn init(&'a mut self, stack_size: usize) {
-        self._stack.init(stack_size, self._regs.get_mut());
+        self._stack.init(stack_size, &self._regs);
     }
 }
 
@@ -80,7 +80,7 @@ impl<'a> Executor<'a> {
 
     fn return_v<T>(&self) { unimplemented!() }
 
-    fn return_ptr(&self) { unimplemented!() }
+    // fn return_ptr(&self) { unimplemented!() }
 
     fn dup(&self) { unimplemented!() }
 
@@ -108,6 +108,18 @@ impl<'a> Executor<'a> {
 
     fn rem<T>(&self) { unimplemented!() }
 
+    fn and<T>(&self) { unimplemented!() }
+
+    fn or<T>(&self) { unimplemented!() }
+
+    fn xor<T>(&self) { unimplemented!() }
+
+    fn shl<T>(&self) { unimplemented!() }
+
+    fn shr<T>(&self) { unimplemented!() }
+
+    fn ushr<T>(&self) { unimplemented!() }
+
     fn cmpg<T>(&self) { unimplemented!() }
 
     fn cmpl<T>(&self) { unimplemented!() }
@@ -130,7 +142,7 @@ impl<'a> Executor<'a> {
                 }
 
                 Opcode::AconstNull => {
-                    self._stack.push_ptr(0);
+                    self._stack.push::<address>(0);
                 }
 
                 Opcode::Aload(index) => {
@@ -142,7 +154,8 @@ impl<'a> Executor<'a> {
                 } 
 
                 Opcode::Areturn => {
-                    self.return_ptr();
+                    // self.return_ptr();
+                    self.return_v::<address>();
                 }
 
                 Opcode::Arraylength => {
@@ -403,9 +416,7 @@ impl<'a> Executor<'a> {
                 }
 
                 Opcode::Iand => {
-                    let value2 = self._stack.pop::<jint>();
-                    let value1 = self._stack.pop::<jint>();
-                    self._stack.push(value1 & value2);
+                    self.and::<jint>();
                 }
 
                 Opcode::Iastore => {
@@ -444,12 +455,299 @@ impl<'a> Executor<'a> {
                     self.div::<jint>();
                 }
 
+                Opcode::IfAcmpeq(offs) => {
+                    // ...
+                }
+
+                Opcode::IfAcmpne(offs) => {
+                    // ...
+                }
+
+                Opcode::Ifeq(offs) => {
+                    // ...
+                }
+
+                Opcode::Ifne(offs) => {
+                    // ...
+                }
+
+                Opcode::Iflt(offs) => {
+                    // ...
+                }
+
+                Opcode::Ifge(offs) => {
+                    // ...
+                }
+
+                Opcode::Ifgt(offs) => {
+                    // ...
+                }
+
+                Opcode::Ifle(offs) => {
+                    // ...
+                }
+
+                Opcode::Ifnonnull(offs) => {
+                    // ...
+                }
+
+                Opcode::Ifnull(offs) => {
+                    // ...
+                }
+
                 Opcode::Iinc(index, con) => {
                     // ...
                 }
 
-                // ... more opcodes would continue here
-                
+                Opcode::Iload(index) => {
+                    self.local_load::<jint>(*index);
+                }
+
+                Opcode::Imul => {
+                    self.mul::<jint>();
+                }
+
+                Opcode::Ineg => {
+                    self.neg::<jint>();
+                }
+
+                Opcode::Instanceof(t) => {
+                    // ...
+                }
+
+                Opcode::Invokedynamic(t) => {
+                    // ...
+                }
+
+                Opcode::Invokeinterface(r, count) => {
+                    // ...
+                }
+
+                Opcode::Invokespecial(r) => {
+                    // ...
+                }
+
+                Opcode::Invokestatic(r) => {
+                    // ...
+                }
+
+                Opcode::Invokevirtual(r) => {
+                    // ...
+                }
+
+                Opcode::Ior => {
+                    self.or::<jint>();
+                }
+
+                Opcode::Irem => {
+                    self.rem::<jint>();
+                }
+
+                Opcode::Ireturn => {
+                    self.return_v::<jint>();
+                }
+
+                Opcode::Ishl => {
+                    self.shl::<jint>();
+                }
+
+                Opcode::Ishr => {
+                    self.shr::<jint>();
+                }
+
+                Opcode::Istore(index) => {
+                    self.local_store::<jint>(*index);
+                }
+
+                Opcode::Isub => {
+                    self.sub::<jint>();
+                }
+
+                Opcode::Iushr => {
+                    self.ushr::<jint>();
+                }
+
+                Opcode::Ixor => {
+                    self.xor::<jint>();
+                }
+
+                Opcode::Jsr(offs) => {
+                    // ...
+                }
+
+                Opcode::L2d => {
+                    self.primitive_cast::<jlong, jdouble>();
+                }
+
+                Opcode::L2f => {
+                    self.primitive_cast::<jlong, jfloat>();
+                }
+
+                Opcode::L2i => {
+                    self.primitive_cast::<jlong, jint>();
+                }
+
+                Opcode::Ladd => {
+                    self.add::<jlong>();
+                }
+
+                Opcode::Laload => {
+                    self.array_load::<jlong>();
+                }
+
+                Opcode::Land => {
+                    self.and::<jlong>();
+                }
+
+                Opcode::Lastore => {
+                    self.array_store::<jlong>();
+                }
+
+                Opcode::Lcmp => {
+                    
+                }
+
+                Opcode::Lconst0 => {
+                    self._stack.push(0 as jlong);
+                }
+
+                Opcode::Lconst1 => {
+                    self._stack.push(1 as jlong);
+                }
+
+                Opcode::Ldc(i) => {
+                    // ...
+                }
+
+                Opcode::LdcW(i) => {
+                    // ...
+                }
+
+                Opcode::Ldc2W(i) => {
+                    // ...
+                }
+
+                Opcode::Ldiv => {
+                    self.div::<jlong>();
+                }
+
+                Opcode::Lload(index) => {
+                    self.local_load::<jlong>(*index);
+                }
+
+                Opcode::Lmul => {
+                    self.mul::<jlong>();
+                }
+
+                Opcode::Lneg => {
+                    self.neg::<jlong>();
+                }
+
+                Opcode::Lookupswitch(t) => {
+                    // ...
+                }
+
+                Opcode::Lor => {
+                    self.or::<jlong>();
+                }
+
+                Opcode::Lrem => {
+                    self.rem::<jlong>();
+                }
+
+                Opcode::Lreturn => {
+                    self.return_v::<jlong>();
+                }
+
+                Opcode::Lshl => {
+                    self.shl::<jlong>();
+                }
+
+                Opcode::Lshr => {
+                    self.shr::<jlong>();
+                }
+
+                Opcode::Lstore(index) => {
+                    self.local_store::<jlong>(*index);
+                }
+
+                Opcode::Lsub => {
+                    self.sub::<jlong>();
+                }
+
+                Opcode::Lushr => {
+                    self.ushr::<jlong>();
+                }
+
+                Opcode::Lxor => {
+                    let value2 = self._stack.pop::<jlong>();
+                    let value1 = self._stack.pop::<jlong>();
+                    self._stack.push(value1 ^ value2);
+                }
+
+                Opcode::Monitorenter => {
+                    // ...
+                }
+
+                Opcode::Monitorexit => {
+                    // ...
+                }
+
+                Opcode::Multianewarray(t, dims) => {
+                    // ...
+                }
+
+                Opcode::New(t) => {
+                    // ...
+                }
+
+                Opcode::Newarray(t) => {
+                    // ...
+                }
+
+                Opcode::Nop => {
+                    // Do nothing
+                }
+
+                Opcode::Pop => {
+                    self._stack.pop::<jint>();
+                }
+
+                Opcode::Pop2 => {
+                    self._stack.pop::<jlong>();
+                }
+
+                Opcode::Putfield(field_ref) => {
+                    // ...
+                }
+
+                Opcode::Putstatic(field_ref) => {
+                    // ...
+                }
+
+                Opcode::Return => {
+                    break;
+                }
+
+                Opcode::Saload => {
+                    self.array_load::<i16>();
+                }
+
+                Opcode::Sastore => {
+                    self.array_store::<i16>();
+                }
+
+                Opcode::Sipush(short) => {
+                    self._stack.push(*short as jint);
+                }
+
+                Opcode::Swap => {
+                    let value2 = self._stack.pop::<jint>();
+                    let value1 = self._stack.pop::<jint>();
+                    self._stack.push(value2);
+                    self._stack.push(value1);
+                }
+
                 _ => break,
             }
 

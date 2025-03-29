@@ -23,20 +23,3 @@ pub mod executor;
 pub mod interpreter_runtime;
 
 use crate::{runtime::vmflags::CompressedPtr, util::global_defs::{BYTES_PER_ARCH, BYTES_PER_INT}};
-
-static mut STACK_SLOT_SIZE: usize = 0;
-
-pub fn init() {
-    unsafe {
-        STACK_SLOT_SIZE = {
-            if CompressedPtr { BYTES_PER_INT }
-            else { BYTES_PER_ARCH }
-        }
-    }
-
-    interpreter_runtime::init();
-}
-
-fn stack_slot_size() -> usize {
-    unsafe { STACK_SLOT_SIZE }
-}

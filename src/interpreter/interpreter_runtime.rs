@@ -19,10 +19,12 @@
  * under the License.
  */
 
-use std::cell::UnsafeCell;
+use std::cell::{Cell, UnsafeCell};
 use cafebabe::attributes::CodeData;
-use crate::{memory::mem_region::MemRegion, runtime::{frame::Frame, universe::Universe, vmflags::CompressedPtr}, util::global_defs::{addr_cast, address, BYTES_PER_LONG}};
-use super::stack_slot_size;
+use crate::{align_up, memory::mem_region::MemRegion, runtime::frame::Frame, util::global_defs::{addr_cast, address, BYTES_PER_INT, BYTES_PER_LONG}};
+
+const OPSTACK_SLOT_SIZE:    usize = BYTES_PER_LONG;
+const LOCALVAR_SLOT_SIZE:   usize = BYTES_PER_INT;
 
 pub struct InterpreterRegisters<'a> {
     pub(super) pc: u16,
@@ -51,52 +53,24 @@ impl<'a> Clone for InterpreterRegisters<'a> {
     }
 }
 
-type PushAndPopPtr<'a> = (fn(&InterpreterStack<'a>, address), fn(&InterpreterStack<'a>) -> address);
-
-static mut PUSH_AND_POP_PTR: (address, address) = (0, 0);
-
-pub(super) fn init() {
-    unsafe {
-        PUSH_AND_POP_PTR = {
-            if CompressedPtr {
-                (
-                    InterpreterStack::push_compressed_ptr as _,
-                    InterpreterStack::pop_compressed_ptr as _,
-                )
-            } else {
-                (
-                    InterpreterStack::push_raw_ptr as _,
-                    InterpreterStack::pop_raw_ptr as _
-                )
-            }
-        }
-    }
-}
-
-fn push_and_pop_ptr<'a>() -> PushAndPopPtr<'a> {
-    unsafe {
-        *(&PUSH_AND_POP_PTR as *const _ as *const _)
-    }
-}
-
 pub(super) struct InterpreterStack<'a> {
-    _regs: UnsafeCell<Option<&'a mut InterpreterRegisters<'a>>>,
+    _regs: Option<&'a UnsafeCell<InterpreterRegisters<'a>>>,
     _mr: MemRegion,
 
-    _locals: UnsafeCell<address>,
+    _locals: Cell<address>,
 }
 
 impl<'a> InterpreterStack<'a> {
     pub fn new() -> Self {
         Self {
-            _regs: UnsafeCell::new(None),
+            _regs: None,
             _mr: MemRegion::new(),
-            _locals: UnsafeCell::new(0),
+            _locals: Cell::new(0),
         }
     }
 
-    pub fn init(&mut self, size: usize, regs: &'a mut InterpreterRegisters<'a>) {
-        self._regs = UnsafeCell::new(Some(regs));
+    pub fn init(&mut self, size: usize, regs: &'a UnsafeCell<InterpreterRegisters<'a>>) {
+        self._regs = Some(regs);
         self._mr = MemRegion::with_size(Vec::<u8>::with_capacity(size).as_ptr() as _, size);
 
         self.regs().sp = self._mr.last_word();
@@ -106,7 +80,7 @@ impl<'a> InterpreterStack<'a> {
 impl<'a> InterpreterStack<'a> {
     fn regs(&self) -> &mut InterpreterRegisters<'a> {
         unsafe {
-            (*self._regs.get()).as_mut().unwrap()
+            &mut *(self._regs.unwrap().get())
         }
     }
 }
@@ -120,53 +94,31 @@ impl<'a> InterpreterStack<'a> {
         Ok(())
     }
 
-    pub fn push<T: Sized>(&self, n: T) {
-        let new_sp = self.regs().sp - size_of::<T>();
+    pub fn push<T>(&self, n: T) {
+        let new_sp = self.regs().sp - OPSTACK_SLOT_SIZE;
         self.regs().sp = new_sp;
 
         unsafe { *(new_sp as *mut _) = n };
     }
 
     pub fn alloca(&self, s: usize) -> Result<address, String> {
-        let new_sp = self.regs().sp - s;
+        let size = align_up!(s, OPSTACK_SLOT_SIZE);
+        let new_sp = self.regs().sp - size;
         self.assert_entry_available(new_sp)?;
         self.regs().sp = new_sp;
 
         Ok(new_sp)
     }
 
-    pub fn pop<T>(&self) -> T
-    where T: Sized + Copy {
+    pub fn pop<T: Copy>(&self) -> T {
         let old_sp = self.regs().sp;
-        self.regs().sp = old_sp + size_of::<T>();
+        self.regs().sp = old_sp + OPSTACK_SLOT_SIZE;
 
         unsafe { *(old_sp as *const _) }
     }
 
-    fn push_raw_ptr(&self, n: address) { self.push(n); }
-
-    fn pop_raw_ptr(&self) -> address { self.pop() }
-
-    fn push_compressed_ptr(&self, n: address) {
-        self.push(Universe::compress_ptr(n));
-    }
-
-    fn pop_compressed_ptr(&self) -> address {
-        Universe::reslove_compressed_ptr(self.pop())
-    }
-
-    pub fn push_ptr(&self, n: address) {
-        push_and_pop_ptr().0(self, n)
-    }
-
-    pub fn pop_ptr(&self) -> address {
-        push_and_pop_ptr().1(self)
-    }
-
     fn cal_addr_of_local(&self, index: u16) -> address {
-        unsafe {
-            *(self._locals.get()) + stack_slot_size() * index as usize
-        }
+        self._locals.get() + LOCALVAR_SLOT_SIZE * index as usize
     }
 
     pub fn load_local<T: Copy>(&self, index: u16) -> T {
@@ -174,16 +126,14 @@ impl<'a> InterpreterStack<'a> {
     }
 
     pub fn store_local<T>(&self, index: u16, n: T) {
-        unsafe {
-            *addr_cast(self.cal_addr_of_local(index)) = n
-        }
+        *addr_cast(self.cal_addr_of_local(index)) = n
     }
 
     // helper functions
 
     // We may waste a little memory if the CompressedPtr flag has not set.
     fn cal_mem_size_of_locals(cd: &'a CodeData) -> usize {
-        stack_slot_size() * cd.max_locals as usize
+        LOCALVAR_SLOT_SIZE * cd.max_locals as usize
     }
 
     fn cal_frame_size(cd: &'a CodeData) -> usize {
@@ -191,13 +141,11 @@ impl<'a> InterpreterStack<'a> {
     }
 
     fn cal_mem_size_of_opstack(cd: &'a CodeData) -> usize {
-        BYTES_PER_LONG * cd.max_stack as usize
+        OPSTACK_SLOT_SIZE * cd.max_stack as usize
     }
 
     fn set_base_of_locals(&self, bp: &Frame, cd: &'a CodeData) {
-        unsafe {
-            *self._locals.get() = bp as *const _ as address - Self::cal_mem_size_of_locals(cd)
-        }
+        self._locals.set(bp as *const _ as address - Self::cal_mem_size_of_locals(cd));
     }
 
     // If we are about to invoke a native method, we do not create a new frame.
