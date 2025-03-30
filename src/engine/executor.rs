@@ -19,13 +19,17 @@
  * under the License.
  */
 
-use std::cell::{Cell, UnsafeCell};
+use std::{cell::{Cell, UnsafeCell}, ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Neg, Rem, Shl, Shr, Sub}, result};
 
 use cafebabe::bytecode::{ByteCode, Opcode};
+use num::Float;
 
 use crate::{ code::method::Method, jni::{jbyte, jchar, jdouble, jfloat, jint, jlong}, object::{klass::Klass, obj_desc::{ArrayObjDesc, ObjDesc}}, util::global_defs::{addr_cast, address}};
 
-use super::interpreter_runtime::{InterpreterRegisters, InterpreterStack};
+use super::interpreter_runtime::{slot_t, InterpreterRegisters, InterpreterStack};
+
+type ujint = u32;
+type ujlong = u64;
 
 pub struct Executor<'a> {
     _regs: UnsafeCell<InterpreterRegisters<'a>>,
@@ -188,33 +192,61 @@ impl<'a> Executor<'a> {
 
     fn primitive_cast<FromType, ToType>(&self) { unimplemented!() }
 
-    fn add<T>(&self) { unimplemented!() }
+    fn add<T>(&self)
+    where T: Copy + Add {
+        let value2 = self._stack.pop::<T>();
+        let value1 = self._stack.pop::<T>();
 
-    fn sub<T>(&self) { unimplemented!() }
+        let result = value1 + value2;
 
-    fn mul<T>(&self) { unimplemented!() }
+        self._stack.push(result);
+    }
 
-    fn div<T>(&self) { unimplemented!() }
+    fn sub<T>(&self)
+    where  T: Copy + Sub { unimplemented!() }
 
-    fn neg<T>(&self) { unimplemented!() }
+    fn mul<T>(&self)
+    where T: Copy + Mul { unimplemented!() }
 
-    fn rem<T>(&self) { unimplemented!() }
+    fn div<T>(&self)
+    where T: Copy + Div { unimplemented!() }
 
-    fn and<T>(&self) { unimplemented!() }
+    fn neg<T>(&self)
+    where T: Copy + Neg { unimplemented!() }
 
-    fn or<T>(&self) { unimplemented!() }
+    fn rem<T>(&self)
+    where T: Copy + Rem { unimplemented!() }
 
-    fn xor<T>(&self) { unimplemented!() }
+    fn and<T>(&self)
+    where T: Copy + BitAnd { unimplemented!() }
 
-    fn shl<T>(&self) { unimplemented!() }
+    fn or<T>(&self)
+    where T: Copy + BitOr { unimplemented!() }
 
-    fn shr<T>(&self) { unimplemented!() }
+    fn xor<T>(&self)
+    where T: Copy + BitXor { unimplemented!() }
 
-    fn ushr<T>(&self) { unimplemented!() }
+    fn shl<T>(&self)
+    where T: Copy + Shl { unimplemented!() }
 
-    fn cmpg<T>(&self) { unimplemented!() }
+    fn shr<T>(&self)
+    where T: Copy + Shr { unimplemented!() }
 
-    fn cmpl<T>(&self) { unimplemented!() }
+    fn ushr<T>(&self)
+    where T: Copy + Shr<jint> {
+        let value2 = self._stack.pop::<jint>();
+        let value1 = self._stack.pop::<T>();
+
+        let result = value1 >> value2;
+
+        self._stack.push(result);
+    }
+
+    fn cmpg<T>(&self)
+    where T: Copy + Float { unimplemented!() }
+
+    fn cmpl<T>(&self)
+    where T: Copy + Float { unimplemented!() }
 }
 
 impl<'a> Executor<'a> {
@@ -692,7 +724,7 @@ impl<'a> Executor<'a> {
                 }
 
                 Opcode::Iushr => {
-                    self.ushr::<jint>();
+                    self.ushr::<ujint>();
                 }
 
                 Opcode::Ixor => {
@@ -807,7 +839,7 @@ impl<'a> Executor<'a> {
                 }
 
                 Opcode::Lushr => {
-                    self.ushr::<jlong>();
+                    self.ushr::<ujlong>();
                 }
 
                 Opcode::Lxor => {
@@ -880,8 +912,8 @@ impl<'a> Executor<'a> {
                 }
 
                 Opcode::Swap => {
-                    let value2 = self._stack.pop::<jint>();
-                    let value1 = self._stack.pop::<jint>();
+                    let value2 = self._stack.pop::<slot_t>();
+                    let value1 = self._stack.pop::<slot_t>();
                     self._stack.push(value2);
                     self._stack.push(value1);
                 }

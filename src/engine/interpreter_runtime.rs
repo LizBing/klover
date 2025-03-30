@@ -21,7 +21,9 @@
 
 use std::cell::{Cell, UnsafeCell};
 use cafebabe::attributes::CodeData;
-use crate::{align_up, code::method::Method, jni::jvalue, memory::mem_region::MemRegion, runtime::frame::Frame, util::global_defs::{addr_cast, address, BYTES_PER_INT}};
+use crate::{align_up, code::method::Method, jni::jvalue, memory::mem_region::MemRegion, runtime::frame::Frame, util::global_defs::{addr_cast, address, word_t, BYTES_PER_INT}};
+
+pub(super) type slot_t = word_t;
 
 const OPSTACK_SLOT_SIZE:    usize = size_of::<jvalue>();
 const LOCALVAR_SLOT_SIZE:   usize = BYTES_PER_INT;
