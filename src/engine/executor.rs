@@ -26,10 +26,24 @@ use num::Float;
 
 use crate::{ code::method::Method, jni::{jbyte, jchar, jdouble, jfloat, jint, jlong}, object::{klass::Klass, obj_desc::{ArrayObjDesc, ObjDesc}}, util::global_defs::{addr_cast, address}};
 
-use super::interpreter_runtime::{slot_t, InterpreterRegisters, InterpreterStack};
+use super::{interpreter_runtime::{InterpreterRegisters, InterpreterStack}, slot_t};
 
-type ujint = u32;
-type ujlong = u64;
+const SLOT_PER_PTR: usize = 1;
+
+const fn cal_slots<T>() -> usize {
+    let size_of_T = size_of::<T>();
+    let mut res = 0;
+
+    if size_of_T <= 4 {
+        res = 1;
+    } else {
+        res = 2;
+    }
+
+    debug_assert!(res == 1 || res == 2, "bad code");
+
+    res
+}
 
 pub struct Executor<'a> {
     _regs: UnsafeCell<InterpreterRegisters<'a>>,
@@ -71,7 +85,7 @@ impl<'a> Executor<'a> {
     }
 
     fn array_load<T>(&self) -> Option<()> {
-        let index = self._stack.pop();
+        let index = self._stack.pop(cal_slots::<jint>());
         let arrayref = self.pop_valid_obj::<ArrayObjDesc>()?;
 
         let opt = arrayref.get::<T>(index);
@@ -80,13 +94,13 @@ impl<'a> Executor<'a> {
         }
 
         let value = opt.unwrap();
-        self._stack.push(value);
+        self._stack.push(cal_slots::<T>(), value);
 
         None
     }
-
+    
     fn array_load_ptr(&self) -> Option<()> {
-        let index = self._stack.pop();
+        let index = self._stack.pop(cal_slots::<jint>());
         let arrayref = self.pop_valid_obj::<ArrayObjDesc>()?;
 
         let opt = arrayref.get_ptr(index);
@@ -95,14 +109,14 @@ impl<'a> Executor<'a> {
         }
 
         let value = opt.unwrap();
-        self._stack.push(value);
+        self._stack.push(SLOT_PER_PTR, value);
 
         None
     }
-
+    
     fn array_store<T: Copy>(&self) -> Option<()> {
-        let value = self._stack.pop::<T>();
-        let index = self._stack.pop();
+        let value = self._stack.pop::<T>(cal_slots::<T>());
+        let index = self._stack.pop(cal_slots::<jint>());
         let arrayref = self.pop_valid_obj::<ArrayObjDesc>()?;
 
         if !arrayref.put(index, value) {
@@ -113,8 +127,8 @@ impl<'a> Executor<'a> {
     }
 
     fn array_store_ptr(&self) -> Option<()> {
-        let value = self._stack.pop::<address>();
-        let index = self._stack.pop();
+        let value = self._stack.pop(SLOT_PER_PTR);
+        let index = self._stack.pop(cal_slots::<jint>());
         let arrayref = self.pop_valid_obj::<ArrayObjDesc>()?;
 
         if !arrayref.put_ptr(index, value) {
@@ -126,7 +140,7 @@ impl<'a> Executor<'a> {
 
     fn local_load<T: Copy>(&self, index: u16) {
         let value = self._stack.load_local::<T>(index);
-        self._stack.push(value);
+        self._stack.push(cal_slots::<T>(), value);
     }
 
     fn local_load_ptr(&self, index: u16) {
@@ -134,16 +148,16 @@ impl<'a> Executor<'a> {
 
         // todo: barrier, resolve oop map.
 
-        self._stack.push(objectref);
+        self._stack.push(SLOT_PER_PTR, objectref);
     }
 
     fn local_store<T: Copy>(&self, index: u16) {
-        let value = self._stack.pop::<T>();
+        let value = self._stack.pop::<T>(cal_slots::<T>());
         self._stack.store_local(index, value);
     }
 
     fn local_store_ptr(&self, index: u16) {
-        let objectref = self._stack.pop::<address>();
+        let objectref = self._stack.pop::<address>(SLOT_PER_PTR);
 
         // todo: barrier, reslove oop map.
 
@@ -151,13 +165,13 @@ impl<'a> Executor<'a> {
     }
 
     // Returning false means that this stack is empty.
-    fn return_with_value<T: Copy>(&self) -> bool {
-        let value = self._stack.pop::<T>();
+    fn return_with_value<T: Copy>(&self, slots: usize) -> bool {
+        let value = self._stack.pop::<T>(slots);
 
         match self._stack.unwind() {
             Some(mthd) => {
                 self._mthd.set(mthd);
-                self._stack.push(value);
+                self._stack.push(slots, value);
             },
 
             _ => return false
@@ -178,28 +192,81 @@ impl<'a> Executor<'a> {
         true
     }
 
-    fn dup(&self) { unimplemented!() }
+    fn dup(&self) {
+        let value = self._stack.pop::<slot_t>(1);
 
-    fn dup_x1(&self) { unimplemented!() }
+        self._stack.push(1, value);
+        self._stack.push(1, value);
+    }
 
-    fn dup_x2(&self) { unimplemented!() }
+    fn dup_x1(&self) {
+        let value1 = self._stack.pop::<slot_t>(1);
+        let value2 = self._stack.pop::<slot_t>(1);
 
-    fn dup2(&self) { unimplemented!() }
+        self._stack.push(1, value1);
+        self._stack.push(1, value2);
+        self._stack.push(1, value1);
+    }
 
-    fn dup2_x1(&self) { unimplemented!() }
+    fn dup_x2(&self) {
+        let value1 = self._stack.pop::<slot_t>(1);
+        let value2 = self._stack.pop::<slot_t>(1);
+        let value3 = self._stack.pop::<slot_t>(1);
 
-    fn dup2_x2(&self) { unimplemented!() }
+        self._stack.push(1, value1);
+        self._stack.push(1, value3);
+        self._stack.push(1, value2);
+        self._stack.push(1, value1);
+    }
+
+    fn dup2(&self) {
+        let value1 = self._stack.pop::<slot_t>(1);
+        let value2 = self._stack.pop::<slot_t>(1);
+
+        self._stack.push(1, value2);
+        self._stack.push(1, value1);
+        self._stack.push(1, value2);
+        self._stack.push(1, value1);
+    }
+
+    fn dup2_x1(&self) {
+        let value1 = self._stack.pop::<slot_t>(1);
+        let value2 = self._stack.pop::<slot_t>(1);
+        let value3 = self._stack.pop::<slot_t>(1);
+
+        self._stack.push(1, value2);
+        self._stack.push(1, value1);
+        self._stack.push(1, value3);
+        self._stack.push(1, value2);
+        self._stack.push(1, value1);
+    }
+
+    fn dup2_x2(&self) {
+        let value1 = self._stack.pop::<slot_t>(1);
+        let value2 = self._stack.pop::<slot_t>(1);
+        let value3 = self._stack.pop::<slot_t>(1);
+        let value4 = self._stack.pop::<slot_t>(1);
+
+        self._stack.push(1, value2);
+        self._stack.push(1, value1);
+        self._stack.push(1, value4);
+        self._stack.push(1, value3);
+        self._stack.push(1, value2);
+        self._stack.push(1, value1);
+    }
 
     fn primitive_cast<FromType, ToType>(&self) { unimplemented!() }
 
     fn add<T>(&self)
     where T: Copy + Add {
-        let value2 = self._stack.pop::<T>();
-        let value1 = self._stack.pop::<T>();
+        let slots = cal_slots::<T>();
+
+        let value2 = self._stack.pop::<T>(slots);
+        let value1 = self._stack.pop::<T>(slots);
 
         let result = value1 + value2;
 
-        self._stack.push(result);
+        self._stack.push(slots, result);
     }
 
     fn sub<T>(&self)
@@ -234,19 +301,47 @@ impl<'a> Executor<'a> {
 
     fn ushr<T>(&self)
     where T: Copy + Shr<jint> {
-        let value2 = self._stack.pop::<jint>();
-        let value1 = self._stack.pop::<T>();
+        let slots = cal_slots::<T>();
+
+        let value2 = self._stack.pop::<jint>(cal_slots::<jint>());
+        let value1 = self._stack.pop::<T>(slots);
 
         let result = value1 >> value2;
 
-        self._stack.push(result);
+        self._stack.push(slots, result);
+    }
+
+    fn cmp_floating<T>(&self, res_for_nan: i32)
+    where T: Copy + Float {
+        let slots = cal_slots::<T>();
+
+        let value2 = self._stack.pop::<T>(slots);
+        let value1 = self._stack.pop::<T>(slots);
+
+        let mut res: jint = 0;
+
+        if value1.is_nan() || value2.is_nan() {
+            res = res_for_nan;
+        } else if value1 > value2 {
+            res = 1;
+        } else if value2 == value2 {
+            res = 0;
+        } else {
+            res = -1;
+        }
+
+        self._stack.push(slots, res);
     }
 
     fn cmpg<T>(&self)
-    where T: Copy + Float { unimplemented!() }
+    where T: Copy + Float {
+        self.cmp_floating::<T>(1);
+    }
 
     fn cmpl<T>(&self)
-    where T: Copy + Float { unimplemented!() }
+    where T: Copy + Float {
+        self.cmp_floating::<T>(-1);
+    }
 }
 
 impl<'a> Executor<'a> {
@@ -266,7 +361,7 @@ impl<'a> Executor<'a> {
                 }
 
                 Opcode::AconstNull => {
-                    self._stack.push::<address>(0);
+                    self._stack.push::<address>(SLOT_PER_PTR, 0);
                 }
 
                 Opcode::Aload(index) => {
@@ -278,7 +373,7 @@ impl<'a> Executor<'a> {
                 } 
 
                 Opcode::Areturn => {
-                    if self.return_with_value::<address>() {
+                    if self.return_with_value::<address>(SLOT_PER_PTR) {
                         code = self.code();
                         continue;
                     }
@@ -288,7 +383,7 @@ impl<'a> Executor<'a> {
                     || -> Option<()> {
                         let arrayref = self.pop_valid_obj::<ArrayObjDesc>()?;
                         let value = arrayref.length();
-                        self._stack.push(value);
+                        self._stack.push(cal_slots::<jint>(), value);
 
                         None
                     } ();
@@ -311,7 +406,7 @@ impl<'a> Executor<'a> {
                 }
 
                 Opcode::Bipush(byte) => {
-                    self._stack.push(*byte as jint);
+                    self._stack.push(cal_slots::<jint>(), *byte as jint);
                 }
 
                 Opcode::Caload => {
@@ -359,11 +454,11 @@ impl<'a> Executor<'a> {
                 }
 
                 Opcode::Dconst0 => {
-                    self._stack.push(0.0f64);
+                    self._stack.push(cal_slots::<jdouble>(), 0.0f64);
                 }
 
                 Opcode::Dconst1 => {
-                    self._stack.push(1.0f64);
+                    self._stack.push(cal_slots::<jdouble>(), 1.0f64);
                 }
 
                 Opcode::Ddiv => {
@@ -387,7 +482,7 @@ impl<'a> Executor<'a> {
                 }
 
                 Opcode::Dreturn => {
-                    if self.return_with_value::<jdouble>() {
+                    if self.return_with_value::<jdouble>(cal_slots::<jdouble>()) {
                         code = self.code();
                         continue;
                     }
@@ -458,15 +553,15 @@ impl<'a> Executor<'a> {
                 }
 
                 Opcode::Fconst0 => {
-                    self._stack.push(0.0f32);
+                    self._stack.push(cal_slots::<jfloat>(), 0.0f32);
                 }
 
                 Opcode::Fconst1 => {
-                    self._stack.push(1.0f32);
+                    self._stack.push(cal_slots::<jfloat>(), 1.0f32);
                 }
 
                 Opcode::Fconst2 => {
-                    self._stack.push(2.0f32);
+                    self._stack.push(cal_slots::<jfloat>(), 2.0f32);
                 }
 
                 Opcode::Fdiv => {
@@ -490,7 +585,7 @@ impl<'a> Executor<'a> {
                 }
 
                 Opcode::Freturn => {
-                    if self.return_with_value::<jfloat>() {
+                    if self.return_with_value::<jfloat>(cal_slots::<jfloat>()) {
                         code = self.code();
                         continue;
                     }
@@ -557,31 +652,31 @@ impl<'a> Executor<'a> {
                 }
 
                 Opcode::Iconst0 => {
-                    self._stack.push(0 as jint);
+                    self._stack.push(cal_slots::<jint>(), 0 as jint);
                 }
 
                 Opcode::Iconst1 => {
-                    self._stack.push(1 as jint);
+                    self._stack.push(cal_slots::<jint>(), 1 as jint);
                 }
 
                 Opcode::Iconst2 => {
-                    self._stack.push(2 as jint);
+                    self._stack.push(cal_slots::<jint>(), 2 as jint);
                 }
 
                 Opcode::Iconst3 => {
-                    self._stack.push(3 as jint);
+                    self._stack.push(cal_slots::<jint>(), 3 as jint);
                 }
 
                 Opcode::Iconst4 => {
-                    self._stack.push(4 as jint);
+                    self._stack.push(cal_slots::<jint>(), 4 as jint);
                 }
 
                 Opcode::Iconst5 => {
-                    self._stack.push(5 as jint);
+                    self._stack.push(cal_slots::<jint>(), 5 as jint);
                 }
 
                 Opcode::IconstM1 => {
-                    self._stack.push(-1 as jint);
+                    self._stack.push(cal_slots::<jint>(), -1 as jint);
                 }
 
                 Opcode::Idiv => {
@@ -701,7 +796,7 @@ impl<'a> Executor<'a> {
                 }
 
                 Opcode::Ireturn => {
-                    if self.return_with_value::<jint>() {
+                    if self.return_with_value::<jint>(cal_slots::<jint>()) {
                         code = self.code();
                         continue;
                     }
@@ -724,7 +819,7 @@ impl<'a> Executor<'a> {
                 }
 
                 Opcode::Iushr => {
-                    self.ushr::<ujint>();
+                    self.ushr::<u32>();
                 }
 
                 Opcode::Ixor => {
@@ -768,11 +863,11 @@ impl<'a> Executor<'a> {
                 }
 
                 Opcode::Lconst0 => {
-                    self._stack.push(0 as jlong);
+                    self._stack.push(cal_slots::<jlong>(), 0 as jlong);
                 }
 
                 Opcode::Lconst1 => {
-                    self._stack.push(1 as jlong);
+                    self._stack.push(cal_slots::<jlong>(), 1 as jlong);
                 }
 
                 Opcode::Ldc(i) => {
@@ -816,7 +911,7 @@ impl<'a> Executor<'a> {
                 }
 
                 Opcode::Lreturn => {
-                    if self.return_with_value::<jlong>() {
+                    if self.return_with_value::<jlong>(cal_slots::<jlong>()) {
                         code = self.code();
                         continue;
                     }
@@ -839,13 +934,11 @@ impl<'a> Executor<'a> {
                 }
 
                 Opcode::Lushr => {
-                    self.ushr::<ujlong>();
+                    self.ushr::<u64>();
                 }
 
                 Opcode::Lxor => {
-                    let value2 = self._stack.pop::<jlong>();
-                    let value1 = self._stack.pop::<jlong>();
-                    self._stack.push(value1 ^ value2);
+                    self.xor::<jlong>();
                 }
 
                 Opcode::Monitorenter => {
@@ -873,11 +966,11 @@ impl<'a> Executor<'a> {
                 }
 
                 Opcode::Pop => {
-                    self._stack.pop::<jint>();
+                    self._stack.pop::<slot_t>(1);
                 }
 
                 Opcode::Pop2 => {
-                    self._stack.pop::<jlong>();
+                    self._stack.pop::<slot_t>(2);
                 }
 
                 Opcode::Putfield(field_ref) => {
@@ -908,14 +1001,14 @@ impl<'a> Executor<'a> {
                 }
 
                 Opcode::Sipush(short) => {
-                    self._stack.push(*short as jint);
+                    self._stack.push(cal_slots::<jint>(), *short as jint);
                 }
 
                 Opcode::Swap => {
-                    let value2 = self._stack.pop::<slot_t>();
-                    let value1 = self._stack.pop::<slot_t>();
-                    self._stack.push(value2);
-                    self._stack.push(value1);
+                    let value2 = self._stack.pop::<slot_t>(1);
+                    let value1 = self._stack.pop::<slot_t>(1);
+                    self._stack.push(1, value2);
+                    self._stack.push(1, value1);
                 }
 
                 Opcode::Tableswitch(rt) => {

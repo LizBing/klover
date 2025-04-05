@@ -21,12 +21,9 @@
 
 use std::cell::{Cell, UnsafeCell};
 use cafebabe::attributes::CodeData;
-use crate::{align_up, code::method::Method, jni::jvalue, memory::mem_region::MemRegion, runtime::frame::Frame, util::global_defs::{addr_cast, address, word_t, BYTES_PER_INT}};
+use crate::{align_up, code::method::Method, memory::mem_region::MemRegion, runtime::frame::Frame, util::global_defs::{addr_cast, address}};
 
-pub(super) type slot_t = word_t;
-
-const OPSTACK_SLOT_SIZE:    usize = size_of::<jvalue>();
-const LOCALVAR_SLOT_SIZE:   usize = BYTES_PER_INT;
+use super::STACK_SLOT_SIZE;
 
 pub struct InterpreterRegisters<'a> {
     pub(super) pc: u16,
@@ -96,15 +93,15 @@ impl<'a> InterpreterStack<'a> {
         Ok(())
     }
 
-    pub fn push<T>(&self, n: T) {
-        let new_sp = self.regs().sp - OPSTACK_SLOT_SIZE;
+    pub fn push<T>(&self, slots: usize, n: T) {
+        let new_sp = self.regs().sp - STACK_SLOT_SIZE * slots;
         self.regs().sp = new_sp;
 
         unsafe { *(new_sp as *mut _) = n };
     }
 
     pub fn alloca(&self, s: usize) -> Result<address, String> {
-        let size = align_up!(s, OPSTACK_SLOT_SIZE);
+        let size = align_up!(s, STACK_SLOT_SIZE);
         let new_sp = self.regs().sp - size;
         self.assert_entry_available(new_sp)?;
         self.regs().sp = new_sp;
@@ -112,15 +109,15 @@ impl<'a> InterpreterStack<'a> {
         Ok(new_sp)
     }
 
-    pub fn pop<T: Copy>(&self) -> T {
+    pub fn pop<T: Copy>(&self, slots: usize) -> T {
         let old_sp = self.regs().sp;
-        self.regs().sp = old_sp + OPSTACK_SLOT_SIZE;
+        self.regs().sp = old_sp + STACK_SLOT_SIZE * slots;
 
         unsafe { *(old_sp as *const _) }
     }
 
     fn cal_addr_of_local(&self, index: u16) -> address {
-        self._locals.get() + LOCALVAR_SLOT_SIZE * index as usize
+        self._locals.get() + STACK_SLOT_SIZE * index as usize
     }
 
     pub fn load_local<T: Copy>(&self, index: u16) -> T {
@@ -133,9 +130,9 @@ impl<'a> InterpreterStack<'a> {
 
     // helper functions
 
-    // We may waste a little memory if the CompressedPtr flag has not set.
+    // We may waste a little memory if the CompressedPtr flag has not been set.
     fn cal_mem_size_of_locals(cd: &'a CodeData) -> usize {
-        LOCALVAR_SLOT_SIZE * cd.max_locals as usize
+        STACK_SLOT_SIZE * cd.max_locals as usize
     }
 
     fn cal_frame_size(cd: &'a CodeData) -> usize {
@@ -143,7 +140,7 @@ impl<'a> InterpreterStack<'a> {
     }
 
     fn cal_mem_size_of_opstack(cd: &'a CodeData) -> usize {
-        OPSTACK_SLOT_SIZE * cd.max_stack as usize
+        STACK_SLOT_SIZE * cd.max_stack as usize
     }
 
     fn set_base_of_locals(&self, bp: &Frame, cd: &'a CodeData) {

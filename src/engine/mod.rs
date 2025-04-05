@@ -19,5 +19,11 @@
  * under the License.
  */
 
+use crate::{runtime::vmflags::CompressedPtr, util::global_defs::{word_t, BYTES_PER_ARCH}};
+
 pub mod executor;
 pub mod interpreter_runtime;
+
+type slot_t = word_t;
+
+static STACK_SLOT_SIZE: usize = BYTES_PER_ARCH;
