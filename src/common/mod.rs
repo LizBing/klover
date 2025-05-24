@@ -19,6 +19,4 @@
  * under the License.
  */
 
-pub struct Universe {}
-
-impl Universe {}
+pub mod universe;

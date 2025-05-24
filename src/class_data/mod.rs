@@ -19,4 +19,4 @@
  * under the License.
  */
 
-pub trait ClassLoader {}
+pub mod class_loader;

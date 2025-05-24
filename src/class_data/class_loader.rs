@@ -19,10 +19,3 @@
  * under the License.
  */
 
-pub(crate) mod class_data;
-pub(crate) mod common;
-pub(crate) mod oop;
-pub(crate) mod runtime;
-pub(crate) mod utils;
-
-mod prims;

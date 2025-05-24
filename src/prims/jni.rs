@@ -106,10 +106,10 @@ pub struct JNINativeMethod {
     pub fnPtr: *mut c_void,
 }
 
-pub type JNIEnv = *mut JNINativeInterface_;
+pub type JNIEnv = *mut JNINativeInterface;
 
 #[repr(C)]
-pub struct JNINativeInterface_ {
+pub struct JNINativeInterface {
     pub reserved0: *mut c_void,
     pub reserved1: *mut c_void,
     pub reserved2: *mut c_void,
@@ -457,18 +457,18 @@ pub struct JavaVMAttachArgs {
 }
 
 #[repr(C)]
-pub struct JNIInvokeInterface_ {
-    reserved0: *mut c_void,
-    reserved1: *mut c_void,
-    reserved2: *mut c_void,
+pub struct JNIInvokeInterface {
+    pub reserved0: *mut c_void,
+    pub reserved1: *mut c_void,
+    pub reserved2: *mut c_void,
 
-    DestroyJavaVM: extern "C" fn(*mut JavaVM) -> jint,
-    AttachCurrentThread: extern "C" fn(*mut JavaVM, *mut *mut JNIEnv, *mut JavaVMAttachArgs) -> jint,
-    DetachCurrentThread: extern "C" fn(*mut JavaVM) -> jint,
-    GetEnv: extern "C" fn(*mut JavaVM, *mut *mut c_void, jint) -> jint,
-    AttachCurrentThreadAsDaemon: extern "C" fn(*mut JavaVM, *mut *mut JNIEnv, *mut JavaVMAttachArgs) -> jint,
+    pub DestroyJavaVM: extern "C" fn(*mut JavaVM) -> jint,
+    pub AttachCurrentThread: extern "C" fn(*mut JavaVM, *mut *mut c_void, *mut c_void) -> jint,
+    pub DetachCurrentThread: extern "C" fn(*mut JavaVM) -> jint,
+    pub GetEnv: extern "C" fn(*mut JavaVM, *mut *mut c_void, jint) -> jint,
+    pub AttachCurrentThreadAsDaemon: extern "C" fn(*mut JavaVM, *mut *mut c_void, *mut c_void) -> jint,
 }
 
-pub type JavaVM = *mut JNIInvokeInterface_;
+pub type JavaVM = *mut JNIInvokeInterface;
 
 pub const JNI_VERSION: jint = 0x00150000;

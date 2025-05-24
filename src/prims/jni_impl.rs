@@ -19,11 +19,11 @@
  * under the License.
  */
 
-use std::{ffi::{c_char, c_void}, ptr::{null, null_mut}};
+use std::{ffi::{c_char, c_void}, ptr:: null_mut};
 
 use crate::prims::jni::JNI_ERR;
 
-use super::jni::{jbyte, jclass, jint, jobject, jsize, JNIEnv, JavaVM, JNI_OK, JNI_VERSION};
+use super::jni::{jboolean, jbyte, jclass, jint, jobject, jsize, JNIEnv, JNIInvokeInterface, JavaVM, JNI_OK, JNI_VERSION};
 
 enum VMCreationState {
     NotCreated,
@@ -32,7 +32,7 @@ enum VMCreationState {
 }
 
 static mut VM_CREATED: VMCreationState = VMCreationState::NotCreated;
-static mut MAIN_VM: JavaVM = null_mut();
+static mut MAIN_VM: JavaVM = unsafe { &mut JNI_INVOKE_INTERFACE };
 
 #[no_mangle]
 extern "C" fn JNI_GetDefaultJavaVMInitArgs(args: *mut c_void) -> jint {
@@ -68,12 +68,57 @@ extern "C" fn JNI_OnUnload(vm: *mut JavaVM, reserved: *mut c_void) -> jint {
     JNI_VERSION
 }
 
-// Methods in JNINativeInterface_
+// Methods in JNIInvokeInterface
 
-fn get_version(env: *mut JNIEnv) -> jint {
-    JNI_VERSION
+extern "C" fn destroy_java_vm(vm: *mut JavaVM) -> jint {
+    JNI_ERR
 }
 
-fn define_class(env: *mut JNIEnv, name: *const c_char, loader: jobject, buf: *const jbyte, len: jsize) -> jclass {
+extern "C" fn attach_current_thread(vm: *mut JavaVM, penv: *mut *mut c_void, args: *mut c_void) -> jint {
+    JNI_ERR
+}
+
+extern "C" fn detach_current_thread(vm: *mut JavaVM) -> jint {
+    JNI_ERR
+}
+
+extern "C" fn get_env(vm: *mut JavaVM, penv: *mut *mut c_void, version: jint) -> jint {
+    JNI_ERR
+}
+
+extern "C" fn attach_current_thread_as_daemon(vm: *mut JavaVM, penv: *mut *mut c_void, args: *mut c_void) -> jint {
+    JNI_ERR
+}
+
+static mut JNI_INVOKE_INTERFACE: JNIInvokeInterface = JNIInvokeInterface {
+    reserved0: null_mut(),
+    reserved1: null_mut(),
+    reserved2: null_mut(),
+
+    DestroyJavaVM: destroy_java_vm,
+    AttachCurrentThread: attach_current_thread,
+    DetachCurrentThread: detach_current_thread,
+    GetEnv: get_env,
+    AttachCurrentThreadAsDaemon: attach_current_thread_as_daemon
+};
+
+// Methods in JNINativeInterface_
+
+extern "C" fn get_version(env: *mut JNIEnv) -> jint {
+    JNI_VERSION
+}
+extern "C" fn define_class(env: *mut JNIEnv, name: *const c_char, loader: jobject, buf: *const jbyte, buf_len: jsize) -> jclass {
+    unimplemented!()
+}
+
+extern "C" fn find_class(env: *mut JNIEnv, name: *const c_char) -> jclass {
+    unimplemented!()
+}
+
+extern "C" fn get_super_class(env: *mut JNIEnv, clazz: jclass) -> jclass {
+    unimplemented!()
+}
+
+extern "C" fn is_assignable_from(env: *mut JNIEnv, clazz1: jclass, clazz2: jclass) -> jboolean {
     unimplemented!()
 }
