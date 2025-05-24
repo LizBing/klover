@@ -19,4 +19,5 @@
  * under the License.
  */
 
-pub mod jvm;
+mod jni;
+mod jni_impl;

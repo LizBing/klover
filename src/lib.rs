@@ -24,5 +24,4 @@ pub(crate) mod oop;
 pub(crate) mod runtime;
 pub(crate) mod utils;
 
-mod jni;
-pub mod prims;
+mod prims;
