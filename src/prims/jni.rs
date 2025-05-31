@@ -167,7 +167,7 @@ pub struct JNINativeInterface {
     pub AllocObject: extern "C" fn(*mut JNIEnv, jclass) -> jobject,
 
     pub NewObject: extern "C" fn(*mut JNIEnv, jclass, jmethodID, ...) -> jobject,
-    pub NewObjectV: extern "C" fn(*mut JNIEnv, jclass, jmethodID, *mut char) -> jobject,
+    pub NewObjectV: extern "C" fn(*mut JNIEnv, jclass, jmethodID, *mut c_char) -> jobject,
     pub NewObjectA: extern "C" fn(*mut JNIEnv, jclass, jmethodID, *const jvalue) -> jobject,
 
     pub GetObjectClass: extern "C" fn(*mut JNIEnv, jobject) -> jclass,
