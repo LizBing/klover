@@ -166,7 +166,7 @@ pub struct JNINativeInterface {
 
     pub AllocObject: extern "C" fn(*mut JNIEnv, jclass) -> jobject,
 
-    pub NewObject: extern "C" fn(*mut JNIEnv, jclass, jmethodID, ...) -> jobject,
+    pub NewObject: unsafe extern "C" fn(*mut JNIEnv, jclass, jmethodID, ...) -> jobject,
     pub NewObjectV: extern "C" fn(*mut JNIEnv, jclass, jmethodID, *mut c_char) -> jobject,
     pub NewObjectA: extern "C" fn(*mut JNIEnv, jclass, jmethodID, *const jvalue) -> jobject,
 
@@ -175,83 +175,83 @@ pub struct JNINativeInterface {
 
     pub GetMethodID: extern "C" fn(*mut JNIEnv, jclass, *const c_char, *const c_char) -> jmethodID,
 
-    pub CallObjectMethod: extern "C" fn(*mut JNIEnv, jobject, jmethodID, ...) -> jobject,
+    pub CallObjectMethod: unsafe extern "C" fn(*mut JNIEnv, jobject, jmethodID, ...) -> jobject,
     pub CallObjectMethodV: extern "C" fn(*mut JNIEnv, jobject, jmethodID, *mut c_char) -> jobject,
     pub CallObjectMethodA: extern "C" fn(*mut JNIEnv, jobject, jmethodID, *const jvalue) -> jobject,
 
-    pub CallBooleanMethod: extern "C" fn(*mut JNIEnv, jobject, jmethodID, ...) -> jboolean,
+    pub CallBooleanMethod: unsafe extern "C" fn(*mut JNIEnv, jobject, jmethodID, ...) -> jboolean,
     pub CallBooleanMethodV: extern "C" fn(*mut JNIEnv, jobject, jmethodID, *mut c_char) -> jboolean,
     pub CallBooleanMethodA: extern "C" fn(*mut JNIEnv, jobject, jmethodID, *const jvalue) -> jboolean,
 
-    pub CallByteMethod: extern "C" fn(*mut JNIEnv, jobject, jmethodID, ...) -> jbyte,
+    pub CallByteMethod: unsafe extern "C" fn(*mut JNIEnv, jobject, jmethodID, ...) -> jbyte,
     pub CallByteMethodV: extern "C" fn(*mut JNIEnv, jobject, jmethodID, *mut c_char) -> jbyte,
     pub CallByteMethodA: extern "C" fn(*mut JNIEnv, jobject, jmethodID, *const jvalue) -> jbyte,
 
-    pub CallCharMethod: extern "C" fn(*mut JNIEnv, jobject, jmethodID, ...) -> jchar,
+    pub CallCharMethod: unsafe extern "C" fn(*mut JNIEnv, jobject, jmethodID, ...) -> jchar,
     pub CallCharMethodV: extern "C" fn(*mut JNIEnv, jobject, jmethodID, *mut c_char) -> jchar,
     pub CallCharMethodA: extern "C" fn(*mut JNIEnv, jobject, jmethodID, *const jvalue) -> jchar,
 
-    pub CallShortMethod: extern "C" fn(*mut JNIEnv, jobject, jmethodID, ...) -> jshort,
+    pub CallShortMethod: unsafe extern "C" fn(*mut JNIEnv, jobject, jmethodID, ...) -> jshort,
     pub CallShortMethodV: extern "C" fn(*mut JNIEnv, jobject, jmethodID, *mut c_char) -> jshort,
     pub CallShortMethodA: extern "C" fn(*mut JNIEnv, jobject, jmethodID, *const jvalue) -> jshort,
 
-    pub CallIntMethod: extern "C" fn(*mut JNIEnv, jobject, jmethodID, ...) -> jint,
+    pub CallIntMethod: unsafe extern "C" fn(*mut JNIEnv, jobject, jmethodID, ...) -> jint,
     pub CallIntMethodV: extern "C" fn(*mut JNIEnv, jobject, jmethodID, *mut c_char) -> jint,
     pub CallIntMethodA: extern "C" fn(*mut JNIEnv, jobject, jmethodID, *const jvalue) -> jint,
 
-    pub CallLongMethod: extern "C" fn(*mut JNIEnv, jobject, jmethodID, ...) -> jlong,
+    pub CallLongMethod: unsafe extern "C" fn(*mut JNIEnv, jobject, jmethodID, ...) -> jlong,
     pub CallLongMethodV: extern "C" fn(*mut JNIEnv, jobject, jmethodID, *mut c_char) -> jlong,
     pub CallLongMethodA: extern "C" fn(*mut JNIEnv, jobject, jmethodID, *const jvalue) -> jlong,
 
-    pub CallFloatMethod: extern "C" fn(*mut JNIEnv, jobject, jmethodID, ...) -> jfloat,
+    pub CallFloatMethod: unsafe extern "C" fn(*mut JNIEnv, jobject, jmethodID, ...) -> jfloat,
     pub CallFloatMethodV: extern "C" fn(*mut JNIEnv, jobject, jmethodID, *mut c_char) -> jfloat,
     pub CallFloatMethodA: extern "C" fn(*mut JNIEnv, jobject, jmethodID, *const jvalue) -> jfloat,
 
-    pub CallDoubleMethod: extern "C" fn(*mut JNIEnv, jobject, jmethodID, ...) -> jdouble,
+    pub CallDoubleMethod: unsafe extern "C" fn(*mut JNIEnv, jobject, jmethodID, ...) -> jdouble,
     pub CallDoubleMethodV: extern "C" fn(*mut JNIEnv, jobject, jmethodID, *mut c_char) -> jdouble,
     pub CallDoubleMethodA: extern "C" fn(*mut JNIEnv, jobject, jmethodID, *const jvalue) -> jdouble,
 
-    pub CallVoidMethod: extern "C" fn(*mut JNIEnv, jobject, jmethodID, ...),
+    pub CallVoidMethod: unsafe extern "C" fn(*mut JNIEnv, jobject, jmethodID, ...),
     pub CallVoidMethodV: extern "C" fn(*mut JNIEnv, jobject, jmethodID, *mut c_char),
     pub CallVoidMethodA: extern "C" fn(*mut JNIEnv, jobject, jmethodID, *const jvalue),
 
-    pub CallNonvirtualObjectMethod: extern "C" fn(*mut JNIEnv, jobject, jclass, jmethodID, ...) -> jobject,
+    pub CallNonvirtualObjectMethod: unsafe extern "C" fn(*mut JNIEnv, jobject, jclass, jmethodID, ...) -> jobject,
     pub CallNonvirtualObjectMethodV: extern "C" fn(*mut JNIEnv, jobject, jclass, jmethodID, *mut c_char) -> jobject,
     pub CallNonvirtualObjectMethodA: extern "C" fn(*mut JNIEnv, jobject, jclass, jmethodID, *const jvalue) -> jobject,
 
-    pub CallNonvirtualBooleanMethod: extern "C" fn(*mut JNIEnv, jobject, jclass, jmethodID, ...) -> jboolean,
+    pub CallNonvirtualBooleanMethod: unsafe extern "C" fn(*mut JNIEnv, jobject, jclass, jmethodID, ...) -> jboolean,
     pub CallNonvirtualBooleanMethodV: extern "C" fn(*mut JNIEnv, jobject, jclass, jmethodID, *mut c_char) -> jboolean,
     pub CallNonvirtualBooleanMethodA: extern "C" fn(*mut JNIEnv, jobject, jclass, jmethodID, *const jvalue) -> jboolean,
 
-    pub CallNonvirtualByteMethod: extern "C" fn(*mut JNIEnv, jobject, jclass, jmethodID, ...) -> jbyte,
+    pub CallNonvirtualByteMethod: unsafe extern "C" fn(*mut JNIEnv, jobject, jclass, jmethodID, ...) -> jbyte,
     pub CallNonvirtualByteMethodV: extern "C" fn(*mut JNIEnv, jobject, jclass, jmethodID, *mut c_char) -> jbyte,
     pub CallNonvirtualByteMethodA: extern "C" fn(*mut JNIEnv, jobject, jclass, jmethodID, *const jvalue) -> jbyte,
 
-    pub CallNonvirtualCharMethod: extern "C" fn(*mut JNIEnv, jobject, jclass, jmethodID, ...) -> jchar,
+    pub CallNonvirtualCharMethod: unsafe extern "C" fn(*mut JNIEnv, jobject, jclass, jmethodID, ...) -> jchar,
     pub CallNonvirtualCharMethodV: extern "C" fn(*mut JNIEnv, jobject, jclass, jmethodID, *mut c_char) -> jchar,
     pub CallNonvirtualCharMethodA: extern "C" fn(*mut JNIEnv, jobject, jclass, jmethodID, *const jvalue) -> jchar,
 
-    pub CallNonvirtualShortMethod: extern "C" fn(*mut JNIEnv, jobject, jclass, jmethodID, ...) -> jshort,
+    pub CallNonvirtualShortMethod: unsafe extern "C" fn(*mut JNIEnv, jobject, jclass, jmethodID, ...) -> jshort,
     pub CallNonvirtualShortMethodV: extern "C" fn(*mut JNIEnv, jobject, jclass, jmethodID, *mut c_char) -> jshort,
     pub CallNonvirtualShortMethodA: extern "C" fn(*mut JNIEnv, jobject, jclass, jmethodID, *const jvalue) -> jshort,
 
-    pub CallNonvirtualIntMethod: extern "C" fn(*mut JNIEnv, jobject, jclass, jmethodID, ...) -> jint,
+    pub CallNonvirtualIntMethod: unsafe extern "C" fn(*mut JNIEnv, jobject, jclass, jmethodID, ...) -> jint,
     pub CallNonvirtualIntMethodV: extern "C" fn(*mut JNIEnv, jobject, jclass, jmethodID, *mut c_char) -> jint,
     pub CallNonvirtualIntMethodA: extern "C" fn(*mut JNIEnv, jobject, jclass, jmethodID, *const jvalue) -> jint,
 
-    pub CallNonvirtualLongMethod: extern "C" fn(*mut JNIEnv, jobject, jclass, jmethodID, ...) -> jlong,
+    pub CallNonvirtualLongMethod: unsafe extern "C" fn(*mut JNIEnv, jobject, jclass, jmethodID, ...) -> jlong,
     pub CallNonvirtualLongMethodV: extern "C" fn(*mut JNIEnv, jobject, jclass, jmethodID, *mut c_char) -> jlong,
     pub CallNonvirtualLongMethodA: extern "C" fn(*mut JNIEnv, jobject, jclass, jmethodID, *const jvalue) -> jlong,
 
-    pub CallNonvirtualFloatMethod: extern "C" fn(*mut JNIEnv, jobject, jclass, jmethodID, ...) -> jfloat,
+    pub CallNonvirtualFloatMethod: unsafe extern "C" fn(*mut JNIEnv, jobject, jclass, jmethodID, ...) -> jfloat,
     pub CallNonvirtualFloatMethodV: extern "C" fn(*mut JNIEnv, jobject, jclass, jmethodID, *mut c_char) -> jfloat,
     pub CallNonvirtualFloatMethodA: extern "C" fn(*mut JNIEnv, jobject, jclass, jmethodID, *const jvalue) -> jfloat,
 
-    pub CallNonvirtualDoubleMethod: extern "C" fn(*mut JNIEnv, jobject, jclass, jmethodID, ...) -> jdouble,
+    pub CallNonvirtualDoubleMethod: unsafe extern "C" fn(*mut JNIEnv, jobject, jclass, jmethodID, ...) -> jdouble,
     pub CallNonvirtualDoubleMethodV: extern "C" fn(*mut JNIEnv, jobject, jclass, jmethodID, *mut c_char) -> jdouble,
     pub CallNonvirtualDoubleMethodA: extern "C" fn(*mut JNIEnv, jobject, jclass, jmethodID, *const jvalue) -> jdouble,
 
-    pub CallNonvirtualVoidMethod: extern "C" fn(*mut JNIEnv, jobject, jclass, jmethodID, ...),
+    pub CallNonvirtualVoidMethod: unsafe extern "C" fn(*mut JNIEnv, jobject, jclass, jmethodID, ...),
     pub CallNonvirtualVoidMethodV: extern "C" fn(*mut JNIEnv, jobject, jclass, jmethodID, *mut c_char),
     pub CallNonvirtualVoidMethodA: extern "C" fn(*mut JNIEnv, jobject, jclass, jmethodID, *const jvalue),
 
@@ -280,43 +280,43 @@ pub struct JNINativeInterface {
 
     pub GetStaticMethodID: extern "C" fn(*mut JNIEnv, jclass, *const c_char, *const c_char) -> jmethodID,
 
-    pub CallStaticObjectMethod: extern "C" fn(*mut JNIEnv, jclass, jmethodID, ...) -> jobject,
+    pub CallStaticObjectMethod: unsafe extern "C" fn(*mut JNIEnv, jclass, jmethodID, ...) -> jobject,
     pub CallStaticObjectMethodV: extern "C" fn(*mut JNIEnv, jclass, jmethodID, *mut c_char) -> jobject,
     pub CallStaticObjectMethodA: extern "C" fn(*mut JNIEnv, jclass, jmethodID, *const jvalue) -> jobject,
 
-    pub CallStaticBooleanMethod: extern "C" fn(*mut JNIEnv, jclass, jmethodID, ...) -> jboolean,
+    pub CallStaticBooleanMethod: unsafe extern "C" fn(*mut JNIEnv, jclass, jmethodID, ...) -> jboolean,
     pub CallStaticBooleanMethodV: extern "C" fn(*mut JNIEnv, jclass, jmethodID, *mut c_char) -> jboolean,
     pub CallStaticBooleanMethodA: extern "C" fn(*mut JNIEnv, jclass, jmethodID, *const jvalue) -> jboolean,
 
-    pub CallStaticByteMethod: extern "C" fn(*mut JNIEnv, jclass, jmethodID, ...) -> jbyte,
+    pub CallStaticByteMethod: unsafe extern "C" fn(*mut JNIEnv, jclass, jmethodID, ...) -> jbyte,
     pub CallStaticByteMethodV: extern "C" fn(*mut JNIEnv, jclass, jmethodID, *mut c_char) -> jbyte,
     pub CallStaticByteMethodA: extern "C" fn(*mut JNIEnv, jclass, jmethodID, *const jvalue) -> jbyte,
 
-    pub CallStaticCharMethod: extern "C" fn(*mut JNIEnv, jclass, jmethodID, ...) -> jchar,
+    pub CallStaticCharMethod: unsafe extern "C" fn(*mut JNIEnv, jclass, jmethodID, ...) -> jchar,
     pub CallStaticCharMethodV: extern "C" fn(*mut JNIEnv, jclass, jmethodID, *mut c_char) -> jchar,
     pub CallStaticCharMethodA: extern "C" fn(*mut JNIEnv, jclass, jmethodID, *const jvalue) -> jchar,
 
-    pub CallStaticShortMethod: extern "C" fn(*mut JNIEnv, jclass, jmethodID, ...) -> jshort,
+    pub CallStaticShortMethod: unsafe extern "C" fn(*mut JNIEnv, jclass, jmethodID, ...) -> jshort,
     pub CallStaticShortMethodV: extern "C" fn(*mut JNIEnv, jclass, jmethodID, *mut c_char) -> jshort,
     pub CallStaticShortMethodA: extern "C" fn(*mut JNIEnv, jclass, jmethodID, *const jvalue) -> jshort,
 
-    pub CallStaticIntMethod: extern "C" fn(*mut JNIEnv, jclass, jmethodID, ...) -> jint,
+    pub CallStaticIntMethod: unsafe extern "C" fn(*mut JNIEnv, jclass, jmethodID, ...) -> jint,
     pub CallStaticIntMethodV: extern "C" fn(*mut JNIEnv, jclass, jmethodID, *mut c_char) -> jint,
     pub CallStaticIntMethodA: extern "C" fn(*mut JNIEnv, jclass, jmethodID, *const jvalue) -> jint,
 
-    pub CallStaticLongMethod: extern "C" fn(*mut JNIEnv, jclass, jmethodID, ...) -> jlong,
+    pub CallStaticLongMethod: unsafe extern "C" fn(*mut JNIEnv, jclass, jmethodID, ...) -> jlong,
     pub CallStaticLongMethodV: extern "C" fn(*mut JNIEnv, jclass, jmethodID, *mut c_char) -> jlong,
     pub CallStaticLongMethodA: extern "C" fn(*mut JNIEnv, jclass, jmethodID, *const jvalue) -> jlong,
 
-    pub CallStaticFloatMethod: extern "C" fn(*mut JNIEnv, jclass, jmethodID, ...) -> jfloat,
+    pub CallStaticFloatMethod: unsafe extern "C" fn(*mut JNIEnv, jclass, jmethodID, ...) -> jfloat,
     pub CallStaticFloatMethodV: extern "C" fn(*mut JNIEnv, jclass, jmethodID, *mut c_char) -> jfloat,
     pub CallStaticFloatMethodA: extern "C" fn(*mut JNIEnv, jclass, jmethodID, *const jvalue) -> jfloat,
 
-    pub CallStaticDoubleMethod: extern "C" fn(*mut JNIEnv, jclass, jmethodID, ...) -> jdouble,
+    pub CallStaticDoubleMethod: unsafe extern "C" fn(*mut JNIEnv, jclass, jmethodID, ...) -> jdouble,
     pub CallStaticDoubleMethodV: extern "C" fn(*mut JNIEnv, jclass, jmethodID, *mut c_char) -> jdouble,
     pub CallStaticDoubleMethodA: extern "C" fn(*mut JNIEnv, jclass, jmethodID, *const jvalue) -> jdouble,
 
-    pub CallStaticVoidMethod: extern "C" fn(*mut JNIEnv, jclass, jmethodID, ...),
+    pub CallStaticVoidMethod: unsafe extern "C" fn(*mut JNIEnv, jclass, jmethodID, ...),
     pub CallStaticVoidMethodV: extern "C" fn(*mut JNIEnv, jclass, jmethodID, *mut c_char),
     pub CallStaticVoidMethodA: extern "C" fn(*mut JNIEnv, jclass, jmethodID, *const jvalue),
 
@@ -408,7 +408,7 @@ pub struct JNINativeInterface {
     pub MonitorEnter: extern "C" fn(*mut JNIEnv, jobject) -> jint,
     pub MonitorExit: extern "C" fn(*mut JNIEnv, jobject) -> jint,
 
-    pub GetJavaVM: extern "C" fn(*mut JNIEnv, *mut *mut c_void) -> jint,
+    pub GetJavaVM: extern "C" fn(*mut JNIEnv, *mut *mut JavaVM) -> jint,
 
     pub GetStringRegion: extern "C" fn(*mut JNIEnv, jstring, jsize, jsize, *mut jchar),
     pub GetStringUTFRegion: extern "C" fn(*mut JNIEnv, jstring, jsize, jsize, *mut c_char),
@@ -416,7 +416,7 @@ pub struct JNINativeInterface {
     pub GetPrimitiveArrayCritical: extern "C" fn(*mut JNIEnv, jarray, *mut jboolean) -> *mut c_void,
     pub ReleasePrimitiveArrayCritical: extern "C" fn(*mut JNIEnv, jarray, *mut c_void, jint),
 
-    pub GetStringCritical: extern "C" fn(*mut JNIEnv, jstring, *mut jboolean) -> *mut c_char,
+    pub GetStringCritical: extern "C" fn(*mut JNIEnv, jstring, *mut jboolean) -> *const c_char,
     pub ReleaseStringCritical: extern "C" fn(*mut JNIEnv, jstring, *const c_char),
 
     pub NewWeakGlobalRef: extern "C" fn(*mut JNIEnv, jobject) -> jweak,
@@ -443,10 +443,10 @@ pub struct JavaVMOption {
 
 #[repr(C)]
 pub struct JavaVMInitArgs {
-    version: jint,
-    nOptions: jint,
-    options: *mut JavaVMOption,
-    ignoreUnrecognized: jboolean,
+    pub version: jint,
+    pub nOptions: jint,
+    pub options: *mut JavaVMOption,
+    pub ignoreUnrecognized: jboolean,
 }
 
 #[repr(C)]
