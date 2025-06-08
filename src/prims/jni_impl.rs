@@ -558,42 +558,126 @@ fn is_virtual_thread(_env: *mut JNIEnv, _obj: jobject) -> jboolean {
 // Stubs for C-variadic JNI functions
 extern "C" {
     fn new_object(env: *mut JNIEnv, clazz: jclass, method_id: jmethodID, ...) -> jobject;
-    // Call<Type>Method
-    fn call_object(env: *mut JNIEnv, obj: jobject, method_id: jmethodID, ...) -> jobject;
-    fn call_boolean(env: *mut JNIEnv, obj: jobject, method_id: jmethodID, ...) -> jboolean;
-    fn call_byte(env: *mut JNIEnv, obj: jobject, method_id: jmethodID, ...) -> jbyte;
-    fn call_char(env: *mut JNIEnv, obj: jobject, method_id: jmethodID, ...) -> jchar;
-    fn call_short(env: *mut JNIEnv, obj: jobject, method_id: jmethodID, ...) -> jshort;
-    fn call_int(env: *mut JNIEnv, obj: jobject, method_id: jmethodID, ...) -> jint;
-    fn call_long(env: *mut JNIEnv, obj: jobject, method_id: jmethodID, ...) -> jlong;
-    fn call_float(env: *mut JNIEnv, obj: jobject, method_id: jmethodID, ...) -> jfloat;
-    fn call_double(env: *mut JNIEnv, obj: jobject, method_id: jmethodID, ...) -> jdouble;
-    fn call_void(env: *mut JNIEnv, obj: jobject, method_id: jmethodID, ...);
+        // Call<Type>Method
+    fn call_object_method(env: *mut JNIEnv, obj: jobject, method_id: jmethodID, ...) -> jobject;
+    fn call_boolean_method(env: *mut JNIEnv, obj: jobject, method_id: jmethodID, ...) -> jboolean;
+    fn call_byte_method(env: *mut JNIEnv, obj: jobject, method_id: jmethodID, ...) -> jbyte;
+    fn call_char_method(env: *mut JNIEnv, obj: jobject, method_id: jmethodID, ...) -> jchar;
+    fn call_short_method(env: *mut JNIEnv, obj: jobject, method_id: jmethodID, ...) -> jshort;
+    fn call_int_method(env: *mut JNIEnv, obj: jobject, method_id: jmethodID, ...) -> jint;
+    fn call_long_method(env: *mut JNIEnv, obj: jobject, method_id: jmethodID, ...) -> jlong;
+    fn call_float_method(env: *mut JNIEnv, obj: jobject, method_id: jmethodID, ...) -> jfloat;
+    fn call_double_method(env: *mut JNIEnv, obj: jobject, method_id: jmethodID, ...) -> jdouble;
+    fn call_void_method(env: *mut JNIEnv, obj: jobject, method_id: jmethodID, ...);
 
     // CallNonvirtual<Type>Method
-    fn call_nonvirtual_object(env: *mut JNIEnv, obj: jobject, clazz: jclass, method_id: jmethodID, ...) -> jobject;
-    fn call_nonvirtual_boolean(env: *mut JNIEnv, obj: jobject, clazz: jclass, method_id: jmethodID, ...) -> jboolean;
-    fn call_nonvirtual_byte(env: *mut JNIEnv, obj: jobject, clazz: jclass, method_id: jmethodID, ...) -> jbyte;
-    fn call_nonvirtual_char(env: *mut JNIEnv, obj: jobject, clazz: jclass, method_id: jmethodID, ...) -> jchar;
-    fn call_nonvirtual_short(env: *mut JNIEnv, obj: jobject, clazz: jclass, method_id: jmethodID, ...) -> jshort;
-    fn call_nonvirtual_int(env: *mut JNIEnv, obj: jobject, clazz: jclass, method_id: jmethodID, ...) -> jint;
-    fn call_nonvirtual_long(env: *mut JNIEnv, obj: jobject, clazz: jclass, method_id: jmethodID, ...) -> jlong;
-    fn call_nonvirtual_float(env: *mut JNIEnv, obj: jobject, clazz: jclass, method_id: jmethodID, ...) -> jfloat;
-    fn call_nonvirtual_double(env: *mut JNIEnv, obj: jobject, clazz: jclass, method_id: jmethodID, ...) -> jdouble;
-    fn call_nonvirtual_void(env: *mut JNIEnv, obj: jobject, clazz: jclass, method_id: jmethodID, ...);
+    fn call_nonvirtual_object_method(env: *mut JNIEnv, obj: jobject, clazz: jclass, method_id: jmethodID, ...) -> jobject;
+    fn call_nonvirtual_boolean_method(env: *mut JNIEnv, obj: jobject, clazz: jclass, method_id: jmethodID, ...) -> jboolean;
+    fn call_nonvirtual_byte_method(env: *mut JNIEnv, obj: jobject, clazz: jclass, method_id: jmethodID, ...) -> jbyte;
+    fn call_nonvirtual_char_method(env: *mut JNIEnv, obj: jobject, clazz: jclass, method_id: jmethodID, ...) -> jchar;
+    fn call_nonvirtual_short_method(env: *mut JNIEnv, obj: jobject, clazz: jclass, method_id: jmethodID, ...) -> jshort;
+    fn call_nonvirtual_int_method(env: *mut JNIEnv, obj: jobject, clazz: jclass, method_id: jmethodID, ...) -> jint;
+    fn call_nonvirtual_long_method(env: *mut JNIEnv, obj: jobject, clazz: jclass, method_id: jmethodID, ...) -> jlong;
+    fn call_nonvirtual_float_method(env: *mut JNIEnv, obj: jobject, clazz: jclass, method_id: jmethodID, ...) -> jfloat;
+    fn call_nonvirtual_double_method(env: *mut JNIEnv, obj: jobject, clazz: jclass, method_id: jmethodID, ...) -> jdouble;
+    fn call_nonvirtual_void_method(env: *mut JNIEnv, obj: jobject, clazz: jclass, method_id: jmethodID, ...);
 
     // CallStatic<Type>Method
-    fn call_static_object(env: *mut JNIEnv, clazz: jclass, method_id: jmethodID, ...) -> jobject;
-    fn call_static_boolean(env: *mut JNIEnv, clazz: jclass, method_id: jmethodID, ...) -> jboolean;
-    fn call_static_byte(env: *mut JNIEnv, clazz: jclass, method_id: jmethodID, ...) -> jbyte;
-    fn call_static_char(env: *mut JNIEnv, clazz: jclass, method_id: jmethodID, ...) -> jchar;
-    fn call_static_short(env: *mut JNIEnv, clazz: jclass, method_id: jmethodID, ...) -> jshort;
-    fn call_static_int(env: *mut JNIEnv, clazz: jclass, method_id: jmethodID, ...) -> jint;
-    fn call_static_long(env: *mut JNIEnv, clazz: jclass, method_id: jmethodID, ...) -> jlong;
-    fn call_static_float(env: *mut JNIEnv, clazz: jclass, method_id: jmethodID, ...) -> jfloat;
-    fn call_static_double(env: *mut JNIEnv, clazz: jclass, method_id: jmethodID, ...) -> jdouble;
-    fn call_static_void(env: *mut JNIEnv, clazz: jclass, method_id: jmethodID, ...);
+    fn call_static_object_method(env: *mut JNIEnv, clazz: jclass, method_id: jmethodID, ...) -> jobject;
+    fn call_static_boolean_method(env: *mut JNIEnv, clazz: jclass, method_id: jmethodID, ...) -> jboolean;
+    fn call_static_byte_method(env: *mut JNIEnv, clazz: jclass, method_id: jmethodID, ...) -> jbyte;
+    fn call_static_char_method(env: *mut JNIEnv, clazz: jclass, method_id: jmethodID, ...) -> jchar;
+    fn call_static_short_method(env: *mut JNIEnv, clazz: jclass, method_id: jmethodID, ...) -> jshort;
+    fn call_static_int_method(env: *mut JNIEnv, clazz: jclass, method_id: jmethodID, ...) -> jint;
+    fn call_static_long_method(env: *mut JNIEnv, clazz: jclass, method_id: jmethodID, ...) -> jlong;
+    fn call_static_float_method(env: *mut JNIEnv, clazz: jclass, method_id: jmethodID, ...) -> jfloat;
+    fn call_static_double_method(env: *mut JNIEnv, clazz: jclass, method_id: jmethodID, ...) -> jdouble;
+    fn call_static_void_method(env: *mut JNIEnv, clazz: jclass, method_id: jmethodID, ...);
 }
+
+fn call_boolean_method_v(_env: *mut JNIEnv, _obj: jobject, _method_id: jmethodID, _args: *mut i8) -> jboolean { 0 }
+fn call_byte_method_v(_env: *mut JNIEnv, _obj: jobject, _method_id: jmethodID, _args: *mut i8) -> jbyte { 0 }
+fn call_char_method_v(_env: *mut JNIEnv, _obj: jobject, _method_id: jmethodID, _args: *mut i8) -> jchar { 0 }
+fn call_short_method_v(_env: *mut JNIEnv, _obj: jobject, _method_id: jmethodID, _args: *mut i8) -> jshort { 0 }
+fn call_int_method_v(_env: *mut JNIEnv, _obj: jobject, _method_id: jmethodID, _args: *mut i8) -> jint { 0 }
+fn call_long_method_v(_env: *mut JNIEnv, _obj: jobject, _method_id: jmethodID, _args: *mut i8) -> jlong { 0 }
+fn call_float_method_v(_env: *mut JNIEnv, _obj: jobject, _method_id: jmethodID, _args: *mut i8) -> jfloat { 0.0 }
+fn call_double_method_v(_env: *mut JNIEnv, _obj: jobject, _method_id: jmethodID, _args: *mut i8) -> jdouble { 0.0 }
+fn call_object_method_v(_env: *mut JNIEnv, _obj: jobject, _method_id: jmethodID, _args: *mut i8) -> jobject { DUMMY_OBJ }
+fn call_string_method_v(_env: *mut JNIEnv, _obj: jobject, _method_id: jmethodID, _args: *mut i8) -> jstring { DUMMY_OBJ }
+fn call_array_method_v(_env: *mut JNIEnv, _obj: jobject, _method_id: jmethodID, _args: *mut i8) -> jarray { DUMMY_OBJ }
+fn call_throwable_method_v(_env: *mut JNIEnv, _obj: jobject, _method_id: jmethodID, _args: *mut i8) -> jthrowable { DUMMY_OBJ }
+fn call_void_method_v(_env: *mut JNIEnv, _obj: jobject, _method_id: jmethodID, _args: *mut i8) {}
+
+fn call_boolean_method_a(_env: *mut JNIEnv, _obj: jobject, _method_id: jmethodID, _args: *const jvalue) -> jboolean { 0 }
+fn call_byte_method_a(_env: *mut JNIEnv, _obj: jobject, _method_id: jmethodID, _args: *const jvalue) -> jbyte { 0 }
+fn call_char_method_a(_env: *mut JNIEnv, _obj: jobject, _method_id: jmethodID, _args: *const jvalue) -> jchar { 0 }
+fn call_short_method_a(_env: *mut JNIEnv, _obj: jobject, _method_id: jmethodID, _args: *const jvalue) -> jshort { 0 }
+fn call_int_method_a(_env: *mut JNIEnv, _obj: jobject, _method_id: jmethodID, _args: *const jvalue) -> jint { 0 }
+fn call_long_method_a(_env: *mut JNIEnv, _obj: jobject, _method_id: jmethodID, _args: *const jvalue) -> jlong { 0 }
+fn call_float_method_a(_env: *mut JNIEnv, _obj: jobject, _method_id: jmethodID, _args: *const jvalue) -> jfloat { 0.0 }
+fn call_double_method_a(_env: *mut JNIEnv, _obj: jobject, _method_id: jmethodID, _args: *const jvalue) -> jdouble { 0.0 }
+fn call_object_method_a(_env: *mut JNIEnv, _obj: jobject, _method_id: jmethodID, _args: *const jvalue) -> jobject { DUMMY_OBJ }
+fn call_string_method_a(_env: *mut JNIEnv, _obj: jobject, _method_id: jmethodID, _args: *const jvalue) -> jstring { DUMMY_OBJ }
+fn call_array_method_a(_env: *mut JNIEnv, _obj: jobject, _method_id: jmethodID, _args: *const jvalue) -> jarray { DUMMY_OBJ }
+fn call_throwable_method_a(_env: *mut JNIEnv, _obj: jobject, _method_id: jmethodID, _args: *const jvalue) -> jthrowable { DUMMY_OBJ }
+fn call_void_method_a(_env: *mut JNIEnv, _obj: jobject, _method_id: jmethodID, _args: *const jvalue) {}
+
+fn call_static_boolean_method_v(_env: *mut JNIEnv, _clazz: jclass, _method_id: jmethodID, _args: *mut i8) -> jboolean { 0 }
+fn call_static_byte_method_v(_env: *mut JNIEnv, _clazz: jclass, _method_id: jmethodID, _args: *mut i8) -> jbyte { 0 }
+fn call_static_char_method_v(_env: *mut JNIEnv, _clazz: jclass, _method_id: jmethodID, _args: *mut i8) -> jchar { 0 }
+fn call_static_short_method_v(_env: *mut JNIEnv, _clazz: jclass, _method_id: jmethodID, _args: *mut i8) -> jshort { 0 }
+fn call_static_int_method_v(_env: *mut JNIEnv, _clazz: jclass, _method_id: jmethodID, _args: *mut i8) -> jint { 0 }
+fn call_static_long_method_v(_env: *mut JNIEnv, _clazz: jclass, _method_id: jmethodID, _args: *mut i8) -> jlong { 0 }
+fn call_static_float_method_v(_env: *mut JNIEnv, _clazz: jclass, _method_id: jmethodID, _args: *mut i8) -> jfloat { 0.0 }
+fn call_static_double_method_v(_env: *mut JNIEnv, _clazz: jclass, _method_id: jmethodID, _args: *mut i8) -> jdouble { 0.0 }
+fn call_static_object_method_v(_env: *mut JNIEnv, _clazz: jclass, _method_id: jmethodID, _args: *mut i8) -> jobject { DUMMY_OBJ }
+fn call_static_string_method_v(_env: *mut JNIEnv, _clazz: jclass, _method_id: jmethodID, _args: *mut i8) -> jstring { DUMMY_OBJ }
+fn call_static_array_method_v(_env: *mut JNIEnv, _clazz: jclass, _method_id: jmethodID, _args: *mut i8) -> jarray { DUMMY_OBJ }
+fn call_static_throwable_method_v(_env: *mut JNIEnv, _clazz: jclass, _method_id: jmethodID, _args: *mut i8) -> jthrowable { DUMMY_OBJ }
+fn call_static_void_method_v(_env: *mut JNIEnv, _clazz: jclass, _method_id: jmethodID, _args: *mut i8) {}
+
+fn call_static_boolean_method_a(_env: *mut JNIEnv, _clazz: jclass, _method_id: jmethodID, _args: *const jvalue) -> jboolean { 0 }
+fn call_static_byte_method_a(_env: *mut JNIEnv, _clazz: jclass, _method_id: jmethodID, _args: *const jvalue) -> jbyte { 0 }
+fn call_static_char_method_a(_env: *mut JNIEnv, _clazz: jclass, _method_id: jmethodID, _args: *const jvalue) -> jchar { 0 }
+fn call_static_short_method_a(_env: *mut JNIEnv, _clazz: jclass, _method_id: jmethodID, _args: *const jvalue) -> jshort { 0 }
+fn call_static_int_method_a(_env: *mut JNIEnv, _clazz: jclass, _method_id: jmethodID, _args: *const jvalue) -> jint { 0 }
+fn call_static_long_method_a(_env: *mut JNIEnv, _clazz: jclass, _method_id: jmethodID, _args: *const jvalue) -> jlong { 0 }
+fn call_static_float_method_a(_env: *mut JNIEnv, _clazz: jclass, _method_id: jmethodID, _args: *const jvalue) -> jfloat { 0.0 }
+fn call_static_double_method_a(_env: *mut JNIEnv, _clazz: jclass, _method_id: jmethodID, _args: *const jvalue) -> jdouble { 0.0 }
+fn call_static_object_method_a(_env: *mut JNIEnv, _clazz: jclass, _method_id: jmethodID, _args: *const jvalue) -> jobject { DUMMY_OBJ }
+fn call_static_string_method_a(_env: *mut JNIEnv, _clazz: jclass, _method_id: jmethodID, _args: *const jvalue) -> jstring { DUMMY_OBJ }
+fn call_static_array_method_a(_env: *mut JNIEnv, _clazz: jclass, _method_id: jmethodID, _args: *const jvalue) -> jarray { DUMMY_OBJ }
+fn call_static_throwable_method_a(_env: *mut JNIEnv, _clazz: jclass, _method_id: jmethodID, _args: *const jvalue) -> jthrowable { DUMMY_OBJ }
+fn call_static_void_method_a(_env: *mut JNIEnv, _clazz: jclass, _method_id: jmethodID, _args: *const jvalue) {}
+
+fn call_nonvirtual_boolean_method_v(_env: *mut JNIEnv, _obj: jobject, _clazz: jclass, _method_id: jmethodID, _args: *mut i8) -> jboolean { 0 }
+fn call_nonvirtual_byte_method_v(_env: *mut JNIEnv, _obj: jobject, _clazz: jclass, _method_id: jmethodID, _args: *mut i8) -> jbyte { 0 }
+fn call_nonvirtual_char_method_v(_env: *mut JNIEnv, _obj: jobject, _clazz: jclass, _method_id: jmethodID, _args: *mut i8) -> jchar { 0 }
+fn call_nonvirtual_short_method_v(_env: *mut JNIEnv, _obj: jobject, _clazz: jclass, _method_id: jmethodID, _args: *mut i8) -> jshort { 0 }
+fn call_nonvirtual_int_method_v(_env: *mut JNIEnv, _obj: jobject, _clazz: jclass, _method_id: jmethodID, _args: *mut i8) -> jint { 0 }
+fn call_nonvirtual_long_method_v(_env: *mut JNIEnv, _obj: jobject, _clazz: jclass, _method_id: jmethodID, _args: *mut i8) -> jlong { 0 }
+fn call_nonvirtual_float_method_v(_env: *mut JNIEnv, _obj: jobject, _clazz: jclass, _method_id: jmethodID, _args: *mut i8) -> jfloat { 0.0 }
+fn call_nonvirtual_double_method_v(_env: *mut JNIEnv, _obj: jobject, _clazz: jclass, _method_id: jmethodID, _args: *mut i8) -> jdouble { 0.0 }
+fn call_nonvirtual_object_method_v(_env: *mut JNIEnv, _obj: jobject, _clazz: jclass, _method_id: jmethodID, _args: *mut i8) -> jobject { DUMMY_OBJ }
+fn call_nonvirtual_string_method_v(_env: *mut JNIEnv, _obj: jobject, _clazz: jclass, _method_id: jmethodID, _args: *mut i8) -> jstring { DUMMY_OBJ }
+fn call_nonvirtual_array_method_v(_env: *mut JNIEnv, _obj: jobject, _clazz: jclass, _method_id: jmethodID, _args: *mut i8) -> jarray { DUMMY_OBJ }
+fn call_nonvirtual_throwable_method_v(_env: *mut JNIEnv, _obj: jobject, _clazz: jclass, _method_id: jmethodID, _args: *mut i8) -> jthrowable { DUMMY_OBJ }
+fn call_nonvirtual_void_method_v(_env: *mut JNIEnv, _obj: jobject, _clazz: jclass, _method_id: jmethodID, _args: *mut i8) {}
+
+fn call_nonvirtual_boolean_method_a(_env: *mut JNIEnv, _obj: jobject, _clazz: jclass, _method_id: jmethodID, _args: *const jvalue) -> jboolean { 0 }
+fn call_nonvirtual_byte_method_a(_env: *mut JNIEnv, _obj: jobject, _clazz: jclass, _method_id: jmethodID, _args: *const jvalue) -> jbyte { 0 }
+fn call_nonvirtual_char_method_a(_env: *mut JNIEnv, _obj: jobject, _clazz: jclass, _method_id: jmethodID, _args: *const jvalue) -> jchar { 0 }
+fn call_nonvirtual_short_method_a(_env: *mut JNIEnv, _obj: jobject, _clazz: jclass, _method_id: jmethodID, _args: *const jvalue) -> jshort { 0 }
+fn call_nonvirtual_int_method_a(_env: *mut JNIEnv, _obj: jobject, _clazz: jclass, _method_id: jmethodID, _args: *const jvalue) -> jint { 0 }
+fn call_nonvirtual_long_method_a(_env: *mut JNIEnv, _obj: jobject, _clazz: jclass, _method_id: jmethodID, _args: *const jvalue) -> jlong { 0 }
+fn call_nonvirtual_float_method_a(_env: *mut JNIEnv, _obj: jobject, _clazz: jclass, _method_id: jmethodID, _args: *const jvalue) -> jfloat { 0.0 }
+fn call_nonvirtual_double_method_a(_env: *mut JNIEnv, _obj: jobject, _clazz: jclass, _method_id: jmethodID, _args: *const jvalue) -> jdouble { 0.0 }
+fn call_nonvirtual_object_method_a(_env: *mut JNIEnv, _obj: jobject, _clazz: jclass, _method_id: jmethodID, _args: *const jvalue) -> jobject { DUMMY_OBJ }
+fn call_nonvirtual_string_method_a(_env: *mut JNIEnv, _obj: jobject, _clazz: jclass, _method_id: jmethodID, _args: *const jvalue) -> jstring { DUMMY_OBJ }
+fn call_nonvirtual_array_method_a(_env: *mut JNIEnv, _obj: jobject, _clazz: jclass, _method_id: jmethodID, _args: *const jvalue) -> jarray { DUMMY_OBJ }
+fn call_nonvirtual_throwable_method_a(_env: *mut JNIEnv, _obj: jobject, _clazz: jclass, _method_id: jmethodID, _args: *const jvalue) -> jthrowable { DUMMY_OBJ }
+fn call_nonvirtual_void_method_a(_env: *mut JNIEnv, _obj: jobject, _clazz: jclass, _method_id: jmethodID, _args: *const jvalue) {}
 
 fn new_object_v(_env: *mut JNIEnv, _clazz: jclass, _method_id: jmethodID, _args: *mut i8) -> jobject {
     DUMMY_OBJ
@@ -601,46 +685,6 @@ fn new_object_v(_env: *mut JNIEnv, _clazz: jclass, _method_id: jmethodID, _args:
 
 fn new_object_a(_env: *mut JNIEnv, _clazz: jclass, _method_id: jmethodID, _args: *const jvalue) -> jobject {
     DUMMY_OBJ
-}
-
-fn call_object_v(_env: *mut JNIEnv, _obj: jobject, _method_id: jmethodID, _args: *mut i8) -> jobject {
-    DUMMY_OBJ
-}
-
-fn call_boolean_v(_env: *mut JNIEnv, _obj: jobject, _method_id: jmethodID, _args: *mut i8) -> jboolean {
-    0
-}
-
-fn call_byte_v(_env: *mut JNIEnv, _obj: jobject, _method_id: jmethodID, _args: *mut i8) -> jbyte {
-    0
-}
-
-fn call_char_v(_env: *mut JNIEnv, _obj: jobject, _method_id: jmethodID, _args: *mut i8) -> jchar {
-    0
-}
-
-fn call_short_v(_env: *mut JNIEnv, _obj: jobject, _method_id: jmethodID, _args: *mut i8) -> jshort {
-    0
-}
-
-fn call_int_v(_env: *mut JNIEnv, _obj: jobject, _method_id: jmethodID, _args: *mut i8) -> jint {
-    0
-}
-
-fn call_long_v(_env: *mut JNIEnv, _obj: jobject, _method_id: jmethodID, _args: *mut i8) -> jlong {
-    0
-}
-
-fn call_float_v(_env: *mut JNIEnv, _obj: jobject, _method_id: jmethodID, _args: *mut i8) -> jfloat {
-    0.0
-}
-
-fn call_double_v(_env: *mut JNIEnv, _obj: jobject, _method_id: jmethodID, _args: *mut i8) -> jdouble {
-    0.0
-}
-
-fn call_void_v(_env: *mut JNIEnv, _obj: jobject, _method_id: jmethodID, _args: *mut i8) {
-    // No operation
 }
 
 // Replace the entire JNI_NATIVE_INTERFACE static structure
@@ -674,72 +718,72 @@ static mut JNI_NATIVE_INTERFACE: JNINativeInterface = JNINativeInterface {
     NewLocalRef: new_local_ref,
     EnsureLocalCapacity: ensure_local_capacity,
     AllocObject: alloc_object,
-    NewObject: new_object, 
-    NewObjectV: new_object_v, 
-    NewObjectA: new_object_a, 
+    NewObject: new_object,
+    NewObjectV: new_object_v,
+    NewObjectA: new_object_a,
     GetObjectClass: get_object_class,
     IsInstanceOf: is_instance_of,
     GetMethodID: get_method_id,
-    CallObjectMethod: call_object, 
-    CallObjectMethodV: unimplemented!(),
-    CallObjectMethodA: unimplemented!(),
-    CallBooleanMethod: call_boolean, 
-    CallBooleanMethodV: unimplemented!(),
-    CallBooleanMethodA: unimplemented!(),
-    CallByteMethod: call_byte, 
-    CallByteMethodV: unimplemented!(),
-    CallByteMethodA: unimplemented!(),
-    CallCharMethod: call_char, 
-    CallCharMethodV: unimplemented!(),
-    CallCharMethodA: unimplemented!(),
-    CallShortMethod: call_short, 
-    CallShortMethodV: unimplemented!(),
-    CallShortMethodA: unimplemented!(),
-    CallIntMethod: call_int, 
-    CallIntMethodV: unimplemented!(),
-    CallIntMethodA: unimplemented!(),
-    CallLongMethod: call_long, 
-    CallLongMethodV: unimplemented!(),
-    CallLongMethodA: unimplemented!(),
-    CallFloatMethod: call_float, 
-    CallFloatMethodV: unimplemented!(),
-    CallFloatMethodA: unimplemented!(),
-    CallDoubleMethod: call_double, 
-    CallDoubleMethodV: unimplemented!(),
-    CallDoubleMethodA: unimplemented!(),
-    CallVoidMethod: call_void, 
-    CallVoidMethodV: unimplemented!(),
-    CallVoidMethodA: unimplemented!(),
-    CallNonvirtualObjectMethod: call_nonvirtual_object, 
-    CallNonvirtualObjectMethodV: unimplemented!(),
-    CallNonvirtualObjectMethodA: unimplemented!(),
-    CallNonvirtualBooleanMethod: call_nonvirtual_boolean, 
-    CallNonvirtualBooleanMethodV: unimplemented!(),
-    CallNonvirtualBooleanMethodA: unimplemented!(),
-    CallNonvirtualByteMethod: call_nonvirtual_byte, 
-    CallNonvirtualByteMethodV: unimplemented!(),
-    CallNonvirtualByteMethodA: unimplemented!(),
-    CallNonvirtualCharMethod: call_nonvirtual_char, 
-    CallNonvirtualCharMethodV: unimplemented!(),
-    CallNonvirtualCharMethodA: unimplemented!(),
-    CallNonvirtualShortMethod: call_nonvirtual_short, 
-    CallNonvirtualShortMethodV: unimplemented!(),
-    CallNonvirtualShortMethodA: unimplemented!(),
-    CallNonvirtualIntMethod: call_nonvirtual_int, 
-    CallNonvirtualIntMethodV: unimplemented!(),
-    CallNonvirtualIntMethodA: unimplemented!(),
-    CallNonvirtualLongMethod: call_nonvirtual_long, 
-    CallNonvirtualLongMethodV: unimplemented!(),
-    CallNonvirtualLongMethodA: unimplemented!(),
-    CallNonvirtualFloatMethod: call_nonvirtual_float, 
-    CallNonvirtualFloatMethodV: unimplemented!(),
-    CallNonvirtualFloatMethodA: unimplemented!(),
-    CallNonvirtualDoubleMethod: call_nonvirtual_double, 
-    CallNonvirtualDoubleMethodV: unimplemented!(),
-    CallNonvirtualDoubleMethodA: unimplemented!(),
-    CallNonvirtualVoidMethod: call_nonvirtual_void, 
-    CallNonvirtualVoidMethodV: unimplemented!(),
-    CallNonvirtualVoidMethodA: unimplemented!(),
+    CallObjectMethod: call_object_method,
+    CallObjectMethodV: call_object_method_v,
+    CallObjectMethodA: call_object_method_a,
+    CallBooleanMethod: call_boolean_method,
+    CallBooleanMethodV: call_boolean_method_v,
+    CallBooleanMethodA: call_boolean_method_a,
+    CallByteMethod: call_byte_method,
+    CallByteMethodV: call_byte_method_v,
+    CallByteMethodA: call_byte_method_a,
+    CallCharMethod: call_char_method,
+    CallCharMethodV: call_char_method_v,
+    CallCharMethodA: call_char_method_a,
+    CallShortMethod: call_short_method,
+    CallShortMethodV: call_short_method_v,
+    CallShortMethodA: call_short_method_a,
+    CallIntMethod: call_int_method,
+    CallIntMethodV: call_int_method_v,
+    CallIntMethodA: call_int_method_a,
+    CallLongMethod: call_long_method,
+    CallLongMethodV: call_long_method_v,
+    CallLongMethodA: call_long_method_a,
+    CallFloatMethod: call_float_method,
+    CallFloatMethodV: call_float_method_v,
+    CallFloatMethodA: call_float_method_a,
+    CallDoubleMethod: call_double_method,
+    CallDoubleMethodV: call_double_method_v,
+    CallDoubleMethodA: call_double_method_a,
+    CallVoidMethod: call_void_method,
+    CallVoidMethodV: call_void_method_v,
+    CallVoidMethodA: call_void_method_a,
+    CallNonvirtualObjectMethod: call_nonvirtual_object_method,
+    CallNonvirtualObjectMethodV: call_nonvirtual_object_method_v,
+    CallNonvirtualObjectMethodA: call_nonvirtual_object_method_a,
+    CallNonvirtualBooleanMethod: call_nonvirtual_boolean_method,
+    CallNonvirtualBooleanMethodV: call_nonvirtual_boolean_method_v,
+    CallNonvirtualBooleanMethodA: call_nonvirtual_boolean_method_a,
+    CallNonvirtualByteMethod: call_nonvirtual_byte_method,
+    CallNonvirtualByteMethodV: call_nonvirtual_byte_method_v,
+    CallNonvirtualByteMethodA: call_nonvirtual_byte_method_a,
+    CallNonvirtualCharMethod: call_nonvirtual_char_method,
+    CallNonvirtualCharMethodV: call_nonvirtual_char_method_v,
+    CallNonvirtualCharMethodA: call_nonvirtual_char_method_a,
+    CallNonvirtualShortMethod: call_nonvirtual_short_method,
+    CallNonvirtualShortMethodV: call_nonvirtual_short_method_v,
+    CallNonvirtualShortMethodA: call_nonvirtual_short_method_a,
+    CallNonvirtualIntMethod: call_nonvirtual_int_method,
+    CallNonvirtualIntMethodV: call_nonvirtual_int_method_v,
+    CallNonvirtualIntMethodA: call_nonvirtual_int_method_a,
+    CallNonvirtualLongMethod: call_nonvirtual_long_method,
+    CallNonvirtualLongMethodV: call_nonvirtual_long_method_v,
+    CallNonvirtualLongMethodA: call_nonvirtual_long_method_a,
+    CallNonvirtualFloatMethod: call_nonvirtual_float_method,
+    CallNonvirtualFloatMethodV: call_nonvirtual_float_method_v,
+    CallNonvirtualFloatMethodA: call_nonvirtual_float_method_a,
+    CallNonvirtualDoubleMethod: call_nonvirtual_double_method,
+    CallNonvirtualDoubleMethodV: call_nonvirtual_double_method_v,
+    CallNonvirtualDoubleMethodA: call_nonvirtual_double_method_a,
+    CallNonvirtualVoidMethod: call_nonvirtual_void_method,
+    CallNonvirtualVoidMethodV: call_nonvirtual_void_method_v,
+    CallNonvirtualVoidMethodA: call_nonvirtual_void_method_a,
     GetFieldID: get_field_id,
     GetObjectField: get_object_field,
     GetBooleanField: get_boolean_field,
@@ -760,36 +804,36 @@ static mut JNI_NATIVE_INTERFACE: JNINativeInterface = JNINativeInterface {
     SetFloatField: set_float_field,
     SetDoubleField: set_double_field,
     GetStaticMethodID: get_static_method_id,
-    CallStaticObjectMethod: call_static_object, 
-    CallStaticObjectMethodV: unimplemented!(),
-    CallStaticObjectMethodA: unimplemented!(),
-    CallStaticBooleanMethod: call_static_boolean, 
-    CallStaticBooleanMethodV: unimplemented!(),
-    CallStaticBooleanMethodA: unimplemented!(),
-    CallStaticByteMethod: call_static_byte, 
-    CallStaticByteMethodV: unimplemented!(),
-    CallStaticByteMethodA: unimplemented!(),
-    CallStaticCharMethod: call_static_char, 
-    CallStaticCharMethodV: unimplemented!(),
-    CallStaticCharMethodA: unimplemented!(),
-    CallStaticShortMethod: call_static_short, 
-    CallStaticShortMethodV: unimplemented!(),
-    CallStaticShortMethodA: unimplemented!(),
-    CallStaticIntMethod: call_static_int, 
-    CallStaticIntMethodV: unimplemented!(),
-    CallStaticIntMethodA: unimplemented!(),
-    CallStaticLongMethod: call_static_long, 
-    CallStaticLongMethodV: unimplemented!(),
-    CallStaticLongMethodA: unimplemented!(),
-    CallStaticFloatMethod: call_static_float, 
-    CallStaticFloatMethodV: unimplemented!(),
-    CallStaticFloatMethodA: unimplemented!(),
-    CallStaticDoubleMethod: call_static_double, 
-    CallStaticDoubleMethodV: unimplemented!(),
-    CallStaticDoubleMethodA: unimplemented!(),
-    CallStaticVoidMethod: call_static_void, 
-    CallStaticVoidMethodV: unimplemented!(),
-    CallStaticVoidMethodA: unimplemented!(),
+    CallStaticObjectMethod: call_static_object_method,
+    CallStaticObjectMethodV: call_static_object_method_v,
+    CallStaticObjectMethodA: call_static_object_method_a,
+    CallStaticBooleanMethod: call_static_boolean_method,
+    CallStaticBooleanMethodV: call_static_boolean_method_v,
+    CallStaticBooleanMethodA: call_static_boolean_method_a,
+    CallStaticByteMethod: call_static_byte_method,
+    CallStaticByteMethodV: call_static_byte_method_v,
+    CallStaticByteMethodA: call_static_byte_method_a,
+    CallStaticCharMethod: call_static_char_method,
+    CallStaticCharMethodV: call_static_char_method_v,
+    CallStaticCharMethodA: call_static_char_method_a,
+    CallStaticShortMethod: call_static_short_method,
+    CallStaticShortMethodV: call_static_short_method_v,
+    CallStaticShortMethodA: call_static_short_method_a,
+    CallStaticIntMethod: call_static_int_method,
+    CallStaticIntMethodV: call_static_int_method_v,
+    CallStaticIntMethodA: call_static_int_method_a,
+    CallStaticLongMethod: call_static_long_method,
+    CallStaticLongMethodV: call_static_long_method_v,
+    CallStaticLongMethodA: call_static_long_method_a,
+    CallStaticFloatMethod: call_static_float_method,
+    CallStaticFloatMethodV: call_static_float_method_v,
+    CallStaticFloatMethodA: call_static_float_method_a,
+    CallStaticDoubleMethod: call_static_double_method,
+    CallStaticDoubleMethodV: call_static_double_method_v,
+    CallStaticDoubleMethodA: call_static_double_method_a,
+    CallStaticVoidMethod: call_static_void_method,
+    CallStaticVoidMethodV: call_static_void_method_v,
+    CallStaticVoidMethodA: call_static_void_method_a,
     GetStaticFieldID: get_static_field_id,
     GetStaticObjectField: get_static_object_field,
     GetStaticBooleanField: get_static_boolean_field,
@@ -882,5 +926,3 @@ static mut JNI_NATIVE_INTERFACE: JNINativeInterface = JNINativeInterface {
     GetModule: get_module,
     IsVirtualThread: is_virtual_thread,
 };
-
-
