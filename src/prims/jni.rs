@@ -37,7 +37,9 @@ pub type jboolean = u8;
 
 pub type jsize    = jint;
 
+#[repr(C)]
 pub struct _jobject;
+
 pub type jobject = *mut _jobject; 
 pub type jclass         = jobject;
 pub type jthrowable     = jobject;
