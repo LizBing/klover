@@ -52,10 +52,13 @@ extern "C" fn JNI_GetDefaultJavaVMInitArgs(args: *mut c_void) -> jint {
 }
 
 #[no_mangle]
-extern "C" fn JNI_CreateJavaVM(pvm: *mut *mut JavaVM, penv: *mut *mut c_void, args: *mut c_void) -> jint {
+unsafe extern "C" fn JNI_CreateJavaVM(pvm: *mut *mut JavaVM, penv: *mut *mut c_void, args: *mut c_void) -> jint {
     println!("Hello!");
 
-    JNI_ERR
+    *pvm = &mut MAIN_VM;
+    *penv = &mut JNI_NATIVE_INTERFACE as *mut JNINativeInterface as _;
+
+    JNI_OK
 }
 
 #[no_mangle]
@@ -87,19 +90,19 @@ fn destroy_java_vm(vm: *mut JavaVM) -> jint {
 }
 
 fn attach_current_thread(vm: *mut JavaVM, penv: *mut *mut c_void, args: *mut c_void) -> jint {
-    JNI_ERR
+    JNI_OK
 }
 
 fn detach_current_thread(vm: *mut JavaVM) -> jint {
-    JNI_ERR
+    JNI_OK
 }
 
 fn get_env(vm: *mut JavaVM, penv: *mut *mut c_void, version: jint) -> jint {
-    JNI_ERR
+    JNI_OK
 }
 
 fn attach_current_thread_as_daemon(vm: *mut JavaVM, penv: *mut *mut c_void, args: *mut c_void) -> jint {
-    JNI_ERR
+    JNI_OK
 }
 
 static mut JNI_INVOKE_INTERFACE: JNIInvokeInterface = JNIInvokeInterface {

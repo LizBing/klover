@@ -147,6 +147,3 @@ jdouble call_static_double_method(JNIEnv *env, jclass clazz, jmethodID method_id
 void call_static_void_method(JNIEnv *env, jclass clazz, jmethodID method_id, ...) {
     // Dummy implementation does nothing
 }
-
-
-
