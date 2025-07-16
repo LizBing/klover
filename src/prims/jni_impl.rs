@@ -19,22 +19,12 @@
  * under the License.
  */
 
-use std::{ffi::{c_char, c_void, CStr}, ptr::null_mut, sync::atomic::{AtomicI32, Ordering}};
+use std::{ffi::{c_char, c_void, CStr}, ptr::null_mut};
 
-use crate::prims::jni::{JavaVMInitArgs, JNI_ERR};
-use crate::prims::jni::JNINativeInterface;
+use crate::prims::jni::{JavaVMInitArgs};
 
 use super::jni::{jarray, jboolean, jbyte, jclass, jint, jobject, jsize, JNIEnv, JNIInvokeInterface, JavaVM, JNI_OK, JNI_VERSION};
 use super::jni::{jmethodID, jfieldID, jthrowable, jchar, jshort, jlong, jfloat, jdouble, jstring, jweak, jobjectRefType, JNINativeMethod, jvalue}; // Added jvalue
-
-enum VMCreationState {
-    NotCreated = 0,
-    InProgress = 1,
-    Complete = 2
-}
-
-static VM_CREATED: AtomicI32 = AtomicI32::new(VMCreationState::NotCreated as i32);
-static mut MAIN_VM: JavaVM = unsafe { &mut JNI_INVOKE_INTERFACE };
 
 #[no_mangle]
 extern "C" fn JNI_GetDefaultJavaVMInitArgs(args: *mut c_void) -> jint {
@@ -44,33 +34,23 @@ extern "C" fn JNI_GetDefaultJavaVMInitArgs(args: *mut c_void) -> jint {
     // todo: verify the version.
 
     init_args.version = JNI_VERSION;
-    init_args.nOptions = 0;
+    init_args.n_opts = 0;
     init_args.options = null_mut();
-    init_args.ignoreUnrecognized = 1;
+    init_args.ign_unrecognized = 1;
 
     JNI_OK
 }
 
+extern "C" { fn get_jni_env() -> JNIEnv; }
+
 #[no_mangle]
 unsafe extern "C" fn JNI_CreateJavaVM(pvm: *mut *mut JavaVM, penv: *mut *mut c_void, args: *mut c_void) -> jint {
-    println!("Hello!");
-
-    *pvm = &mut MAIN_VM;
-    *penv = &mut JNI_NATIVE_INTERFACE as *mut JNINativeInterface as _;
-
-    JNI_OK
+    unimplemented!()
 }
 
 #[no_mangle]
 unsafe extern "C" fn JNI_GetCreatedJavaVMs(vm_buf: *mut *mut JavaVM, len: jsize, nvms: *mut jsize) -> jint {
-    if VM_CREATED.load(Ordering::SeqCst) == VMCreationState::Complete as i32 {
-        if nvms != null_mut() { *nvms = 1 }
-        if len > 0 { *vm_buf = &mut MAIN_VM }
-    } else {
-        if nvms != null_mut() { *nvms = 0 }
-    }
-
-    JNI_OK
+    unimplemented!()
 }
 
 #[no_mangle]
@@ -86,23 +66,23 @@ extern "C" fn JNI_OnUnload(vm: *mut JavaVM, reserved: *mut c_void) -> jint {
 // Methods in JNIInvokeInterface
 
 fn destroy_java_vm(vm: *mut JavaVM) -> jint {
-    JNI_OK
+    unimplemented!()
 }
 
 fn attach_current_thread(vm: *mut JavaVM, penv: *mut *mut c_void, args: *mut c_void) -> jint {
-    JNI_OK
+    unimplemented!()
 }
 
 fn detach_current_thread(vm: *mut JavaVM) -> jint {
-    JNI_OK
+    unimplemented!()
 }
 
 fn get_env(vm: *mut JavaVM, penv: *mut *mut c_void, version: jint) -> jint {
-    JNI_OK
+    unimplemented!()
 }
 
 fn attach_current_thread_as_daemon(vm: *mut JavaVM, penv: *mut *mut c_void, args: *mut c_void) -> jint {
-    JNI_OK
+    unimplemented!()
 }
 
 static mut JNI_INVOKE_INTERFACE: JNIInvokeInterface = JNIInvokeInterface {
@@ -110,11 +90,11 @@ static mut JNI_INVOKE_INTERFACE: JNIInvokeInterface = JNIInvokeInterface {
     reserved1: null_mut(),
     reserved2: null_mut(),
 
-    DestroyJavaVM: destroy_java_vm,
-    AttachCurrentThread: attach_current_thread,
-    DetachCurrentThread: detach_current_thread,
-    GetEnv: get_env,
-    AttachCurrentThreadAsDaemon: attach_current_thread_as_daemon
+    destroy_java_vm,
+    attach_current_thread,
+    detach_current_thread,
+    get_env,
+    attach_current_thread_daemon: attach_current_thread_as_daemon
 };
 
 // Methods in JNINativeInterface_
@@ -485,11 +465,7 @@ fn unregister_natives(_env: *mut JNIEnv, _clazz: jclass) -> jint {
 }
 
 fn get_java_vm(_env: *mut JNIEnv, vm: *mut *mut JavaVM) -> jint {
-    unsafe {
-        *vm = &mut MAIN_VM as _
-    }
-
-    JNI_OK
+    unimplemented!()
 }
 
 fn get_string_region(_env: *mut JNIEnv, _str: jstring, _start: jsize, _len: jsize, _buf: *mut jchar) { }
@@ -690,242 +666,3 @@ fn new_object_a(_env: *mut JNIEnv, _clazz: jclass, _method_id: jmethodID, _args:
     DUMMY_OBJ
 }
 
-// Replace the entire JNI_NATIVE_INTERFACE static structure
-static mut JNI_NATIVE_INTERFACE: JNINativeInterface = JNINativeInterface {
-    reserved0: std::ptr::null_mut(),
-    reserved1: std::ptr::null_mut(),
-    reserved2: std::ptr::null_mut(),
-    reserved3: std::ptr::null_mut(),
-
-    GetVersion: get_version,
-    DefineClass: define_class,
-    FindClass: find_class,
-    FromReflectedMethod: from_reflected_method,
-    FromReflectedField: from_reflected_field,
-    ToReflectedMethod: to_reflected_method,
-    GetSuperclass: get_super_class,
-    IsAssignableFrom: is_assignable_from,
-    ToReflectedField: to_reflected_field,
-    Throw: throw,
-    ThrowNew: throw_new,
-    ExceptionOccurred: exception_occurred,
-    ExceptionDescribe: exception_describe,
-    ExceptionClear: exception_clear,
-    FatalError: fatal_error,
-    PushLocalFrame: push_local_frame,
-    PopLocalFrame: pop_local_frame,
-    NewGlobalRef: new_global_ref,
-    DeleteGlobalRef: delete_global_ref,
-    DeleteLocalRef: delete_local_ref,
-    IsSameObject: is_same_object,
-    NewLocalRef: new_local_ref,
-    EnsureLocalCapacity: ensure_local_capacity,
-    AllocObject: alloc_object,
-    NewObject: new_object,
-    NewObjectV: new_object_v,
-    NewObjectA: new_object_a,
-    GetObjectClass: get_object_class,
-    IsInstanceOf: is_instance_of,
-    GetMethodID: get_method_id,
-    CallObjectMethod: call_object_method,
-    CallObjectMethodV: call_object_method_v,
-    CallObjectMethodA: call_object_method_a,
-    CallBooleanMethod: call_boolean_method,
-    CallBooleanMethodV: call_boolean_method_v,
-    CallBooleanMethodA: call_boolean_method_a,
-    CallByteMethod: call_byte_method,
-    CallByteMethodV: call_byte_method_v,
-    CallByteMethodA: call_byte_method_a,
-    CallCharMethod: call_char_method,
-    CallCharMethodV: call_char_method_v,
-    CallCharMethodA: call_char_method_a,
-    CallShortMethod: call_short_method,
-    CallShortMethodV: call_short_method_v,
-    CallShortMethodA: call_short_method_a,
-    CallIntMethod: call_int_method,
-    CallIntMethodV: call_int_method_v,
-    CallIntMethodA: call_int_method_a,
-    CallLongMethod: call_long_method,
-    CallLongMethodV: call_long_method_v,
-    CallLongMethodA: call_long_method_a,
-    CallFloatMethod: call_float_method,
-    CallFloatMethodV: call_float_method_v,
-    CallFloatMethodA: call_float_method_a,
-    CallDoubleMethod: call_double_method,
-    CallDoubleMethodV: call_double_method_v,
-    CallDoubleMethodA: call_double_method_a,
-    CallVoidMethod: call_void_method,
-    CallVoidMethodV: call_void_method_v,
-    CallVoidMethodA: call_void_method_a,
-    CallNonvirtualObjectMethod: call_nonvirtual_object_method,
-    CallNonvirtualObjectMethodV: call_nonvirtual_object_method_v,
-    CallNonvirtualObjectMethodA: call_nonvirtual_object_method_a,
-    CallNonvirtualBooleanMethod: call_nonvirtual_boolean_method,
-    CallNonvirtualBooleanMethodV: call_nonvirtual_boolean_method_v,
-    CallNonvirtualBooleanMethodA: call_nonvirtual_boolean_method_a,
-    CallNonvirtualByteMethod: call_nonvirtual_byte_method,
-    CallNonvirtualByteMethodV: call_nonvirtual_byte_method_v,
-    CallNonvirtualByteMethodA: call_nonvirtual_byte_method_a,
-    CallNonvirtualCharMethod: call_nonvirtual_char_method,
-    CallNonvirtualCharMethodV: call_nonvirtual_char_method_v,
-    CallNonvirtualCharMethodA: call_nonvirtual_char_method_a,
-    CallNonvirtualShortMethod: call_nonvirtual_short_method,
-    CallNonvirtualShortMethodV: call_nonvirtual_short_method_v,
-    CallNonvirtualShortMethodA: call_nonvirtual_short_method_a,
-    CallNonvirtualIntMethod: call_nonvirtual_int_method,
-    CallNonvirtualIntMethodV: call_nonvirtual_int_method_v,
-    CallNonvirtualIntMethodA: call_nonvirtual_int_method_a,
-    CallNonvirtualLongMethod: call_nonvirtual_long_method,
-    CallNonvirtualLongMethodV: call_nonvirtual_long_method_v,
-    CallNonvirtualLongMethodA: call_nonvirtual_long_method_a,
-    CallNonvirtualFloatMethod: call_nonvirtual_float_method,
-    CallNonvirtualFloatMethodV: call_nonvirtual_float_method_v,
-    CallNonvirtualFloatMethodA: call_nonvirtual_float_method_a,
-    CallNonvirtualDoubleMethod: call_nonvirtual_double_method,
-    CallNonvirtualDoubleMethodV: call_nonvirtual_double_method_v,
-    CallNonvirtualDoubleMethodA: call_nonvirtual_double_method_a,
-    CallNonvirtualVoidMethod: call_nonvirtual_void_method,
-    CallNonvirtualVoidMethodV: call_nonvirtual_void_method_v,
-    CallNonvirtualVoidMethodA: call_nonvirtual_void_method_a,
-    GetFieldID: get_field_id,
-    GetObjectField: get_object_field,
-    GetBooleanField: get_boolean_field,
-    GetByteField: get_byte_field,
-    GetCharField: get_char_field,
-    GetShortField: get_short_field,
-    GetIntField: get_int_field,
-    GetLongField: get_long_field,
-    GetFloatField: get_float_field,
-    GetDoubleField: get_double_field,
-    SetObjectField: set_object_field,
-    SetBooleanField: set_boolean_field,
-    SetByteField: set_byte_field,
-    SetCharField: set_char_field,
-    SetShortField: set_short_field,
-    SetIntField: set_int_field,
-    SetLongField: set_long_field,
-    SetFloatField: set_float_field,
-    SetDoubleField: set_double_field,
-    GetStaticMethodID: get_static_method_id,
-    CallStaticObjectMethod: call_static_object_method,
-    CallStaticObjectMethodV: call_static_object_method_v,
-    CallStaticObjectMethodA: call_static_object_method_a,
-    CallStaticBooleanMethod: call_static_boolean_method,
-    CallStaticBooleanMethodV: call_static_boolean_method_v,
-    CallStaticBooleanMethodA: call_static_boolean_method_a,
-    CallStaticByteMethod: call_static_byte_method,
-    CallStaticByteMethodV: call_static_byte_method_v,
-    CallStaticByteMethodA: call_static_byte_method_a,
-    CallStaticCharMethod: call_static_char_method,
-    CallStaticCharMethodV: call_static_char_method_v,
-    CallStaticCharMethodA: call_static_char_method_a,
-    CallStaticShortMethod: call_static_short_method,
-    CallStaticShortMethodV: call_static_short_method_v,
-    CallStaticShortMethodA: call_static_short_method_a,
-    CallStaticIntMethod: call_static_int_method,
-    CallStaticIntMethodV: call_static_int_method_v,
-    CallStaticIntMethodA: call_static_int_method_a,
-    CallStaticLongMethod: call_static_long_method,
-    CallStaticLongMethodV: call_static_long_method_v,
-    CallStaticLongMethodA: call_static_long_method_a,
-    CallStaticFloatMethod: call_static_float_method,
-    CallStaticFloatMethodV: call_static_float_method_v,
-    CallStaticFloatMethodA: call_static_float_method_a,
-    CallStaticDoubleMethod: call_static_double_method,
-    CallStaticDoubleMethodV: call_static_double_method_v,
-    CallStaticDoubleMethodA: call_static_double_method_a,
-    CallStaticVoidMethod: call_static_void_method,
-    CallStaticVoidMethodV: call_static_void_method_v,
-    CallStaticVoidMethodA: call_static_void_method_a,
-    GetStaticFieldID: get_static_field_id,
-    GetStaticObjectField: get_static_object_field,
-    GetStaticBooleanField: get_static_boolean_field,
-    GetStaticByteField: get_static_byte_field,
-    GetStaticCharField: get_static_char_field,
-    GetStaticShortField: get_static_short_field,
-    GetStaticIntField: get_static_int_field,
-    GetStaticLongField: get_static_long_field,
-    GetStaticFloatField: get_static_float_field,
-    GetStaticDoubleField: get_static_double_field,
-    SetStaticObjectField: set_static_object_field,
-    SetStaticBooleanField: set_static_boolean_field,
-    SetStaticByteField: set_static_byte_field,
-    SetStaticCharField: set_static_char_field,
-    SetStaticShortField: set_static_short_field,
-    SetStaticIntField: set_static_int_field,
-    SetStaticLongField: set_static_long_field,
-    SetStaticFloatField: set_static_float_field,
-    SetStaticDoubleField: set_static_double_field,
-    NewString: new_string,
-    GetStringLength: get_string_length,
-    GetStringChars: get_string_chars,
-    ReleaseStringChars: release_string_chars,
-    NewStringUTF: new_string_utf,
-    GetStringUTFLength: get_string_utf_length,
-    GetStringUTFChars: get_string_utf_chars,
-    ReleaseStringUTFChars: release_string_utf_chars,
-    GetArrayLength: get_array_length,
-    NewObjectArray: new_object_array,
-    GetObjectArrayElement: get_object_array_element,
-    SetObjectArrayElement: set_object_array_element,
-    NewBooleanArray: new_boolean_array,
-    NewByteArray: new_byte_array,
-    NewCharArray: new_char_array,
-    NewShortArray: new_short_array,
-    NewIntArray: new_int_array,
-    NewLongArray: new_long_array,
-    NewFloatArray: new_float_array,
-    NewDoubleArray: new_double_array,
-    GetBooleanArrayElements: get_boolean_array_elements,
-    GetByteArrayElements: get_byte_array_elements,
-    GetCharArrayElements: get_char_array_elements,
-    GetShortArrayElements: get_short_array_elements,
-    GetIntArrayElements: get_int_array_elements,
-    GetLongArrayElements: get_long_array_elements,
-    GetFloatArrayElements: get_float_array_elements,
-    GetDoubleArrayElements: get_double_array_elements,
-    ReleaseBooleanArrayElements: release_boolean_array_elements,
-    ReleaseByteArrayElements: release_byte_array_elements,
-    ReleaseCharArrayElements: release_char_array_elements,
-    ReleaseShortArrayElements: release_short_array_elements,
-    ReleaseIntArrayElements: release_int_array_elements,
-    ReleaseLongArrayElements: release_long_array_elements,
-    ReleaseFloatArrayElements: release_float_array_elements,
-    ReleaseDoubleArrayElements: release_double_array_elements,
-    GetBooleanArrayRegion: get_boolean_array_region,
-    GetByteArrayRegion: get_byte_array_region,
-    GetCharArrayRegion: get_char_array_region,
-    GetShortArrayRegion: get_short_array_region,
-    GetIntArrayRegion: get_int_array_region,
-    GetLongArrayRegion: get_long_array_region,
-    GetFloatArrayRegion: get_float_array_region,
-    GetDoubleArrayRegion: get_double_array_region,
-    SetBooleanArrayRegion: set_boolean_array_region,
-    SetByteArrayRegion: set_byte_array_region,
-    SetCharArrayRegion: set_char_array_region,
-    SetShortArrayRegion: set_short_array_region,
-    SetIntArrayRegion: set_int_array_region,
-    SetLongArrayRegion: set_long_array_region,
-    SetFloatArrayRegion: set_float_array_region,
-    SetDoubleArrayRegion: set_double_array_region,
-    RegisterNatives: register_natives,
-    UnregisterNatives: unregister_natives,
-    MonitorEnter: monitor_enter,
-    MonitorExit: monitor_exit,
-    GetJavaVM: get_java_vm,
-    GetStringRegion: get_string_region,
-    GetStringUTFRegion: get_string_utf_region,
-    GetPrimitiveArrayCritical: get_primitive_array_critical,
-    ReleasePrimitiveArrayCritical: release_primitive_array_critical,
-    GetStringCritical: get_string_critical,
-    ReleaseStringCritical: release_string_critical,
-    NewWeakGlobalRef: new_weak_global_ref,
-    DeleteWeakGlobalRef: delete_weak_global_ref,
-    ExceptionCheck: exception_check,
-    NewDirectByteBuffer: new_direct_byte_buffer,
-    GetDirectBufferAddress: get_direct_buffer_address,
-    GetDirectBufferCapacity: get_direct_buffer_capacity,
-    GetObjectRefType: get_object_ref_type,
-    GetModule: get_module,
-    IsVirtualThread: is_virtual_thread,
-};

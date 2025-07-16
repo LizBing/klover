@@ -19,10 +19,3 @@
  * under the License.
  */
 
-pub struct Klass {}
-
-impl Klass {
-    pub fn size_of_instance() -> usize {
-        unimplemented!()
-    }
-}
