@@ -21,6 +21,8 @@
 
 pub(crate) mod class_data;
 pub(crate) mod common;
+pub(crate) mod engine;
+pub(crate) mod memory;
 pub(crate) mod oop;
 pub(crate) mod runtime;
 pub(crate) mod utils;

@@ -19,37 +19,24 @@
  * under the License.
  */
 
-#[macro_export]
-macro_rules! is_aligned {
-    ($n: expr, $alignment: expr) => {
-        ($n % $alignment == 0) 
-    };
+use std::{os::raw::c_void, ptr::null_mut};
+
+use crate::{memory::mem_region::MemRegion, utils::global_defs::address};
+
+extern "C" {
+    fn malloc(size: usize) -> *mut c_void;
+    fn free(addr: *mut c_void);
 }
 
-#[macro_export]
-macro_rules! is_arch_aligned {
-    ($n: expr) => {
-        crate::is_aligned!($n, size_of::<usize>())
-    };
+pub fn c_heap_alloc(size: usize) -> Option<MemRegion> {
+    unsafe {
+        let mem = malloc(size);
+        if mem == null_mut() { return None; }
+
+        Some(MemRegion::with_size(mem as address, size))
+    }
 }
 
-#[macro_export]
-macro_rules! is_page_aligned {
-    ($n: expr) => {
-        crate::is_aligned!($n, region::page::size())
-    };
-}
-
-#[macro_export]
-macro_rules! align_up {
-    ($n: expr, $a: expr) => {
-        (($n + (($a) - 1)) & !(($a) - 1))
-    };
-}
-
-#[macro_export]
-macro_rules! align_down {
-    ($n: expr, $a: expr) => {
-        ($n & !(($a) - 1))
-    };
+pub fn c_heap_free(mr: MemRegion) {
+    unsafe { free(mr.begin() as *mut c_void); }
 }

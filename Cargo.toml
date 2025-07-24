@@ -8,6 +8,9 @@ name = "jvm"
 crate-type = ["cdylib"]
 
 [dependencies]
+cafebabe = { path = "../cafebabe", features = ["klover"] }
+libc = "0.2"
+region = "3.0.2"
 
 [build-dependencies]
 cc = "1.0"

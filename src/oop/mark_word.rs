@@ -23,7 +23,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::{utils::global_defs::uintx, OneBit};
 
-#[repr(C, align(4))]
+#[repr(C)]
 pub struct MarkWord {
     _encoded: AtomicU64,
 }
@@ -46,26 +46,32 @@ impl MarkWord {
     }
 }
 
-const LOCK_BITS:      i32 = 2;
-const BIASED_TAG_BIT: i32 = 1;
-const AGE_BITS:       i32 = 4;
-const KLASS_PTR_BITS: i32 = 26;
-const HASH_BITS:      i32 = 31;
+const LOCK_BITS      :i32 =  2;
+const BIASED_TAG_BIT :i32 =  1;
+const AGE_BITS       :i32 =  4;
+#[cfg(target_pointer_width = "32")]
+const HASH_BITS      :i32 = 25;
+#[cfg(target_pointer_width = "64")]
+const HASH_BITS      :i32 = 31;
+#[cfg(target_pointer_width = "32")]
+const KLASS_PTR_BITS :i32 = 32;
+#[cfg(target_pointer_width = "64")]
+const KLASS_PTR_BITS :i32 = 26;
 
-const LOCK_SHIFT:       i32 = 0;
-const BIASED_TAG_SHIFT: i32 = LOCK_SHIFT + LOCK_BITS;
-const AGE_SHIFT:        i32 = BIASED_TAG_SHIFT + BIASED_TAG_BIT;
-const KLASS_PTR_SHIFT:  i32 = AGE_SHIFT + AGE_SHIFT;
-const HASH_SHIFT:       i32 = KLASS_PTR_BITS + KLASS_PTR_SHIFT;
+const LOCK_SHIFT       :i32 = 0;
+const BIASED_TAG_SHIFT :i32 = LOCK_SHIFT       + LOCK_BITS;
+const AGE_SHIFT        :i32 = BIASED_TAG_SHIFT + BIASED_TAG_BIT;
+const HASH_SHIFT       :i32 = AGE_SHIFT        + AGE_SHIFT;
+const KLASS_PTR_SHIFT  :i32 = HASH_SHIFT       + HASH_BITS;
 
-const LOCK_MASK:       u64 = (OneBit!() << LOCK_BITS)      - 1;
-const BIASED_TAG_MASK: u64 = (OneBit!() << BIASED_TAG_BIT) - 1;
-const AGE_MASK:        u64 = (OneBit!() << AGE_BITS)       - 1;
-const KLASS_PTR_MASK:  u64 = (OneBit!() << KLASS_PTR_BITS) - 1;
-const HASH_MASK:       u64 = (OneBit!() << HASH_BITS)      - 1;
+const LOCK_MASK       :u64 = (OneBit!() << LOCK_BITS)      - 1;
+const BIASED_TAG_MASK :u64 = (OneBit!() << BIASED_TAG_BIT) - 1;
+const AGE_MASK        :u64 = (OneBit!() << AGE_BITS)       - 1;
+const KLASS_PTR_MASK  :u64 = (OneBit!() << KLASS_PTR_BITS) - 1;
+const HASH_MASK       :u64 = (OneBit!() << HASH_BITS)      - 1;
 
-const BIASED_TAG_MASK_IN_PLACE: u64 = BIASED_TAG_MASK << BIASED_TAG_SHIFT;
-const AGE_MASK_IN_PLACE: u64 = AGE_MASK << AGE_SHIFT;
+const BIASED_TAG_MASK_IN_PLACE :u64 = BIASED_TAG_MASK << BIASED_TAG_SHIFT;
+const AGE_MASK_IN_PLACE        :u64 = AGE_MASK        << AGE_SHIFT;
 
 impl MarkWord {
     pub fn age(encoded: u64) -> i32 {

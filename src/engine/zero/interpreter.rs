@@ -19,37 +19,22 @@
  * under the License.
  */
 
-#[macro_export]
-macro_rules! is_aligned {
-    ($n: expr, $alignment: expr) => {
-        ($n % $alignment == 0) 
-    };
+use crate::engine::context::Context;
+
+struct ZeroEngine<'a> {
+    _ctx: &'a mut Context,
 }
 
-#[macro_export]
-macro_rules! is_arch_aligned {
-    ($n: expr) => {
-        crate::is_aligned!($n, size_of::<usize>())
-    };
-}
+impl<'a> ZeroEngine<'a> {
+    fn process(&mut self, opcodes: &[u8], length: u32) {
+        let pc = &mut self._ctx._regs.pc;
 
-#[macro_export]
-macro_rules! is_page_aligned {
-    ($n: expr) => {
-        crate::is_aligned!($n, region::page::size())
-    };
-}
+        loop {
+            if *pc >= length { break; }
+            match opcodes[*pc as usize] {
 
-#[macro_export]
-macro_rules! align_up {
-    ($n: expr, $a: expr) => {
-        (($n + (($a) - 1)) & !(($a) - 1))
-    };
-}
-
-#[macro_export]
-macro_rules! align_down {
-    ($n: expr, $a: expr) => {
-        ($n & !(($a) - 1))
-    };
+                _ => {}
+            }
+        }
+    }
 }

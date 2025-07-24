@@ -19,37 +19,4 @@
  * under the License.
  */
 
-#[macro_export]
-macro_rules! is_aligned {
-    ($n: expr, $alignment: expr) => {
-        ($n % $alignment == 0) 
-    };
-}
-
-#[macro_export]
-macro_rules! is_arch_aligned {
-    ($n: expr) => {
-        crate::is_aligned!($n, size_of::<usize>())
-    };
-}
-
-#[macro_export]
-macro_rules! is_page_aligned {
-    ($n: expr) => {
-        crate::is_aligned!($n, region::page::size())
-    };
-}
-
-#[macro_export]
-macro_rules! align_up {
-    ($n: expr, $a: expr) => {
-        (($n + (($a) - 1)) & !(($a) - 1))
-    };
-}
-
-#[macro_export]
-macro_rules! align_down {
-    ($n: expr, $a: expr) => {
-        ($n & !(($a) - 1))
-    };
-}
+mod interpreter;
