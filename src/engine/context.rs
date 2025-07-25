@@ -46,20 +46,18 @@ impl Clone for Frame {
 }
 
 pub struct VMRegiters {
-    pub pc: u32,
-
     sp: address,
     bp: *mut Frame
 }
 
 impl VMRegiters {
     fn new() -> Self {
-        VMRegiters { pc: 0, sp: 0, bp: null_mut() }
+        VMRegiters { sp: 0, bp: null_mut() }
     }
 }
 
 pub struct Context {
-    pub _regs: VMRegiters,
+    _regs: VMRegiters,
     _stack: MemRegion
 }
 
@@ -70,11 +68,15 @@ impl Context {
             _stack: c_heap_alloc(align_up!(stack_size, VirtSpace::page_size())).unwrap()
         }
     }
+}
 
+impl Context {
     pub const fn size_of_slots(n: usize) -> usize {
         size_of::<slot_t>() * n
     }
+}
 
+impl Context {
     // Ensure reachable.
     pub fn reserve(&mut self, slots: usize) -> bool {
         let size = Self::size_of_slots(slots);
@@ -111,7 +113,7 @@ impl Context {
         true
     }
 
-    pub fn create_frame(this: *mut Context, callback: address) -> bool {
+    pub fn create_frame(this: *mut Context, pc: u32, callback: address) -> bool {
         unsafe {
             let regs = &mut (*this)._regs;
 
@@ -119,7 +121,7 @@ impl Context {
             if mem == 0 { return false; }
             let new_frame = addr_cast::<Frame>(mem);
 
-            new_frame.store(regs.pc, regs.bp, callback);
+            new_frame.store(pc, regs.bp, callback);
             regs.bp = new_frame;
         }
 
@@ -131,18 +133,20 @@ impl Context {
         bp as address + size_of::<Frame>()
     }
 
-    pub fn unwind(this: *mut Context) -> address {
+    pub fn unwind(this: *mut Context) -> (address, u32) {
+        let mut pc = 0;
+        
         unsafe {
             let regs = &mut (*this)._regs;
 
             let frame = regs.bp;
-            if frame == null_mut() { return 0; }
+            if frame == null_mut() { return (0, 0); }
 
             regs.sp = Self::cal_unwind_sp_offs(regs.bp);
             regs.bp = (*frame).stored_bp;
-            regs.pc = (*frame).stored_pc;
+            pc = (*frame).stored_pc;
 
-            (*frame).callback
+            ((*frame).callback, pc)
         }
     }
 

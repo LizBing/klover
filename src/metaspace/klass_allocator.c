@@ -13,8 +13,4 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-use cafebabe::attributes::AttributeInfo;
 
-pub struct Method<'a> {
-    _info: &'a AttributeInfo<'a>,
-}
