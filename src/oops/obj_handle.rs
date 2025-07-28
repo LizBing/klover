@@ -14,3 +14,28 @@
  * limitations under the License.
  */
 
+use std::ptr::null_mut;
+
+use crate::oop::oop::ObjPtr;
+
+pub struct ObjHandle {
+    _oop: ObjPtr
+}
+
+impl ObjHandle {
+    pub fn new() -> Self {
+        Self {
+            _oop: null_mut()
+        }
+    }
+}
+
+impl ObjHandle {
+    pub fn oop(&self) -> ObjPtr {
+        self._oop
+    }
+
+    pub fn set_oop(&mut self, oop: ObjPtr) {
+        self._oop = oop;
+    }
+}
