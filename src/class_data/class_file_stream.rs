@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-use std::cell::OnceCell;
 use std::fs::File;
 use std::io::Read;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use cafebabe::descriptors::ClassName;
+use once_cell::sync::OnceCell;
 
-static CLASS_PATHS: OnceCell<Vec<Path>> = OnceCell::new();
+static CLASS_PATHS: OnceCell<Vec<String>> = OnceCell::new();
 
 pub fn initialize() {}
 
@@ -33,7 +33,7 @@ pub fn resolve_class_name(name: ClassName, offs: usize) -> Option<Vec<u8>> {
         if let Ok(mut f) = File::open(path) {
             let mut buf = Vec::new();
 
-            return match f.read_to_end(buf.as_mut_slice()) {
+            return match f.read_to_end(&mut buf) {
                 Ok(_) => Some(buf.split_off(buf.len() - offs)),
                 _ => None,
             }

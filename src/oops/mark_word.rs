@@ -64,7 +64,7 @@ const AGE_MASK        :u64 = (OneBit!() << AGE_BITS)       - 1;
 const KLASS_PTR_MASK  :u64 = (OneBit!() << KLASS_PTR_BITS) - 1;
 const HASH_MASK       :u64 = (OneBit!() << HASH_BITS)      - 1;
 
-const LOCK_MASK_IN_PLACE       :u64 = LOCK_MASK_IN_PLACE << LOCK_SHIFT;
+const LOCK_MASK_IN_PLACE       :u64 = LOCK_MASK << LOCK_SHIFT;
 const BIASED_TAG_MASK_IN_PLACE :u64 = BIASED_TAG_MASK << BIASED_TAG_SHIFT;
 const AGE_MASK_IN_PLACE        :u64 = AGE_MASK        << AGE_SHIFT;
 const KLASS_PTR_MASK_IN_PLACE  :u64 = KLASS_PTR_MASK << KLASS_PTR_SHIFT;

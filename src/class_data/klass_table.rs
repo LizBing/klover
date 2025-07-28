@@ -13,25 +13,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-use std::borrow::Cow;
-use std::cell::OnceCell;
-use std::ptr::null_mut;
-use cafebabe::descriptors::ClassName;
+use once_cell::sync::OnceCell;
 use dashmap::DashMap;
-use crate::metaspace::klass_allocator::KlassMemSpace;
-use crate::oops::klass::{Klass, KlassHandle};
+use crate::{metaspace::klass_cell::KlassCell};
 
-static KLASS_TABLE: OnceCell<DashMap<String, KlassHandle>> = OnceCell::new();
+type KlassTable = DashMap<String, KlassCell>;
+static KLASS_TABLE: OnceCell<KlassTable> = OnceCell::new();
 
-pub fn get(fqn: String) -> Option<KlassHandle> {
-    let table = KLASS_TABLE.get().unwrap();
+fn table() -> &'static KlassTable {
+    KLASS_TABLE.get().unwrap()
+}
 
-    match table.get(&fqn) {
-        Some(handle) => Some(*handle),
+pub fn get(fqn: String) -> Option<KlassCell> {
+    match table().get(&fqn) {
+        Some(handle) => { Some(handle.clone()) },
         None => None
     }
 }
 
-pub fn put(klass: KlassHandle) {
+pub fn put(klass: KlassCell) {
     unimplemented!()
 }

@@ -14,26 +14,22 @@
  * limitations under the License.
  */
 use std::mem::ManuallyDrop;
-use std::ops::DerefMut;
-use std::ptr::null_mut;
 use std::sync::Mutex;
 use crate::common::universe;
 use crate::memory::bump_alloc::BumpAllocator;
 use crate::memory::mem_region::MemRegion;
 use crate::memory::virt_space::VirtSpace;
+use crate::metaspace::klass_cell::KlassCell;
 use crate::OneBit;
-use crate::oops::klass::{Klass, KlassHandle};
+use crate::oops::klass::{Klass};
 use crate::runtime::tls;
-use crate::runtime::tls::klass_mem_pool;
-use crate::utils::global_defs::{address, naddr, word_t, K};
+use crate::utils::global_defs::{address, naddr, word_t, K, LOG_BYTES_PER_ARCH};
 
-const KLASS_MEM_SPACE_SIZE: usize = OneBit!() << 26;
+const KLASS_MEM_SPACE_SIZE: usize = OneBit!() << (26 + LOG_BYTES_PER_ARCH);
 const KLASS_MEM_BUCKET_SIZE: usize = 16 * K;
 
-pub fn alloc_klass() -> KlassHandle {
-    unsafe {
-        &mut *(tls::klass_mem_pool().alloc())
-    }
+pub fn alloc_klass() -> *mut Klass<'static> {
+    tls::klass_mem_pool().alloc()
 }
 
 pub struct KlassMemSpace {
@@ -45,7 +41,7 @@ pub struct KlassMemSpace {
 impl KlassMemSpace {
     pub fn new() -> Self {
         let vm = VirtSpace::new(0, KLASS_MEM_SPACE_SIZE, 0, false, false).unwrap();
-        let base = vm.mr().begin() - size_of::<word_t>();
+        let base = vm.mr().begin();
 
         Self {
             _mtx: Mutex::new(()),
@@ -56,14 +52,14 @@ impl KlassMemSpace {
 }
 
 impl KlassMemSpace {
-    pub fn compress(&self, raw: KlassHandle) -> naddr {
-        (raw as *mut _ as address - self._base) as _
+    pub fn compress(&self, raw: *mut Klass) -> naddr {
+        let addr = raw as address;
+        (((addr - self._base) >> LOG_BYTES_PER_ARCH) + size_of::<word_t>()) as _
     }
 
-    pub fn reslove(&self, comp: naddr) -> KlassHandle {
-        unsafe {
-            &mut *(self._base + comp as usize)
-        }
+    pub fn reslove(&self, comp: naddr) -> KlassCell {
+        let addr = self._base + ((comp as address - size_of::<word_t>()) << LOG_BYTES_PER_ARCH);
+        KlassCell::with_raw(addr as _)
     }
 }
 
@@ -82,7 +78,7 @@ impl KlassMemSpace {
 union KlassMemSpaceSlot {
     // Class unloading is unsupported currently.
     // _next: *mut Self,
-    _data: ManuallyDrop<Klass>,
+    _data: ManuallyDrop<Klass<'static>>,
     _dummy: word_t
 }
 

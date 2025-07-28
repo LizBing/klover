@@ -154,6 +154,7 @@ dependencies = [
  "cc",
  "dashmap",
  "libc",
+ "once_cell",
  "region",
 ]
 

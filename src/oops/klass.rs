@@ -1,3 +1,4 @@
+use std::cell::RefMut;
 /*
  * Copyright 2025 Lei Zaakjyu
  *
@@ -20,41 +21,35 @@ use cafebabe::descriptors::ClassName;
 use crate::class_data::bootstrap_loader;
 use crate::class_data::class_loader::ClassLoader;
 use crate::class_data::java_classes::{JavaLangClass, JavaLangObject};
-use crate::gc::common::mem_allocator::MemAllocator;
+use crate::metaspace::klass_cell::KlassCell;
 use crate::oops::obj_handle::ObjHandle;
 use crate::oops::oop::ObjPtr;
 
-pub type KlassHandle = &'_ mut Klass;
-
-impl Clone for KlassHandle {
-    fn clone(&self) -> KlassHandle {
-        *self
-    }
-}
-
-pub struct Klass {
-    _name: ClassName<'_>,
-    _super: Option<KlassHandle>,
+pub struct Klass<'a> {
+    _name: ClassName<'a>,
+    _super: Option<KlassCell>,
     _loader: Option<Arc<ClassLoader>>,
 
     _metadata: Option<Vec<u8>>,
-    _class_file: Option<ClassFile<'_>>,
+    _class_file: Option<ClassFile<'a>>,
 
     _mirror: ObjHandle,
 }
 
-impl Klass {
+impl<'a> Klass<'a> {
     // Returning false means ClassNotFoundException.
-    pub fn init_normal(
-        &mut self,
+    pub fn init_normal<'b: 'a>(
+        &'b mut self,
         loader: Option<Arc<ClassLoader>>,
-        metadata:Vec<u8>,
+        metadata: Vec<u8>,
     ) -> bool {
-        let cf = match cafebabe::parse_class(metadata.as_slice()) {
+        self._metadata = Some(metadata);
+        let md = self._metadata.as_ref().unwrap();
+
+        let cf = match cafebabe::parse_class(md.as_slice()) {
             Ok(n) => n,
             Err(_) => return false,
         };
-        self._metadata = Some(metadata);
 
         self._name = cf.this_class.clone();
         self._super = match cf.super_class.clone() {
@@ -74,7 +69,7 @@ impl Klass {
         true
     }
 
-    pub fn init_array_class(&mut self, name: ClassName, loader: Option<Arc<ClassLoader>>) {
+    pub fn init_array_class(&mut self, name: ClassName<'a>, loader: Option<Arc<ClassLoader>>) {
         self._name = name;
         self._super = Some(JavaLangObject::this());
         self._loader = loader;
@@ -86,18 +81,18 @@ impl Klass {
     }
 }
 
-impl Drop for Klass {
+impl Drop for Klass<'_> {
     fn drop(&mut self) {
         unreachable!()
     }
 }
 
-impl Klass {
+impl Klass<'_> {
     pub fn name(&self) -> ClassName {
         self._name.clone()
     }
 
-    pub fn super_class(&self) -> Option<KlassHandle> {
+    pub fn super_class(&self) -> Option<KlassCell> {
         unimplemented!()
     }
     
@@ -110,7 +105,7 @@ impl Klass {
     }
 }
 
-impl Klass {
+impl Klass<'_> {
     pub fn size_of_instance() -> usize {
         unimplemented!()
     }

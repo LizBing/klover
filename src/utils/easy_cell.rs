@@ -16,33 +16,44 @@
 
 use std::ptr::null_mut;
 
-use crate::oops::oop::ObjPtr;
-
-pub struct ObjHandle {
-    _oop: ObjPtr
+pub struct EasyCell<T: 'static> {
+    _raw: *mut T
 }
 
-unsafe impl Send for ObjHandle {}
-unsafe impl Sync for ObjHandle {}
+unsafe impl<T> Send for EasyCell<T> {}
+unsafe impl<T> Sync for EasyCell<T> {}
 
-impl ObjHandle {
+impl<T> EasyCell<T> {
     pub fn new() -> Self {
-        Self {
-            _oop: null_mut()
+        Self::with_raw(null_mut())
+    }
+
+    pub fn with_raw(raw: *mut T) -> Self {
+        Self { _raw: raw }
+    }
+}
+
+impl<T> Clone for EasyCell<T> {
+    fn clone(&self) -> Self {
+        Self::with_raw(self._raw)
+    }
+}
+
+impl<T> EasyCell<T> {
+    pub fn raw(&self) -> *mut T { self._raw }
+}
+
+impl<T> EasyCell<T> {
+    pub fn get(&self) -> &'static T {
+        unsafe {
+            &*self._raw
         }
     }
-    
-    pub fn with_oop(oop: ObjPtr) -> Self {
-        Self { _oop: oop }
+
+    pub fn get_mut(&self) -> &'static mut T {
+        unsafe {
+            &mut *self._raw
+        }
     }
 }
 
-impl ObjHandle {
-    pub fn oop(&self) -> ObjPtr {
-        self._oop
-    }
-
-    pub fn set_oop(&mut self, oop: ObjPtr) {
-        self._oop = oop;
-    }
-}

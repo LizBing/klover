@@ -14,18 +14,6 @@
  * limitations under the License.
  */
 
-use cafebabe::descriptors::ClassName;
-use crate::metaspace::klass_cell::KlassCell;
+use crate::{oops::klass::Klass, utils::{easy_cell::EasyCell, global_defs::address}};
 
-
-pub struct ClassLoader {}
-
-impl ClassLoader {
-    pub fn load_class(&self, name: ClassName) -> Option<KlassCell> {
-        unimplemented!()
-    }
-}
-
-fn foo() {
-    let cf = cafebabe::parse_class(String::new().as_bytes()).unwrap();
-}
+pub type KlassCell = EasyCell<Klass<'static>>;

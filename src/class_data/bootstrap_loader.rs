@@ -14,14 +14,12 @@
  * limitations under the License.
  */
 use cafebabe::descriptors::ClassName;
-use crate::metaspace::klass_allocator;
-use crate::oops::klass::{Klass, KlassHandle};
-use crate::oops::oop::ObjPtr;
+use crate::metaspace::klass_cell::KlassCell;
 
-pub fn define_class(name: ClassName, buf: Vec<u8>) -> KlassHandle {
+pub fn define_class(name: ClassName, buf: Vec<u8>) -> KlassCell {
     unimplemented!()
 }
 
-pub fn load_class(name: ClassName) -> Option<KlassHandle> {
+pub fn load_class(name: ClassName) -> Option<KlassCell> {
     unimplemented!()
 }

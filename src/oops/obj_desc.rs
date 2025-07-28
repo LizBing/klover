@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 use crate::common::universe;
-use crate::oops::klass::{Klass, KlassHandle};
+use crate::metaspace::klass_cell::KlassCell;
+use crate::oops::klass::{Klass};
 use crate::oops::mark_word;
 use crate::oops::mark_word::MarkWord;
 use crate::utils::global_defs::{addr_cast, address, word_t};
@@ -27,10 +28,10 @@ pub struct ObjDesc {
 }
 
 impl ObjDesc {
-    pub fn init(&mut self, klass: Option<KlassHandle>) {
+    pub fn init(&mut self, klass: Option<KlassCell>) {
         let klass_ptr = match klass {
             Some(k) => {
-                universe::klass_mem_space().compress(k)
+                universe::klass_mem_space().compress(k.raw())
             }
             None => 0
         };

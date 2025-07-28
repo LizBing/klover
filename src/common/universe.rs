@@ -30,6 +30,6 @@ pub fn klass_mem_space() -> &'static mut KlassMemSpace {
     unsafe { &mut UNIVERSE.get_mut().unwrap()._klass_mem_space }
 }
 
-pub fn heap() -> &'static Box<dyn CollectedHeap> {
-    unsafe { UNIVERSE.get().unwrap()._heap.as_ref() }
+pub fn heap() -> &'static mut Box<dyn CollectedHeap> {
+    unsafe { &mut UNIVERSE.get_mut().unwrap()._heap }
 }

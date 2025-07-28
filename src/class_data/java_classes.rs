@@ -16,27 +16,27 @@
 use std::cell::OnceCell;
 use crate::common::universe;
 use crate::gc::common::mem_allocator::MemAllocator;
-use crate::oops::klass::{Klass, KlassHandle};
+use crate::metaspace::klass_cell::KlassCell;
 use crate::oops::oop::ObjPtr;
 
-static mut JAVA_LANG_OBJECT: OnceCell<KlassHandle> = OnceCell::new();
+static mut JAVA_LANG_OBJECT: OnceCell<KlassCell> = OnceCell::new();
 pub struct JavaLangObject;
 
 impl JavaLangObject {
-    pub fn this() -> KlassHandle {
+    pub fn this() -> KlassCell {
         unsafe {
-            *JAVA_LANG_OBJECT.get().unwrap()
+            JAVA_LANG_OBJECT.get().unwrap().clone()
         }
     }
 }
 
-static mut JAVA_LANG_CLASS: OnceCell<KlassHandle> = OnceCell::new();
+static mut JAVA_LANG_CLASS: OnceCell<KlassCell> = OnceCell::new();
 pub struct JavaLangClass;
 
 impl JavaLangClass {
-    fn this() -> KlassHandle {
+    fn this() -> KlassCell {
         unsafe {
-            *JAVA_LANG_CLASS.get().unwrap()
+            JAVA_LANG_CLASS.get().unwrap().clone()
         }
     }
 

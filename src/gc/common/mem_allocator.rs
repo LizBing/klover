@@ -16,19 +16,20 @@
 use std::ptr::null_mut;
 use crate::class_data::java_classes::JavaLangClass;
 use crate::common::universe;
-use crate::oops::klass::{Klass, KlassHandle};
+use crate::metaspace::klass_cell::KlassCell;
+use crate::oops::klass::{Klass};
 use crate::oops::mark_word::MarkWord;
 use crate::oops::oop;
 use crate::oops::oop::ObjPtr;
 use crate::utils::global_defs::{addr_cast, address};
 
 pub struct MemAllocator {
-    _klass: Option<KlassHandle>,
+    _klass: Option<KlassCell>,
     _size: usize,
 }
 
 impl MemAllocator {
-    pub fn new(klass: Option<KlassHandle>, size: usize) -> Self {
+    pub fn new(klass: Option<KlassCell>, size: usize) -> Self {
         Self { _klass: klass, _size: size }
     }
 }

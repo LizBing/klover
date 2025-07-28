@@ -25,7 +25,7 @@ struct Frame<T: Copy> {
     stored_data: T,
 }
 
-impl<T> Frame<T> {
+impl<T: Copy> Frame<T> {
     fn store(&mut self, bp: address, data: T) {
         self.stored_bp = bp;
         self.stored_data = data;
@@ -117,13 +117,13 @@ impl Context {
         }
 
         new_frame.store(regs.bp, data);
-        regs.bp = new_frame as _;
+        regs.bp = new_frame as *const _ as _;
 
         true
     }
 
     // helper
-    fn cal_unwind_sp<T>(bp: address) -> address {
+    fn cal_unwind_sp<T: Copy>(bp: address) -> address {
         bp + size_of::<Frame<T>>()
     }
 

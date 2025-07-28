@@ -14,12 +14,13 @@
  * limitations under the License.
  */
 
-use std::cell::{Cell, OnceCell, RefCell, UnsafeCell};
-use std::ptr::null_mut;
-use crate::metaspace::klass_allocator::KlassMemPool;
+use std::{cell::RefCell, ptr::null_mut};
+use once_cell::unsync::OnceCell;
+
+use crate::{metaspace::klass_allocator::KlassMemPool, utils::easy_cell::EasyCell};
 
 thread_local! {
-    static TLS: RefCell<Option<ThrdLocalStorage>> = RefCell::new(None);
+    static TLS: OnceCell<EasyCell<ThrdLocalStorage>> = OnceCell::new();
 }
 
 struct ThrdLocalStorage {
@@ -35,9 +36,13 @@ impl ThrdLocalStorage {
 }
 
 pub fn initialize() {
-    TLS.set(Some(ThrdLocalStorage::new()));
+    TLS.with(|tls| {
+        tls.set(EasyCell::with_raw(Box::into_raw(Box::new(ThrdLocalStorage::new()))))
+    });
 }
 
 pub fn klass_mem_pool() -> &'static mut KlassMemPool {
-    TLS.with(|tls| &mut tls.borrow_mut().as_mut().unwrap()._kmp)
+    TLS.with(|tls|{
+        &mut tls.get().unwrap().get_mut()._kmp
+    })
 }

@@ -13,6 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+use std::ptr::{null, null_mut};
+
 use cafebabe::bytecode::{ByteCode, Opcode};
 use crate::engine::context::Context;
 use crate::oops::obj_desc::ObjDesc;
@@ -21,18 +24,18 @@ use crate::runtime::rt_exceptions::RuntimeException;
 use crate::utils::global_defs::{addr_cast, address};
 // Refs: JVMS 21 Table 2.11.1-B
 
-struct ZeroEngine {
-    _ctx: &'_ Context,
+struct ZeroEngine<'a> {
+    _ctx: &'a Context,
 
 }
 
-impl ZeroEngine {
-    pub fn new(ctx: &'_ Context) -> Self {
+impl<'a> ZeroEngine<'a> {
+    pub fn new<'b: 'a>(ctx: &'b Context) -> Self {
         Self { _ctx: ctx }
     }
 }
 
-impl ZeroEngine {
+impl ZeroEngine<'_> {
     fn pop_ref(&self) -> Result<&'_ ObjDesc, RuntimeException> {
         let addr = self._ctx.pop::<1, address>();
         match addr_cast(addr) {
@@ -46,8 +49,8 @@ impl ZeroEngine {
     }
 }
 
-impl ZeroEngine {
-    fn array_load<const SLOTS: usize, T>(&self) -> Result<(), RuntimeException> {
+impl ZeroEngine<'_> {
+    fn array_load<const SLOTS: usize, T: Copy>(&self) -> Result<(), RuntimeException> {
         let index = self.pop_index();
         let arrayref = self.pop_ref()?;
 
@@ -63,7 +66,7 @@ impl ZeroEngine {
         self.array_load::<1, ObjPtr>()
     }
 
-    fn array_store<const SLOTS: usize, T>(&self) -> Result<(), RuntimeException> {
+    fn array_store<const SLOTS: usize, T: Copy>(&self) -> Result<(), RuntimeException> {
         let value = self._ctx.pop::<SLOTS, _>();
         let index = self.pop_index();
         let arrayref = self.pop_ref()?;
@@ -81,7 +84,7 @@ impl ZeroEngine {
     }
 }
 
-impl ZeroEngine {
+impl ZeroEngine<'_> {
     fn process(&self, codes: &ByteCode) -> Result<(), RuntimeException> {
         let mut pc = 0;
 
@@ -94,14 +97,15 @@ impl ZeroEngine {
                 Opcode::Aastore => {
                     self.array_store_oop()?;
                 }
+
                 Opcode::AconstNull => {
-                    self._stack.push::<address>(SLOT_PER_PTR, 0);
-                }
-/*
-                Opcode::Aload(index) => {
-                    self.local_load_ptr(*index);
+                    self._ctx.push::<1, ObjPtr>(null_mut());
                 }
 
+                Opcode::Aload(index) => {
+                    // self.local_load_ptr(*index);
+                }
+/*
                 Opcode::Anewarray(t) => {
                     // ...
                 }
