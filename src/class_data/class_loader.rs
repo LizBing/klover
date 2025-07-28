@@ -18,6 +18,7 @@ use cafebabe::descriptors::ClassName;
 use crate::metaspace::klass_cell::KlassCell;
 
 
+#[derive(Debug)]
 pub struct ClassLoader {}
 
 impl ClassLoader {

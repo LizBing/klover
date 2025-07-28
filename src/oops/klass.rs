@@ -25,6 +25,7 @@ use crate::metaspace::klass_cell::KlassCell;
 use crate::oops::obj_handle::ObjHandle;
 use crate::oops::oop::ObjPtr;
 
+#[derive(Debug)]
 pub struct Klass<'a> {
     _name: ClassName<'a>,
     _super: Option<KlassCell>,

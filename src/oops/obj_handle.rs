@@ -18,6 +18,7 @@ use std::ptr::null_mut;
 
 use crate::oops::oop::ObjPtr;
 
+#[derive(Debug)]
 pub struct ObjHandle {
     _oop: ObjPtr
 }

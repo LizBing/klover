@@ -16,6 +16,7 @@
 
 use std::ptr::null_mut;
 
+#[derive(Debug)]
 pub struct EasyCell<T: 'static> {
     _raw: *mut T
 }

@@ -20,6 +20,7 @@ use crate::utils::global_defs::address;
 
 use super::mem_region::MemRegion;
 
+#[derive(Debug)]
 pub struct BumpAllocator {
     _mr: MemRegion,
     _top: AtomicUsize

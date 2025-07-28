@@ -28,8 +28,8 @@ use crate::utils::global_defs::{address, naddr, word_t, K, LOG_BYTES_PER_ARCH};
 const KLASS_MEM_SPACE_SIZE: usize = OneBit!() << (26 + LOG_BYTES_PER_ARCH);
 const KLASS_MEM_BUCKET_SIZE: usize = 16 * K;
 
-pub fn alloc_klass() -> *mut Klass<'static> {
-    tls::klass_mem_pool().alloc()
+pub fn alloc_klass() -> KlassCell {
+    KlassCell::with_raw(tls::klass_mem_pool().alloc())
 }
 
 pub struct KlassMemSpace {
@@ -89,6 +89,7 @@ impl KlassMemSpaceSlot {
     }
 }
 
+#[derive(Debug)]
 pub struct KlassMemPool {
     _bumper: BumpAllocator,
 }

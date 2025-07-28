@@ -23,6 +23,7 @@ thread_local! {
     static TLS: OnceCell<EasyCell<ThrdLocalStorage>> = OnceCell::new();
 }
 
+#[derive(Debug)]
 struct ThrdLocalStorage {
     _kmp: KlassMemPool
 }
@@ -38,7 +39,8 @@ impl ThrdLocalStorage {
 pub fn initialize() {
     TLS.with(|tls| {
         tls.set(EasyCell::with_raw(Box::into_raw(Box::new(ThrdLocalStorage::new()))))
-    });
+    }).unwrap();
+
 }
 
 pub fn klass_mem_pool() -> &'static mut KlassMemPool {

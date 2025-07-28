@@ -20,6 +20,7 @@ use libc::memset;
 
 use crate::{is_page_aligned, utils::global_defs::{address, word_t}};
 
+#[derive(Debug)]
 pub struct MemRegion {
     _begin: address,
     _end:   address

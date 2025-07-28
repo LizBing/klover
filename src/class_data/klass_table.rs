@@ -20,6 +20,10 @@ use crate::{metaspace::klass_cell::KlassCell};
 type KlassTable = DashMap<String, KlassCell>;
 static KLASS_TABLE: OnceCell<KlassTable> = OnceCell::new();
 
+pub fn initialize() {
+    KLASS_TABLE.set(KlassTable::new());
+}
+
 fn table() -> &'static KlassTable {
     KLASS_TABLE.get().unwrap()
 }

@@ -14,6 +14,6 @@
  * limitations under the License.
  */
 
-use crate::{oops::klass::Klass, utils::{easy_cell::EasyCell, global_defs::address}};
+use crate::{oops::klass::Klass, utils::easy_cell::EasyCell};
 
 pub type KlassCell = EasyCell<Klass<'static>>;
