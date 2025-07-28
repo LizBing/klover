@@ -17,3 +17,4 @@
 pub mod allocation;
 pub mod mem_region;
 pub mod virt_space;
+pub mod bump_alloc;

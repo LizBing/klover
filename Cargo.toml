@@ -8,7 +8,8 @@ name = "jvm"
 crate-type = ["cdylib"]
 
 [dependencies]
-cafebabe = { path = "../cafebabe", features = ["klover"] }
+cafebabe = { path = "../cafebabe", features = ["klover", "threadsafe"] }
+dashmap = "6.1.0"
 libc = "0.2"
 region = "3.0.2"
 

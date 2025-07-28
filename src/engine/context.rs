@@ -15,56 +15,43 @@
  */
 
 use std::{ffi::c_void, ptr::null_mut};
-
+use std::cell::UnsafeCell;
 use crate::{align_up, memory::{allocation::c_heap_alloc, mem_region::MemRegion, virt_space::VirtSpace}, utils::global_defs::{addr_cast, address, word_t}};
 
-pub type slot_t = word_t;
+pub type slot_t = usize;
 
-struct Frame {
-    stored_pc: u32,
-    stored_bp: *mut Frame,
-
-    callback: address
+struct Frame<T: Copy> {
+    stored_bp: address,
+    stored_data: T,
 }
 
-impl Frame {
-    fn store(&mut self, pc: u32, bp: *mut Frame, callback: address) {
-        self.stored_pc = pc;
+impl<T> Frame<T> {
+    fn store(&mut self, bp: address, data: T) {
         self.stored_bp = bp;
-        self.callback = callback;
-    }
-}
-
-impl Clone for Frame {
-    fn clone(&self) -> Self {
-        Self {
-            stored_pc: 0,
-            stored_bp: null_mut(),
-            callback: self.callback
-        }
+        self.stored_data = data;
     }
 }
 
 pub struct VMRegiters {
     sp: address,
-    bp: *mut Frame
+    bp: address
 }
 
 impl VMRegiters {
     fn new() -> Self {
-        VMRegiters { sp: 0, bp: null_mut() }
+        VMRegiters { sp: 0, bp: 0 }
     }
 }
 
 pub struct Context {
-    _regs: VMRegiters,
+    _regs: UnsafeCell<VMRegiters>,
     _stack: MemRegion
 }
 
 impl Context {
     pub fn new(stack_size: usize) -> Self {
         Self {
-            _regs: VMRegiters::new(),
+            _regs: UnsafeCell::new(VMRegiters::new()),
             _stack: c_heap_alloc(align_up!(stack_size, VirtSpace::page_size())).unwrap()
         }
     }
@@ -77,17 +64,23 @@ impl Context {
 }
 
 impl Context {
+    fn get_regs(&self) -> &'_ mut VMRegiters {
+        unsafe { &mut *self._regs.get() }
+    }
+}
+
+impl Context {
     // Ensure reachable.
-    pub fn reserve(&mut self, slots: usize) -> bool {
+    pub fn reserve(&self, slots: usize) -> bool {
         let size = Self::size_of_slots(slots);
-        let regs = &mut self._regs;
+        let regs = self.get_regs();
 
         self._stack.contains(regs.sp - size)
     }
 
-    pub fn alloca(&mut self, slots: usize, zeroing: bool) -> address {
+    pub fn alloca(&self, slots: usize, zeroing: bool) -> address {
         let size = Self::size_of_slots(slots);
-        let regs = &mut self._regs;
+        let regs = self.get_regs();
         
         if !self._stack.contains(regs.sp - size) {
             return 0;
@@ -102,10 +95,10 @@ impl Context {
         res
     }
 
-    pub fn try_free(&mut self, addr: address, slots: usize) -> bool {
+    pub fn try_free(&self, addr: address, slots: usize) -> bool {
         let size = Self::size_of_slots(slots);
         
-        let regs = &mut self._regs;
+        let regs = self.get_regs();
         if regs.sp != addr && !self._stack.contains(regs.sp + size) { return false; }
 
         regs.sp += size;
@@ -113,72 +106,55 @@ impl Context {
         true
     }
 
-    pub fn create_frame(this: *mut Context, pc: u32, callback: address) -> bool {
-        unsafe {
-            let regs = &mut (*this)._regs;
+    pub fn create_frame<T: Copy>(&self, data: T) -> bool {
+        let regs = self.get_regs();
 
-            let mem = (*this).alloca(size_of::<Frame>(), false);
-            if mem == 0 { return false; }
-            let new_frame = addr_cast::<Frame>(mem);
-
-            new_frame.store(pc, regs.bp, callback);
-            regs.bp = new_frame;
+        let mem = self.alloca(size_of::<Frame<T>>(), false);
+        let new_frame;
+        match addr_cast::<Frame<T>>(mem) {
+            None => { return false; },
+            Some(n) => new_frame = n,
         }
+
+        new_frame.store(regs.bp, data);
+        regs.bp = new_frame as _;
 
         true
     }
 
     // helper
-    fn cal_unwind_sp_offs(bp: *const Frame) -> address {
-        bp as address + size_of::<Frame>()
+    fn cal_unwind_sp<T>(bp: address) -> address {
+        bp + size_of::<Frame<T>>()
     }
 
-    pub fn unwind(this: *mut Context) -> (address, u32) {
-        let mut pc = 0;
-        
-        unsafe {
-            let regs = &mut (*this)._regs;
+    pub fn unwind<T: Copy>(&self) -> Option<T> {
+        let regs = self.get_regs();
 
-            let frame = regs.bp;
-            if frame == null_mut() { return (0, 0); }
-
-            regs.sp = Self::cal_unwind_sp_offs(regs.bp);
-            regs.bp = (*frame).stored_bp;
-            pc = (*frame).stored_pc;
-
-            ((*frame).callback, pc)
+        let frame;
+        match addr_cast::<Frame<T>>(regs.bp) {
+            None => { return None; }
+            Some(n) => frame = n,
         }
+
+        regs.sp = Self::cal_unwind_sp::<T>(regs.bp);
+        regs.bp = frame.stored_bp;
+
+        Some(frame.stored_data)
     }
 
-    // unsafe
-    pub fn push_1slot<T: Copy>(&mut self, n: T) {
-        let regs = &mut self._regs;
-        regs.sp -= Self::size_of_slots(1);
+    // Unsafe unless reserved.
+    pub fn push<const SLOTS: usize, T: Copy>(&self, n: T) {
+        let regs = self.get_regs();
+        regs.sp -= Self::size_of_slots(SLOTS);
 
         unsafe { *(regs.sp as *mut c_void as *mut T) = n; }
     }
 
-    pub fn push_2slots<T: Copy>(&mut self, n: T) {
-        let regs = &mut self._regs;
-        regs.sp -= Self::size_of_slots(2);
-
-        unsafe { *(regs.sp as *mut c_void as *mut T) = n; }
-    }
-
-    pub fn pop_1slot<T: Copy>(&mut self) -> T {
-        let regs = &mut self._regs;
+    pub fn pop<const SLOTS: usize, T: Copy>(&self) -> T {
+        let regs = self.get_regs();
 
         let res = regs.sp;
-        regs.sp += Self::size_of_slots(1);        
-
-        unsafe { *(res as *const c_void as *const T) }
-    }
-
-    pub fn pop_2slots<T: Copy>(&mut self) -> T {
-        let regs = &mut self._regs;
-
-        let res = regs.sp;
-        regs.sp += Self::size_of_slots(2);        
+        regs.sp += Self::size_of_slots(SLOTS);
 
         unsafe { *(res as *const c_void as *const T) }
     }

@@ -16,7 +16,7 @@
 
 use std::ptr::null_mut;
 
-use crate::oop::oop::ObjPtr;
+use crate::oops::oop::ObjPtr;
 
 pub struct ObjHandle {
     _oop: ObjPtr
@@ -27,6 +27,10 @@ impl ObjHandle {
         Self {
             _oop: null_mut()
         }
+    }
+    
+    pub fn with_oop(oop: ObjPtr) -> Self {
+        Self { _oop: oop }
     }
 }
 

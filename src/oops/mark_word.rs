@@ -17,6 +17,7 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::{utils::global_defs::uintx, OneBit};
+use crate::utils::global_defs::naddr;
 
 #[repr(C)]
 pub struct MarkWord {
@@ -24,10 +25,8 @@ pub struct MarkWord {
 }
 
 impl MarkWord {
-    pub fn new() -> Self {
-        Self {
-            _encoded: AtomicU64::new(0),
-        }
+    pub fn with_value(value: u64) -> Self {
+        Self { _encoded: AtomicU64::new(value) }
     }
 }
 
@@ -65,23 +64,61 @@ const AGE_MASK        :u64 = (OneBit!() << AGE_BITS)       - 1;
 const KLASS_PTR_MASK  :u64 = (OneBit!() << KLASS_PTR_BITS) - 1;
 const HASH_MASK       :u64 = (OneBit!() << HASH_BITS)      - 1;
 
+const LOCK_MASK_IN_PLACE       :u64 = LOCK_MASK_IN_PLACE << LOCK_SHIFT;
 const BIASED_TAG_MASK_IN_PLACE :u64 = BIASED_TAG_MASK << BIASED_TAG_SHIFT;
 const AGE_MASK_IN_PLACE        :u64 = AGE_MASK        << AGE_SHIFT;
+const KLASS_PTR_MASK_IN_PLACE  :u64 = KLASS_PTR_MASK << KLASS_PTR_SHIFT;
+const HASH_MASK_IN_PLACE        :u64 = HASH_MASK << HASH_SHIFT;
+
+pub const LOCKED_VALUE   :u64 = 0b00;
+pub const UNLOCKED_VALUE :u64 = 0b01;
+pub const MONITORED_VALUE  :u64 = 0b10;
+pub const MARKED_VALUE   :u64 = 0b11;
+
 
 impl MarkWord {
+    pub fn lock_value(encoded: u64) -> u64 {
+        (encoded & LOCK_MASK) >> LOCK_SHIFT
+    }
+
+    pub fn set_lock(n: u64, lv: u64) -> u64 {
+        (n & !LOCK_MASK_IN_PLACE) | (lv << LOCK_SHIFT)
+    }
+    
+    pub fn is_biased(encoded: u64) -> bool {
+        encoded & !BIASED_TAG_MASK_IN_PLACE != 0
+    }
+    
+    pub fn set_biased_tag(n: u64) -> u64 {
+        (n & !BIASED_TAG_MASK_IN_PLACE) | (OneBit!() << BIASED_TAG_SHIFT)
+    }
+    
+    pub fn unset_biased_tag(n: u64) -> u64 {
+        n & !BIASED_TAG_MASK_IN_PLACE
+    }
+
     pub fn age(encoded: u64) -> i32 {
-        ((encoded & AGE_MASK) >> AGE_SHIFT) as _
+        ((encoded & AGE_MASK_IN_PLACE) >> AGE_SHIFT) as _
     }
 
     pub fn set_age(n: u64, age: i32) -> u64 {
         (n & !AGE_MASK_IN_PLACE) |  ((age as u64) << AGE_SHIFT)
     }
-
-    pub fn inc_age(n: u64) -> u64 {
-        let age = Self::age(n);
-        debug_assert!(age != 15);
-
-        Self::set_age(n, age + 1)
+    
+    pub fn klass_ptr(encoded: u64) -> naddr {
+        ((encoded & KLASS_PTR_MASK_IN_PLACE) >> KLASS_PTR_SHIFT) as _
+    }
+    
+    pub fn set_klass_ptr(n: u64, addr: naddr) -> u64 {
+        (n & !KLASS_PTR_MASK_IN_PLACE) |  ((addr as u64) << KLASS_PTR_SHIFT)
+    }
+    
+    pub fn hash(encoded: u64) -> i32 {
+        ((encoded & HASH_MASK_IN_PLACE) >> HASH_SHIFT) as _
+    }
+    
+    pub fn set_hash(n: u64, hash: i32) -> u64 {
+        (n & !HASH_MASK_IN_PLACE) | ((hash as u64) << HASH_SHIFT)
     }
 }
 

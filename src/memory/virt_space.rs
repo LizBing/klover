@@ -19,7 +19,7 @@ use std::ffi::c_void;
 
 use region::Protection;
 
-use crate::{is_page_aligned, utils::global_defs::address};
+use crate::{align_up, is_page_aligned, utils::global_defs::address};
 use super::mem_region::MemRegion;
 
 pub struct VirtSpace {
@@ -107,14 +107,15 @@ impl VirtSpace {
 }
 
 impl VirtSpace {
-    pub fn expand_by(&mut self, size: usize, exec: bool) -> bool {
-        assert!(is_page_aligned!(size));
+    pub fn expand_by(&mut self, _size: usize, exec: bool) -> usize {
+        let size = align_up!(_size, Self::page_size());
         debug_assert!(self.mr().end() >= self._commit_top + size, "out of space");
 
         let prev_comt = self._commit_top;
         self._commit_top += size;
 
-        commit_region(prev_comt, size, exec)
+        if commit_region(prev_comt, size, exec) { size }
+        else { 0 }
     }
 
     pub fn shrink_by(&mut self, size: usize) -> bool {

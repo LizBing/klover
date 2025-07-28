@@ -69,7 +69,6 @@ impl BumpAllocator {
 }
 
 impl BumpAllocator {
-    /*
     pub fn alloc(&mut self, size: usize) -> address {
         let top = self._top.get_mut();
 
@@ -81,7 +80,6 @@ impl BumpAllocator {
 
         res
     }
-    */
 
     pub fn par_alloc(&self, size: usize) -> address {
         let mut res = self._top.load(Ordering::SeqCst);

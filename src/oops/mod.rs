@@ -15,6 +15,7 @@
  */
 
 pub mod klass;
-pub mod mark_word;
+pub(super) mod mark_word;
 pub mod obj_handle;
 pub mod oop;
+pub mod obj_desc;

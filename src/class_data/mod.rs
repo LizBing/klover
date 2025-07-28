@@ -15,3 +15,7 @@
  */
 
 pub mod class_loader;
+mod klass_table;
+mod class_file_stream;
+pub mod bootstrap_loader;
+pub mod java_classes;

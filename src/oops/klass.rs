@@ -17,39 +17,72 @@ use std::ptr::null_mut;
 use std::sync::Arc;
 use cafebabe::ClassFile;
 use cafebabe::descriptors::ClassName;
+use crate::class_data::bootstrap_loader;
 use crate::class_data::class_loader::ClassLoader;
-use crate::oop::obj_handle::ObjHandle;
-use crate::oop::oop::ObjPtr;
+use crate::class_data::java_classes::{JavaLangClass, JavaLangObject};
+use crate::gc::common::mem_allocator::MemAllocator;
+use crate::oops::obj_handle::ObjHandle;
+use crate::oops::oop::ObjPtr;
+
+pub type KlassHandle = &'_ mut Klass;
+
+impl Clone for KlassHandle {
+    fn clone(&self) -> KlassHandle {
+        *self
+    }
+}
 
 pub struct Klass {
-    _name: &'_ ClassName<'_>,
-    _super: *mut Klass,
+    _name: ClassName<'_>,
+    _super: Option<KlassHandle>,
     _loader: Option<Arc<ClassLoader>>,
 
+    _metadata: Option<Vec<u8>>,
     _class_file: Option<ClassFile<'_>>,
-    _metadata: Vec<u8>,
 
     _mirror: ObjHandle,
 }
 
 impl Klass {
-    pub fn init(&mut self, name: &ClassName, metadata: Vec<u8>) -> bool {
-        self._name = name;
-        self._super = null_mut();
+    // Returning false means ClassNotFoundException.
+    pub fn init_normal(
+        &mut self,
+        loader: Option<Arc<ClassLoader>>,
+        metadata:Vec<u8>,
+    ) -> bool {
+        let cf = match cafebabe::parse_class(metadata.as_slice()) {
+            Ok(n) => n,
+            Err(_) => return false,
+        };
+        self._metadata = Some(metadata);
+
+        self._name = cf.this_class.clone();
+        self._super = match cf.super_class.clone() {
+            Some(s) => match loader.as_ref() {
+                Some(l) => l.load_class(s),
+                None => bootstrap_loader::load_class(s)
+            }
+
+            None => None
+        };
+        self._loader = loader;
+        self._class_file = Some(cf);
+
+        // resolve the handle in define_class
         self._mirror = ObjHandle::new();
 
-        if !metadata.is_empty() {
-            match cafebabe::parse_class(metadata.as_slice()) {
-                Ok(cf) => self._class_file = Some(cf),
-                Err(e) => return false,
-            }
-        } else {
-            self._class_file = None;
-        }
-
-        self._metadata = metadata;
-
         true
+    }
+
+    pub fn init_array_class(&mut self, name: ClassName, loader: Option<Arc<ClassLoader>>) {
+        self._name = name;
+        self._super = Some(JavaLangObject::this());
+        self._loader = loader;
+        
+        self._metadata = None;
+        self._class_file = None;
+        
+        self._mirror = ObjHandle::new();
     }
 }
 
@@ -60,11 +93,11 @@ impl Drop for Klass {
 }
 
 impl Klass {
-    pub fn name(&self) -> &ClassName {
-        self._name
+    pub fn name(&self) -> ClassName {
+        self._name.clone()
     }
 
-    pub fn super_class(&self) -> *mut Klass {
+    pub fn super_class(&self) -> Option<KlassHandle> {
         unimplemented!()
     }
     

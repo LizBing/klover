@@ -14,13 +14,14 @@
  * limitations under the License.
  */
 
-use crate::{oop::mark_word::MarkWord, utils::global_defs::address};
+use crate::{oops::mark_word::MarkWord, utils::global_defs::address};
+use crate::oops::obj_desc::ObjDesc;
 
 // Ordinary Object Pointer
-pub type ObjPtr = *mut MarkWord;
+pub type ObjPtr = *mut ObjDesc;
 
 pub fn as_addr(n: ObjPtr) -> address {
-    n as _
+    n as address
 }
 
 pub fn as_oop(n: address) -> ObjPtr {

@@ -45,5 +45,4 @@ fn add_c_module(dir: &str, name: &str, include_path: &str) {
 
 fn main() {
     add_c_src("src/prims", "jni_impl.c", "src/prims");
-    add_c_module("src/metaspace", "klass_allocator", "src/metaspace");
 }

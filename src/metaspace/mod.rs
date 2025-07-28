@@ -15,3 +15,5 @@
  */
 
 pub mod klass_allocator;
+
+pub fn initialize() {}

@@ -26,8 +26,9 @@ pub type word_t = uintx;
 pub type address = uintx;
 pub type naddr = u32;
 
-pub const fn addr_cast<'a, T>(n: address) -> &'a mut T {
-    unsafe { &mut *(n as *mut _) }
+pub const fn addr_cast<T>(n: address) -> Option<&'_ mut T> {
+    if n == 0 { None }
+    else { Some(unsafe { &mut *(n as *mut T) }) }
 }
 
 pub const LOG_BITS_PER_BYTE: i32 = 3;

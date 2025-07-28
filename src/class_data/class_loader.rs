@@ -14,8 +14,22 @@
  * limitations under the License.
  */
 
-use crate::oop::obj_handle::ObjHandle;
+use std::ptr::null_mut;
+use cafebabe::descriptors::ClassName;
+use crate::class_data::class_file_stream::resolve_class_name;
+use crate::class_data::klass_table;
+use crate::oops::klass::{Klass, KlassHandle};
+use crate::oops::obj_handle::ObjHandle;
+use crate::runtime::tls;
 
-struct ClassLoader {
+pub struct ClassLoader {}
+
+impl ClassLoader {
+    pub fn load_class(&self, name: ClassName) -> Option<KlassHandle> {
+        unimplemented!()
+    }
 }
 
+fn foo() {
+    let cf = cafebabe::parse_class(String::new().as_bytes()).unwrap();
+}

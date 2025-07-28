@@ -15,14 +15,14 @@
  */
 
 pub(crate) mod class_data;
-pub(crate) mod common;
 pub(crate) mod engine;
 pub(crate) mod memory;
 pub(crate) mod metaspace;
-pub(crate) mod oop;
-pub(crate) mod runtime;
+pub(crate) mod oops;
 pub(crate) mod utils;
 
 mod prims;
 mod code;
 pub(crate) mod gc;
+mod runtime;
+pub mod common;

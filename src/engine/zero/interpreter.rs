@@ -15,29 +15,89 @@
  */
 use cafebabe::bytecode::{ByteCode, Opcode};
 use crate::engine::context::Context;
+use crate::oops::obj_desc::ObjDesc;
+use crate::oops::oop::ObjPtr;
+use crate::runtime::rt_exceptions::RuntimeException;
+use crate::utils::global_defs::{addr_cast, address};
+// Refs: JVMS 21 Table 2.11.1-B
 
-struct ZeroEngine<'a> {
-    _ctx: &'a mut Context,
+struct ZeroEngine {
+    _ctx: &'_ Context,
+
 }
 
-impl<'a> ZeroEngine<'a> {
-    fn process(&mut self, codes: &ByteCode) {
+impl ZeroEngine {
+    pub fn new(ctx: &'_ Context) -> Self {
+        Self { _ctx: ctx }
+    }
+}
+
+impl ZeroEngine {
+    fn pop_ref(&self) -> Result<&'_ ObjDesc, RuntimeException> {
+        let addr = self._ctx.pop::<1, address>();
+        match addr_cast(addr) {
+            Some(n) => Ok(n),
+            None => Err(RuntimeException::NullPointerException),
+        }
+    }
+    
+    fn pop_index(&self) -> i32 {
+        self._ctx.pop::<1, _>()
+    }
+}
+
+impl ZeroEngine {
+    fn array_load<const SLOTS: usize, T>(&self) -> Result<(), RuntimeException> {
+        let index = self.pop_index();
+        let arrayref = self.pop_ref()?;
+
+        match arrayref.array_get::<T>(index) {
+            Some(value) => self._ctx.push::<SLOTS, _>(value),
+            None => return Err(RuntimeException::ArrayIndexOutOfBoundsException)
+        }
+
+        Ok(())
+    }
+
+    fn array_load_oop(&self) -> Result<(), RuntimeException> {
+        self.array_load::<1, ObjPtr>()
+    }
+
+    fn array_store<const SLOTS: usize, T>(&self) -> Result<(), RuntimeException> {
+        let value = self._ctx.pop::<SLOTS, _>();
+        let index = self.pop_index();
+        let arrayref = self.pop_ref()?;
+
+        if !arrayref.array_set::<T>(index, value) {
+            return Err(RuntimeException::ArrayIndexOutOfBoundsException);
+        }
+
+        Ok(())
+    }
+
+    fn array_store_oop(&self) -> Result<(), RuntimeException> {
+        // todo: tell if value shares the same type of the element type of arrayref.
+        self.array_store::<1, ObjPtr>()
+    }
+}
+
+impl ZeroEngine {
+    fn process(&self, codes: &ByteCode) -> Result<(), RuntimeException> {
         let mut pc = 0;
 
         while pc < codes.opcodes.len() {
-            match codes.opcodes[pc].1 {
+            match codes.opcodes[pc].clone().1 {
                 Opcode::Aaload => {
-                    self.array_load_ptr();
+                    self.array_load_oop()?
                 }
 
                 Opcode::Aastore => {
-                    self.array_store_ptr();
+                    self.array_store_oop()?;
                 }
-
                 Opcode::AconstNull => {
                     self._stack.push::<address>(SLOT_PER_PTR, 0);
                 }
-
+/*
                 Opcode::Aload(index) => {
                     self.local_load_ptr(*index);
                 }
@@ -703,8 +763,12 @@ impl<'a> ZeroEngine<'a> {
                     // ...
                 }
 
+ */
+
                 _ => {}
             }
         }
+
+        Ok(())
     }
 }
