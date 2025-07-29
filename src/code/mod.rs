@@ -14,4 +14,5 @@
  * limitations under the License.
  */
 
-pub(crate) mod method;
+pub mod cp_cache;
+pub mod method;

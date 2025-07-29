@@ -14,6 +14,5 @@
  * limitations under the License.
  */
 
-mod bytecodes;
-pub mod context;
-pub mod zero;
+mod vm_flags;
+mod vm_flag;

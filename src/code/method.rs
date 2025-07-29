@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 /*
  * Copyright 2025 Lei Zaakjyu
  *
@@ -13,8 +15,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-use cafebabe::attributes::AttributeInfo;
+use cafebabe::{attributes::{AttributeData, AttributeInfo, CodeData}, bytecode::Opcode};
+
+use crate::code::cp_cache::ConstantPoolCache;
 
 pub struct Method<'a> {
-    _info: &'a AttributeInfo<'a>,
+    _name: Cow<'a, str>,
+    _code_data: &'a CodeData<'a>,
+
+    pub cp_cache: ConstantPoolCache
 }
+
+impl Method<'_> {
+    pub fn code_data(&self) -> &CodeData {
+        self._code_data
+    }
+
+    pub fn opcodes(&self) -> &Vec<(usize, Opcode)> {
+        &self._code_data.bytecode.as_ref().unwrap().opcodes
+    }
+}
+

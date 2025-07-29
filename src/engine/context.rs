@@ -20,12 +20,12 @@ use crate::{align_up, memory::{allocation::c_heap_alloc, mem_region::MemRegion, 
 
 pub type slot_t = usize;
 
-struct Frame<T: Copy> {
+struct Frame<T> {
     stored_bp: address,
     stored_data: T,
 }
 
-impl<T: Copy> Frame<T> {
+impl<T> Frame<T> {
     fn store(&mut self, bp: address, data: T) {
         self.stored_bp = bp;
         self.stored_data = data;
@@ -43,6 +43,7 @@ impl VMRegiters {
     }
 }
 
+#[derive(Debug)]
 pub struct Context {
     _regs: UnsafeCell<VMRegiters>,
     _stack: MemRegion
@@ -106,7 +107,7 @@ impl Context {
         true
     }
 
-    pub fn create_frame<T: Copy>(&self, data: T) -> bool {
+    pub fn create_frame<T>(&self, data: T) -> bool {
         let regs = self.get_regs();
 
         let mem = self.alloca(size_of::<Frame<T>>(), false);
@@ -123,7 +124,7 @@ impl Context {
     }
 
     // helper
-    fn cal_unwind_sp<T: Copy>(bp: address) -> address {
+    fn cal_unwind_sp<T>(bp: address) -> address {
         bp + size_of::<Frame<T>>()
     }
 
@@ -132,7 +133,7 @@ impl Context {
 
         let frame;
         match addr_cast::<Frame<T>>(regs.bp) {
-            None => { return None; }
+            None => return None,
             Some(n) => frame = n,
         }
 

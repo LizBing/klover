@@ -14,10 +14,9 @@
  * limitations under the License.
  */
 
-use std::{cell::RefCell, ptr::null_mut};
 use once_cell::unsync::OnceCell;
 
-use crate::{metaspace::klass_allocator::KlassMemPool, utils::easy_cell::EasyCell};
+use crate::{engine::context::Context, metaspace::klass_allocator::KlassMemPool, utils::easy_cell::EasyCell};
 
 thread_local! {
     static TLS: OnceCell<EasyCell<ThrdLocalStorage>> = OnceCell::new();
@@ -25,13 +24,13 @@ thread_local! {
 
 #[derive(Debug)]
 struct ThrdLocalStorage {
-    _kmp: KlassMemPool
+    _kmp: KlassMemPool,
 }
 
 impl ThrdLocalStorage {
     fn new() -> ThrdLocalStorage {
         Self {
-            _kmp: KlassMemPool::new()
+            _kmp: KlassMemPool::new(),
         }
     }
 }

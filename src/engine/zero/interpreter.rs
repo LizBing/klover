@@ -14,28 +14,104 @@
  * limitations under the License.
  */
 
-use std::ptr::{null, null_mut};
+use std::cell::{Cell, UnsafeCell};
+use std::ptr::null_mut;
 
-use cafebabe::bytecode::{ByteCode, Opcode};
-use crate::engine::context::Context;
+use cafebabe::bytecode::Opcode;
+use crate::code::cp_cache::ConstantPoolCacheEntry;
+use crate::code::method::Method;
+use crate::engine::context::{slot_t, Context};
 use crate::oops::obj_desc::ObjDesc;
 use crate::oops::oop::ObjPtr;
 use crate::runtime::rt_exceptions::RuntimeException;
 use crate::utils::global_defs::{addr_cast, address};
+
 // Refs: JVMS 21 Table 2.11.1-B
+
+#[derive(Clone, Copy)]
+struct ZeroProcData<'a> {
+    mthd: &'a Method<'a>,
+    pc: usize,
+    locals: *mut slot_t
+}
+
+impl<'a> ZeroProcData<'a> {
+    fn new(mthd: &'a Method, locals: address) -> Self {
+        Self {
+            mthd: mthd,
+            pc: 0,
+            locals: locals as _
+        }
+    }
+}
+
+impl ZeroProcData<'_> {
+    fn load_local<const SLOTS: usize, T: Copy>(&self, index: u16) -> T {
+        unsafe {
+            let addr = self.locals.add(index as usize) as *const T;
+            *addr
+        }
+    }
+
+    fn store_local<const SLOTS: usize, T>(&self, index: u16, value: T) {
+        unsafe {
+            let addr = self.locals.add(index as usize) as *mut T;
+            *addr = value
+        }
+    }
+}
 
 struct ZeroEngine<'a> {
     _ctx: &'a Context,
-
+    _proc_data: UnsafeCell<Option<ZeroProcData<'a>>>
 }
 
 impl<'a> ZeroEngine<'a> {
     pub fn new<'b: 'a>(ctx: &'b Context) -> Self {
-        Self { _ctx: ctx }
+        Self { _ctx: ctx, _proc_data: UnsafeCell::new(None) }
     }
 }
 
-impl ZeroEngine<'_> {
+impl<'a> ZeroEngine<'a> {
+    fn proc_data(&self) -> &'a mut ZeroProcData<'a> {
+        unsafe {
+            self._proc_data.get().as_mut().unwrap().as_mut().unwrap()
+        }
+    }
+}
+
+impl<'a> ZeroEngine<'a> {
+    fn create_data(&self, mthd: &'a Method) {
+        let locals = self._ctx.alloca(mthd.code_data().max_locals as usize, true);
+        let pd = ZeroProcData::new(mthd, locals);
+
+        unsafe {
+            *self._proc_data.get() = Some(pd);
+        }
+    }
+
+    fn unwind(&self) -> bool {
+        unsafe {
+            match self._ctx.unwind() {
+                Some(n) => *self._proc_data.get() = Some(n),
+                None => return false
+            }
+        }
+
+        true
+    }
+
+    fn reflect_cp_index(&self, bin_offs: usize) -> usize {
+        let code = self.proc_data().mthd.code_data().code;
+
+        let indexbyte1 = code[bin_offs + 1] as u16;
+        let indexbyte2 = code[bin_offs + 2] as u16;
+
+        let index = (indexbyte1 << 8) | indexbyte2;
+
+        index as usize
+    }
+
     fn pop_ref(&self) -> Result<&'_ ObjDesc, RuntimeException> {
         let addr = self._ctx.pop::<1, address>();
         match addr_cast(addr) {
@@ -49,7 +125,7 @@ impl ZeroEngine<'_> {
     }
 }
 
-impl ZeroEngine<'_> {
+impl<'a> ZeroEngine<'a> {
     fn array_load<const SLOTS: usize, T: Copy>(&self) -> Result<(), RuntimeException> {
         let index = self.pop_index();
         let arrayref = self.pop_ref()?;
@@ -82,14 +158,23 @@ impl ZeroEngine<'_> {
         // todo: tell if value shares the same type of the element type of arrayref.
         self.array_store::<1, ObjPtr>()
     }
+
+    fn load_local<const SLOTS: usize, T: Copy>(&self, index: u16) {
+        let n = self.proc_data().load_local::<SLOTS, _>(index);
+        self._ctx.push::<SLOTS, T>(n);
+    }
 }
 
-impl ZeroEngine<'_> {
-    fn process(&self, codes: &ByteCode) -> Result<(), RuntimeException> {
-        let mut pc = 0;
 
-        while pc < codes.opcodes.len() {
-            match codes.opcodes[pc].clone().1 {
+impl<'a> ZeroEngine<'a> {
+    fn process(&self, mthd: &'a Method) -> Result<(), RuntimeException> {
+        self.create_data(mthd);
+
+        loop {
+            let mthd = self.proc_data().mthd;
+
+            let opc_pair = mthd.opcodes()[self.proc_data().pc].clone();
+            match opc_pair.1 {
                 Opcode::Aaload => {
                     self.array_load_oop()?
                 }
@@ -103,20 +188,27 @@ impl ZeroEngine<'_> {
                 }
 
                 Opcode::Aload(index) => {
-                    // self.local_load_ptr(*index);
-                }
-/*
-                Opcode::Anewarray(t) => {
-                    // ...
+                    self.load_local::<1, ObjPtr>(index);
                 }
 
-                Opcode::Areturn => {
-                    if self.return_with_value::<address>(SLOT_PER_PTR) {
-                        code = self.code();
-                        continue;
+                Opcode::Anewarray(t) => {
+                    let index = self.reflect_cp_index(opc_pair.0);
+                    match mthd.cp_cache.acquire(index) {
+                        ConstantPoolCacheEntry::None => {
+                            // todo: resolve
+                        }
+
+                        ConstantPoolCacheEntry::KlassHandle(klass) => {
+                            // todo: new array
+                        }
+
+                        _ => { unreachable!( )}
                     }
                 }
-
+                Opcode::Areturn => {
+                    // to be implemented
+                }
+/*
                 Opcode::Arraylength => {
                     || -> Option<()> {
                         let arrayref = self.pop_valid_obj::<ArrayObjDesc>()?;

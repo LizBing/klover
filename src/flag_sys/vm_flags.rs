@@ -14,6 +14,16 @@
  * limitations under the License.
  */
 
-mod bytecodes;
-pub mod context;
-pub mod zero;
+use phf::phf_map;
+
+use crate::runtime::flag_sys::vm_flag::{VMFlag, VMFlagData};
+
+pub static INTP_STACK_SIZE: VMFlagData<usize> = VMFlagData::new(
+    "IntpStackSize",
+    4,
+    "Size of interpreter stack(MB).", 
+    None);
+
+static VM_FLAG_MAP: phf::Map<&'static str, VMFlag> = phf_map! {
+    "IntpStackSize" => VMFlag::USIZE_FLAG(&INTP_STACK_SIZE)
+};
