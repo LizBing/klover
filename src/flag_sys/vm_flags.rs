@@ -14,16 +14,11 @@
  * limitations under the License.
  */
 
-use phf::phf_map;
+use klover_flag_sys_proc_macro::def_vm_flags;
 
-use crate::runtime::flag_sys::vm_flag::{VMFlag, VMFlagData};
+def_vm_flags! {
+    FOO {
+        product(INTP_STACK_SIZE, usize, 4, None, "Interpreter stack size in MB.")
+    }
+}
 
-pub static INTP_STACK_SIZE: VMFlagData<usize> = VMFlagData::new(
-    "IntpStackSize",
-    4,
-    "Size of interpreter stack(MB).", 
-    None);
-
-static VM_FLAG_MAP: phf::Map<&'static str, VMFlag> = phf_map! {
-    "IntpStackSize" => VMFlag::USIZE_FLAG(&INTP_STACK_SIZE)
-};

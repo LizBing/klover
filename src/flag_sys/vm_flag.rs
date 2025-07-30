@@ -20,10 +20,11 @@ pub type ConstrainFunc<T> = fn(T) -> bool;
 
 pub struct VMFlagData<T: Copy> {
     _name: &'static str,
-    _value: Cell<T>,
-    _desc: &'static str,
 
-    _cons_func: Option<ConstrainFunc<T>>
+    _value: Cell<T>,
+    _cons_func: Option<ConstrainFunc<T>>,
+
+    _desc: &'static str,
 }
 
 unsafe impl<T: Copy> Sync for VMFlagData<T> {}
@@ -32,8 +33,8 @@ impl<T: Copy> VMFlagData<T> {
     pub const fn new(
         name: &'static str, 
         value: T,
+        cons_func: Option<ConstrainFunc<T>>,
         desc: &'static str,
-        cons_func: Option<ConstrainFunc<T>>
     ) -> Self {
         Self {
             _name: name,
@@ -63,7 +64,7 @@ impl<T: Copy> VMFlagData<T> {
 }
 
 pub enum VMFlag {
-    USIZE_FLAG(&'static VMFlagData<usize>),
-    I32_FLAG(&'static VMFlagData<i32>)
+    UsizeFlag(&'static VMFlagData<usize>),
+    I32Flag(&'static VMFlagData<i32>)
 }
 
