@@ -14,5 +14,4 @@
  * limitations under the License.
  */
 
-mod vm_flags;
-mod vm_flag;
+pub mod vm_flag;

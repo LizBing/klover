@@ -13,28 +13,71 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-use once_cell::sync::OnceCell;
+
+use std::{hash::Hash, sync::{atomic::{AtomicU64, Ordering}, Arc, Weak}};
 use dashmap::DashMap;
-use crate::{metaspace::klass_cell::KlassCell};
+use once_cell::sync::{Lazy, OnceCell};
+use crate::{class_data::class_loader::ClassLoader, metaspace::klass_cell::KlassCell};
 
-type KlassTable = DashMap<String, KlassCell>;
-static KLASS_TABLE: OnceCell<KlassTable> = OnceCell::new();
+static LOADER_ID_GEN: AtomicU64 = AtomicU64::new(1);
 
-pub fn initialize() {
-    KLASS_TABLE.set(KlassTable::new());
+fn next_loader_id() -> u64 {
+    LOADER_ID_GEN.fetch_add(1, Ordering::SeqCst)
 }
 
-fn table() -> &'static KlassTable {
-    KLASS_TABLE.get().unwrap()
+#[derive(Clone, Debug)]
+pub struct LoaderKey {
+    _id: u64,
+    _loader: Weak<ClassLoader>
 }
 
-pub fn get(fqn: String) -> Option<KlassCell> {
-    match table().get(&fqn) {
-        Some(handle) => { Some(handle.clone()) },
+impl LoaderKey {
+    pub fn new(loader: &Arc<ClassLoader>) -> Self {
+        Self { _id: next_loader_id(), _loader: Arc::downgrade(loader) }
+    }
+}
+
+impl LoaderKey {
+    pub fn is_dead(&self) -> bool {
+        self._loader.upgrade().is_none()
+    }
+}
+
+impl PartialEq for LoaderKey {
+    fn eq(&self, other: &Self) -> bool {
+        self._id == other._id
+    }
+}
+
+impl Eq for LoaderKey {}
+
+impl Hash for LoaderKey {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self._id.hash(state);
+    }
+}
+
+static TABLE: Lazy<DashMap<LoaderKey, DashMap<String, KlassCell>>> = Lazy::new(|| {
+    DashMap::new()
+});
+
+pub fn register_loader(loader: &Arc<ClassLoader>) {
+    loader.set_key(LoaderKey::new(loader));
+}
+
+pub fn get(loader_key: LoaderKey, fqn: String) -> Option<KlassCell> {
+    match TABLE.get(&loader_key) {
+        Some(sub_map) => {
+            match sub_map.get(&fqn) {
+                Some(n) => Some(n.clone()),
+                None => None
+            }
+        }
         None => None
     }
 }
 
-pub fn put(klass: KlassCell) {
-    unimplemented!()
+pub fn put(loader_key: LoaderKey, fqn: String, klass: KlassCell) {
+    let sub_map = TABLE.entry(loader_key).or_insert(DashMap::new());
+    assert!(sub_map.insert(fqn, klass).is_none(), "Duplicated.");
 }

@@ -28,22 +28,13 @@ pub struct ObjDesc {
 }
 
 impl ObjDesc {
-    pub fn init(&mut self, klass: Option<KlassCell>) {
-        let klass_ptr = match klass {
-            Some(k) => {
-                universe::klass_mem_space().compress(k.raw())
-            }
-            None => 0
-        };
+    pub fn set_mark(mem: address, mw: MarkWord) {
+        addr_cast::<ObjDesc>(mem).expect("null object pointer.")._mw = mw;
+    }
 
-        let mut mw_val = 0u64;
-        mw_val = MarkWord::set_lock(mw_val, mark_word::UNLOCKED_VALUE);
-        mw_val = MarkWord::unset_biased_tag(mw_val);
-        mw_val = MarkWord::set_age(mw_val, 0);
-        mw_val = MarkWord::set_klass_ptr(mw_val, klass_ptr);
-        mw_val = MarkWord::set_hash(mw_val, 0);
-
-        self._mw = MarkWord::with_value(mw_val);
+    pub fn set_array_len(mem: address, len: i32) {
+        let obj = addr_cast::<ObjDesc>(mem).expect("null object pointer.");
+        unsafe { *obj._array_len.get_unchecked_mut(0) = len; }
     }
 }
 
@@ -59,7 +50,9 @@ impl ObjDesc {
 
 impl ObjDesc {
     pub fn array_len(&self) -> i32 {
-        self._array_len[0]
+        unsafe {
+            *self._array_len.get_unchecked(0)
+        }
     }
 
     pub fn data_base(&self) -> address {

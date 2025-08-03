@@ -14,46 +14,62 @@
  * limitations under the License.
  */
 use std::ptr::null_mut;
-use crate::class_data::java_classes::JavaLangClass;
+use crate::class_data::java_classes::{initialize, JavaLangClass};
 use crate::common::universe;
 use crate::metaspace::klass_cell::KlassCell;
-use crate::oops::klass::{Klass};
 use crate::oops::mark_word::MarkWord;
+use crate::oops::obj_desc::ObjDesc;
 use crate::oops::oop;
 use crate::oops::oop::ObjPtr;
 use crate::utils::global_defs::{addr_cast, address};
 
-pub struct MemAllocator {
-    _klass: Option<KlassCell>,
-    _size: usize,
-}
+pub trait MemAllocator {
+    fn size(&self) -> usize;
 
-impl MemAllocator {
-    pub fn new(klass: Option<KlassCell>, size: usize) -> Self {
-        Self { _klass: klass, _size: size }
-    }
-}
+    fn klass(&self) -> KlassCell;
 
-impl MemAllocator {
-    // Construct Markword.
-    fn initialize(&self, mem: address) {
-        let oop = oop::as_oop(mem);
-        unsafe {
-            (*oop).init(self._klass.clone());
-        }
+    fn initialize(&self, mem: address);
+
+    fn raw_alloc(&self) -> address {
+        universe::heap().mem_alloc(self.size())
     }
 
-    pub fn raw_alloc(&self) -> address {
-        universe::heap().mem_alloc(self._size)
-    }
-
-    pub fn allocate(&self) -> ObjPtr {
-        let mem = self.raw_alloc();
-        if mem == 0 { return null_mut(); }
-        
-        self.initialize(mem);
+    fn finish(&self, mem: address) -> ObjPtr {
+        ObjDesc::set_mark(mem, MarkWord::prototype(self.klass()));
         oop::as_oop(mem)
     }
+
+    fn allocate(&self) -> ObjPtr {
+        let mem = self.raw_alloc();
+        self.initialize(mem);
+        self.finish(mem)
+    }
 }
 
+pub struct ClassAllocator {
+    _native: KlassCell
+}
+
+impl ClassAllocator {
+    pub fn new(native: KlassCell) -> Self {
+        Self {
+            _native: native
+        }
+    }
+}
+
+impl MemAllocator for ClassAllocator {
+    fn size(&self) -> usize {
+        universe::heap().min_obj_size() + size_of::<KlassCell>()
+    }
+
+    fn klass(&self) -> KlassCell {
+        JavaLangClass::this()
+    }
+
+    fn initialize(&self, mem: address) {
+        let slot_addr = mem + universe::heap().min_obj_size();
+        *addr_cast::<KlassCell>(slot_addr).unwrap() = self._native.clone();
+    } 
+}
 

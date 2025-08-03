@@ -24,7 +24,7 @@ static CLASS_PATHS: OnceCell<Vec<String>> = OnceCell::new();
 
 pub fn initialize() {}
 
-pub fn resolve_class_name(name: ClassName, offs: usize) -> Option<Vec<u8>> {
+pub fn resolve_class_name(name: String, offs: usize) -> Option<Vec<u8>> {
     let relative = format!("{}.class", name);
 
     for n in CLASS_PATHS.get().unwrap().iter() {

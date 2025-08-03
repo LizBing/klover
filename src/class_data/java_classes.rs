@@ -15,7 +15,7 @@
  */
 use std::cell::OnceCell;
 use crate::common::universe;
-use crate::gc::common::mem_allocator::MemAllocator;
+use crate::gc::common::mem_allocator::{ClassAllocator, MemAllocator};
 use crate::metaspace::klass_cell::KlassCell;
 use crate::oops::oop::ObjPtr;
 
@@ -34,7 +34,7 @@ static mut JAVA_LANG_CLASS: OnceCell<KlassCell> = OnceCell::new();
 pub struct JavaLangClass;
 
 impl JavaLangClass {
-    fn this() -> KlassCell {
+    pub fn this() -> KlassCell {
         unsafe {
             JAVA_LANG_CLASS.get().unwrap().clone()
         }
@@ -46,11 +46,9 @@ impl JavaLangClass {
 }
 
 impl JavaLangClass {
-    pub fn new_instance() -> ObjPtr {
-        MemAllocator::new(
-            Some(JavaLangClass::this()),
-            JavaLangClass::size_of_instance()
-        ).allocate()
+    pub fn new_instance(native: KlassCell) -> ObjPtr {
+        let allocator = ClassAllocator::new(native);
+        allocator.allocate()
     }
 }
 

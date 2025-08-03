@@ -13,7 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-use std::cell::OnceCell;
+use once_cell::sync::OnceCell;
+
 use crate::gc::common::collected_heap::CollectedHeap;
 use crate::metaspace::klass_allocator::KlassMemSpace;
 
@@ -33,3 +34,4 @@ pub fn klass_mem_space() -> &'static mut KlassMemSpace {
 pub fn heap() -> &'static mut Box<dyn CollectedHeap> {
     unsafe { &mut UNIVERSE.get_mut().unwrap()._heap }
 }
+

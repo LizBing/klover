@@ -23,7 +23,6 @@ use crate::code::method::Method;
 use crate::engine::context::{slot_t, Context};
 use crate::oops::obj_desc::ObjDesc;
 use crate::oops::oop::ObjPtr;
-use crate::runtime::rt_exceptions::RuntimeException;
 use crate::utils::global_defs::{addr_cast, address};
 
 // Refs: JVMS 21 Table 2.11.1-B
@@ -112,11 +111,14 @@ impl<'a> ZeroEngine<'a> {
         index as usize
     }
 
-    fn pop_ref(&self) -> Result<&'_ ObjDesc, RuntimeException> {
+    fn pop_ref(&self) -> Option<&'_ ObjDesc> {
         let addr = self._ctx.pop::<1, address>();
         match addr_cast(addr) {
-            Some(n) => Ok(n),
-            None => Err(RuntimeException::NullPointerException),
+            Some(n) => { Some(n) },
+            None => {
+                // todo: thorw NullPointerException.
+                None
+            },
         }
     }
     
@@ -126,35 +128,33 @@ impl<'a> ZeroEngine<'a> {
 }
 
 impl<'a> ZeroEngine<'a> {
-    fn array_load<const SLOTS: usize, T: Copy>(&self) -> Result<(), RuntimeException> {
+    fn array_load<const SLOTS: usize, T: Copy>(&self) {
         let index = self.pop_index();
-        let arrayref = self.pop_ref()?;
+        let arrayref = self.pop_ref().unwrap();
 
         match arrayref.array_get::<T>(index) {
             Some(value) => self._ctx.push::<SLOTS, _>(value),
-            None => return Err(RuntimeException::ArrayIndexOutOfBoundsException)
+            None => {
+                // todo: throw ArrayIndexOutOfBoundsException.
+            }
         }
-
-        Ok(())
     }
 
-    fn array_load_oop(&self) -> Result<(), RuntimeException> {
+    fn array_load_oop(&self) {
         self.array_load::<1, ObjPtr>()
     }
 
-    fn array_store<const SLOTS: usize, T: Copy>(&self) -> Result<(), RuntimeException> {
+    fn array_store<const SLOTS: usize, T: Copy>(&self) {
         let value = self._ctx.pop::<SLOTS, _>();
         let index = self.pop_index();
-        let arrayref = self.pop_ref()?;
+        let arrayref = self.pop_ref().unwrap();
 
         if !arrayref.array_set::<T>(index, value) {
-            return Err(RuntimeException::ArrayIndexOutOfBoundsException);
+            // todo: throw ArrayIndexOutOfBoundsException.
         }
-
-        Ok(())
     }
 
-    fn array_store_oop(&self) -> Result<(), RuntimeException> {
+    fn array_store_oop(&self) {
         // todo: tell if value shares the same type of the element type of arrayref.
         self.array_store::<1, ObjPtr>()
     }
@@ -167,7 +167,7 @@ impl<'a> ZeroEngine<'a> {
 
 
 impl<'a> ZeroEngine<'a> {
-    fn process(&self, mthd: &'a Method) -> Result<(), RuntimeException> {
+    fn process(&self, mthd: &'a Method) {
         self.create_data(mthd);
 
         loop {
@@ -176,11 +176,11 @@ impl<'a> ZeroEngine<'a> {
             let opc_pair = mthd.opcodes()[self.proc_data().pc].clone();
             match opc_pair.1 {
                 Opcode::Aaload => {
-                    self.array_load_oop()?
+                    self.array_load_oop()
                 }
 
                 Opcode::Aastore => {
-                    self.array_store_oop()?;
+                    self.array_store_oop();
                 }
 
                 Opcode::AconstNull => {
@@ -864,7 +864,5 @@ impl<'a> ZeroEngine<'a> {
                 _ => {}
             }
         }
-
-        Ok(())
     }
 }

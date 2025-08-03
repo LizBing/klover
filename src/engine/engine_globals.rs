@@ -14,11 +14,8 @@
  * limitations under the License.
  */
 
-use klover_flag_sys_proc_macro::def_vm_flags;
-
-def_vm_flags! {
-    FOO {
-        product(INTP_STACK_SIZE, usize, 4, None, "Interpreter stack size in MB.")
+klover_flag_sys_proc_macro::def_vm_flags! {
+    ENGINE_GLOBALS {
+        product(INTP_STACK_SIZE, usize, 4, None, "Size of interpreter stack(MB).")
     }
 }
-

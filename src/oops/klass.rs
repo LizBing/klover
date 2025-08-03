@@ -55,8 +55,8 @@ impl<'a> Klass<'a> {
         self._name = cf.this_class.clone();
         self._super = match cf.super_class.clone() {
             Some(s) => match loader.as_ref() {
-                Some(l) => l.load_class(s),
-                None => bootstrap_loader::load_class(s)
+                Some(l) => l.load_class(s.to_string()),
+                None => bootstrap_loader::load_class(s.to_string())
             }
 
             None => None

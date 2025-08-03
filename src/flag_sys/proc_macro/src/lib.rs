@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-use proc_macro::{Literal, TokenStream};
+use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::{quote, ToTokens};
 use syn::{parse::Parse, Type, Expr, LitStr};
@@ -76,8 +76,8 @@ impl Parse for VMFlags {
 
         while !content.is_empty() {
             flags.push(content.parse()?);
-            if content.peek(Token![;]) {
-                content.parse::<Token![;]>()?;
+            if content.peek(Token![,]) {
+                content.parse::<Token![,]>()?;
             }
         }
 

@@ -1,3 +1,5 @@
+use std::sync::{Arc, RwLock};
+
 /*
  * Copyright 2025 Lei Zaakjyu
  *
@@ -14,12 +16,25 @@
  * limitations under the License.
  */
 use cafebabe::descriptors::ClassName;
-use crate::metaspace::klass_cell::KlassCell;
+use dashmap::{DashMap, Entry};
+use once_cell::sync::Lazy;
+use crate::{class_data::{class_loader::ClassLoader, java_classes::JavaLangClass}, metaspace::{klass_allocator::alloc_klass, klass_cell::KlassCell}, oops::klass::Klass, runtime::tls};
 
-pub fn define_class(name: ClassName, buf: Vec<u8>) -> KlassCell {
-    unimplemented!()
+static TABLE: Lazy<DashMap<String, KlassCell>> = Lazy::new(|| { DashMap::new() });
+
+// Returns None for LinkageError.
+pub fn define_class(fqn: String, buf: Vec<u8>) -> Option<KlassCell> {
+    let klass = ClassLoader::define_class_helper(None, buf);
+
+    match TABLE.entry(fqn) {
+        Entry::Vacant(entry) => {
+            entry.insert(klass.clone());
+            Some(klass)
+        },
+        _ => None,
+    }
 }
 
-pub fn load_class(name: ClassName) -> Option<KlassCell> {
+pub fn load_class(name: String) -> Option<KlassCell> {
     unimplemented!()
 }

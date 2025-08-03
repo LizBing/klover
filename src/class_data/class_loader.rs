@@ -14,19 +14,48 @@
  * limitations under the License.
  */
 
+use std::sync::Arc;
+
 use cafebabe::descriptors::ClassName;
-use crate::metaspace::klass_cell::KlassCell;
+use once_cell::{unsync::OnceCell};
+use crate::{class_data::{java_classes::JavaLangClass, klass_table::{self, LoaderKey}}, metaspace::{klass_allocator::alloc_klass, klass_cell::KlassCell}};
 
 
 #[derive(Debug)]
-pub struct ClassLoader {}
+pub struct ClassLoader {
+    _key: OnceCell<LoaderKey>,
+}
+
+unsafe impl Sync for ClassLoader {}
 
 impl ClassLoader {
-    pub fn load_class(&self, name: ClassName) -> Option<KlassCell> {
-        unimplemented!()
+    pub fn key(&self) -> LoaderKey {
+        self._key.get().unwrap().clone()
+    }
+
+    pub fn set_key(&self, key: LoaderKey) {
+        self._key.set(key).unwrap();
     }
 }
 
-fn foo() {
-    let cf = cafebabe::parse_class(String::new().as_bytes()).unwrap();
+impl ClassLoader {
+    pub fn define_class_helper(loader: Option<Arc<ClassLoader>>, buf: Vec<u8>) -> KlassCell {
+        let klass = alloc_klass();
+
+        klass.get_mut().init_normal(loader, buf);
+        klass.get_mut().set_mirror(JavaLangClass::new_instance(klass.clone()));
+
+        klass
+    }
+
+    pub fn load_class(&self, name: String) -> Option<KlassCell> {
+        unimplemented!()
+    }
+
+    pub fn define_class(loader: Arc<ClassLoader>, fqn: String, buf: Vec<u8>) -> KlassCell {
+        let klass = Self::define_class_helper(Some(loader.clone()), buf);
+        klass_table::put(loader.key(), fqn, klass.clone());
+
+        klass
+    }
 }

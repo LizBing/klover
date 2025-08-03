@@ -16,8 +16,11 @@
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use crate::common::universe;
+use crate::metaspace::klass_cell::KlassCell;
 use crate::{utils::global_defs::uintx, OneBit};
 use crate::utils::global_defs::naddr;
+use super::mark_word;
 
 #[repr(C)]
 pub struct MarkWord {
@@ -27,6 +30,19 @@ pub struct MarkWord {
 impl MarkWord {
     pub fn with_value(value: u64) -> Self {
         Self { _encoded: AtomicU64::new(value) }
+    }
+
+    pub fn prototype(klass: KlassCell) -> Self {
+        let mut mw_val = 0u64;
+        mw_val = MarkWord::set_lock(mw_val, UNLOCKED_VALUE);
+        mw_val = MarkWord::unset_biased_tag(mw_val);
+        mw_val = MarkWord::set_age(mw_val, 0);
+        mw_val = MarkWord::set_hash(mw_val, 0);
+
+        let klass_ptr = universe::klass_mem_space().compress(klass.raw());
+        mw_val = MarkWord::set_klass_ptr(mw_val, klass_ptr);
+
+        MarkWord::with_value(mw_val)
     }
 }
 

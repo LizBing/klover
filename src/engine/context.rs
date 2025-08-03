@@ -16,6 +16,7 @@
 
 use std::{ffi::c_void, ptr::null_mut};
 use std::cell::UnsafeCell;
+use crate::engine::engine_globals::INTP_STACK_SIZE;
 use crate::{align_up, memory::{allocation::c_heap_alloc, mem_region::MemRegion, virt_space::VirtSpace}, utils::global_defs::{addr_cast, address, word_t}};
 
 pub type slot_t = usize;
@@ -50,10 +51,10 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn new(stack_size: usize) -> Self {
+    pub fn new() -> Self {
         Self {
             _regs: UnsafeCell::new(VMRegiters::new()),
-            _stack: c_heap_alloc(align_up!(stack_size, VirtSpace::page_size())).unwrap()
+            _stack: c_heap_alloc(align_up!(INTP_STACK_SIZE.get_value(), VirtSpace::page_size())).unwrap()
         }
     }
 }
