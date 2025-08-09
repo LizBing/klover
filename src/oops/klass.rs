@@ -14,22 +14,19 @@ use std::cell::RefMut;
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-use std::ptr::null_mut;
 use std::sync::Arc;
 use cafebabe::ClassFile;
 use cafebabe::descriptors::ClassName;
-use crate::class_data::bootstrap_loader;
-use crate::class_data::class_loader::ClassLoader;
+use crate::class_data::{class_loader};
 use crate::class_data::java_classes::{JavaLangClass, JavaLangObject};
-use crate::metaspace::klass_cell::KlassCell;
 use crate::oops::obj_handle::ObjHandle;
 use crate::oops::oop::ObjPtr;
 
 #[derive(Debug)]
 pub struct Klass<'a> {
     _name: ClassName<'a>,
-    _super: Option<KlassCell>,
-    _loader: Option<Arc<ClassLoader>>,
+    _super: Option<&'a Klass<'a>>,
+    _loader: ObjHandle,
 
     _metadata: Option<Vec<u8>>,
     _class_file: Option<ClassFile<'a>>,
@@ -37,11 +34,11 @@ pub struct Klass<'a> {
     _mirror: ObjHandle,
 }
 
-impl<'a> Klass<'a> {
+impl Klass<'static> {
     // Returning false means ClassNotFoundException.
-    pub fn init_normal<'b: 'a>(
-        &'b mut self,
-        loader: Option<Arc<ClassLoader>>,
+    pub fn init_normal(
+        &'static mut self,
+        loader: ObjPtr,
         metadata: Vec<u8>,
     ) -> bool {
         self._metadata = Some(metadata);
@@ -54,14 +51,11 @@ impl<'a> Klass<'a> {
 
         self._name = cf.this_class.clone();
         self._super = match cf.super_class.clone() {
-            Some(s) => match loader.as_ref() {
-                Some(l) => l.load_class(s.to_string()),
-                None => bootstrap_loader::load_class(s.to_string())
-            }
+            Some(s) => Some(class_loader::load_class(loader)),
 
             None => None
         };
-        self._loader = loader;
+        self._loader = ObjHandle::with_oop(loader);
         self._class_file = Some(cf);
 
         // resolve the handle in define_class
@@ -70,10 +64,10 @@ impl<'a> Klass<'a> {
         true
     }
 
-    pub fn init_array_class(&mut self, name: ClassName<'a>, loader: Option<Arc<ClassLoader>>) {
+    pub fn init_array_class(&mut self, name: ClassName<'static>, loader: ObjPtr) {
         self._name = name;
         self._super = Some(JavaLangObject::this());
-        self._loader = loader;
+        self._loader = ObjHandle::with_oop(loader);
         
         self._metadata = None;
         self._class_file = None;
@@ -93,16 +87,12 @@ impl Klass<'_> {
         self._name.clone()
     }
 
-    pub fn super_class(&self) -> Option<KlassCell> {
-        unimplemented!()
+    pub fn super_class(&self) -> Option<&'static Klass> {
+        self._super
     }
     
-    pub fn mirror(&self) -> ObjPtr {
-        self._mirror.oop()
-    }
-    
-    pub fn set_mirror(&mut self, oop: ObjPtr) {
-        self._mirror.set_oop(oop)
+    pub fn mirror(&self) -> &ObjHandle {
+        &self._mirror
     }
 }
 

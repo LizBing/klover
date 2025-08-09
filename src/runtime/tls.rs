@@ -29,8 +29,8 @@ struct ThrdLocalStorage {
 }
 
 impl ThrdLocalStorage {
-    fn new() -> ThrdLocalStorage {
-        Self {
+    fn init(&mut self) {
+        *self = Self {
             _kmp: KlassMemPool::new(),
             _ctx: Context::new(),
         }
@@ -40,8 +40,12 @@ impl ThrdLocalStorage {
 pub fn initialize() {
     TLS.with(|tls| {
         let mem = c_heap_alloc(size_of::<ThrdLocalStorage>()).unwrap();
-        tls.set(EasyCell::with_raw(mem.begin() as *mut ThrdLocalStorage))
-    }).unwrap();
+        let cell = EasyCell::new(mem.begin() as *mut ThrdLocalStorage);
+
+        cell.get_mut().init();
+
+        tls.set(cell).unwrap();
+    })
 }
 
 pub fn klass_mem_pool() -> &'static mut KlassMemPool {

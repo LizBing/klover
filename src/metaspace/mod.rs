@@ -15,6 +15,5 @@
  */
 
 pub mod klass_allocator;
-pub mod klass_cell;
 
 pub fn initialize() {}

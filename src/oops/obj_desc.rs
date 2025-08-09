@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 use crate::common::universe;
-use crate::metaspace::klass_cell::KlassCell;
 use crate::oops::klass::{Klass};
 use crate::oops::mark_word;
 use crate::oops::mark_word::MarkWord;

@@ -16,12 +16,12 @@
 
 use std::{cell::RefCell, sync::RwLock};
 
-use crate::metaspace::klass_cell::KlassCell;
+use crate::oops::klass::Klass;
 
 #[derive(Clone)]
 pub enum ConstantPoolCacheEntry {
     None,
-    KlassHandle(KlassCell),
+    KlassHandle(&'static Klass<'static>),
 }
 
 pub struct ConstantPoolCache {

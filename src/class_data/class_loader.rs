@@ -18,44 +18,8 @@ use std::sync::Arc;
 
 use cafebabe::descriptors::ClassName;
 use once_cell::{unsync::OnceCell};
-use crate::{class_data::{java_classes::JavaLangClass, klass_table::{self, LoaderKey}}, metaspace::{klass_allocator::alloc_klass, klass_cell::KlassCell}};
+use crate::{class_data::{java_classes::JavaLangClass, klass_table::{self, LoaderKey}}, metaspace::{klass_allocator::alloc_klass,}, oops::{klass::Klass, oop::ObjPtr}};
 
-
-#[derive(Debug)]
-pub struct ClassLoader {
-    _key: OnceCell<LoaderKey>,
-}
-
-unsafe impl Sync for ClassLoader {}
-
-impl ClassLoader {
-    pub fn key(&self) -> LoaderKey {
-        self._key.get().unwrap().clone()
-    }
-
-    pub fn set_key(&self, key: LoaderKey) {
-        self._key.set(key).unwrap();
-    }
-}
-
-impl ClassLoader {
-    pub fn define_class_helper(loader: Option<Arc<ClassLoader>>, buf: Vec<u8>) -> KlassCell {
-        let klass = alloc_klass();
-
-        klass.get_mut().init_normal(loader, buf);
-        klass.get_mut().set_mirror(JavaLangClass::new_instance(klass.clone()));
-
-        klass
-    }
-
-    pub fn load_class(&self, name: String) -> Option<KlassCell> {
-        unimplemented!()
-    }
-
-    pub fn define_class(loader: Arc<ClassLoader>, fqn: String, buf: Vec<u8>) -> KlassCell {
-        let klass = Self::define_class_helper(Some(loader.clone()), buf);
-        klass_table::put(loader.key(), fqn, klass.clone());
-
-        klass
-    }
+pub fn load_class(loader: ObjPtr) -> &'static Klass<'static> {
+    unimplemented!()
 }

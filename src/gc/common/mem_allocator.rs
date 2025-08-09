@@ -16,7 +16,7 @@
 use std::ptr::null_mut;
 use crate::class_data::java_classes::{initialize, JavaLangClass};
 use crate::common::universe;
-use crate::metaspace::klass_cell::KlassCell;
+use crate::oops::klass::Klass;
 use crate::oops::mark_word::MarkWord;
 use crate::oops::obj_desc::ObjDesc;
 use crate::oops::oop;
@@ -26,7 +26,7 @@ use crate::utils::global_defs::{addr_cast, address};
 pub trait MemAllocator {
     fn size(&self) -> usize;
 
-    fn klass(&self) -> KlassCell;
+    fn klass(&self) -> &Klass<'static>;
 
     fn initialize(&self, mem: address);
 
@@ -46,30 +46,30 @@ pub trait MemAllocator {
     }
 }
 
-pub struct ClassAllocator {
-    _native: KlassCell
+pub struct ClassAllocator<'a> {
+    _native: &'a Klass<'a>
 }
 
-impl ClassAllocator {
-    pub fn new(native: KlassCell) -> Self {
+impl<'a> ClassAllocator<'a> {
+    pub fn new(native: &'a Klass<'a>) -> Self {
         Self {
             _native: native
         }
     }
 }
 
-impl MemAllocator for ClassAllocator {
+impl<'a> MemAllocator for ClassAllocator<'a> {
     fn size(&self) -> usize {
-        universe::heap().min_obj_size() + size_of::<KlassCell>()
+        universe::heap().min_obj_size() + size_of::<&Klass>()
     }
 
-    fn klass(&self) -> KlassCell {
+    fn klass(&self) -> &Klass<'static> {
         JavaLangClass::this()
     }
 
     fn initialize(&self, mem: address) {
         let slot_addr = mem + universe::heap().min_obj_size();
-        *addr_cast::<KlassCell>(slot_addr).unwrap() = self._native.clone();
+        *addr_cast::<&Klass>(slot_addr).unwrap() = self._native;
     } 
 }
 

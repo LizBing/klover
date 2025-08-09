@@ -17,7 +17,8 @@
 use std::{hash::Hash, sync::{atomic::{AtomicU64, Ordering}, Arc, Weak}};
 use dashmap::DashMap;
 use once_cell::sync::{Lazy, OnceCell};
-use crate::{class_data::class_loader::ClassLoader, metaspace::klass_cell::KlassCell};
+
+use crate::{oops::klass::Klass, utils::easy_cell::EasyCell};
 
 static LOADER_ID_GEN: AtomicU64 = AtomicU64::new(1);
 
@@ -28,18 +29,17 @@ fn next_loader_id() -> u64 {
 #[derive(Clone, Debug)]
 pub struct LoaderKey {
     _id: u64,
-    _loader: Weak<ClassLoader>
 }
 
 impl LoaderKey {
-    pub fn new(loader: &Arc<ClassLoader>) -> Self {
-        Self { _id: next_loader_id(), _loader: Arc::downgrade(loader) }
+    pub fn new() -> Self {
+        unimplemented!()
     }
 }
 
 impl LoaderKey {
     pub fn is_dead(&self) -> bool {
-        self._loader.upgrade().is_none()
+        unimplemented!()
     }
 }
 
@@ -57,27 +57,18 @@ impl Hash for LoaderKey {
     }
 }
 
-static TABLE: Lazy<DashMap<LoaderKey, DashMap<String, KlassCell>>> = Lazy::new(|| {
+static TABLE: Lazy<DashMap<Option<LoaderKey>, DashMap<String, EasyCell<Klass>>>> = Lazy::new(|| {
     DashMap::new()
 });
 
-pub fn register_loader(loader: &Arc<ClassLoader>) {
-    loader.set_key(LoaderKey::new(loader));
+pub fn register_loader() {
+    unimplemented!()
 }
 
-pub fn get(loader_key: LoaderKey, fqn: String) -> Option<KlassCell> {
-    match TABLE.get(&loader_key) {
-        Some(sub_map) => {
-            match sub_map.get(&fqn) {
-                Some(n) => Some(n.clone()),
-                None => None
-            }
-        }
-        None => None
-    }
+pub fn get(loader_key: Option<LoaderKey>, fqn: String) -> Option<&'static Klass<'static>> {
+    unimplemented!()
 }
 
-pub fn put(loader_key: LoaderKey, fqn: String, klass: KlassCell) {
-    let sub_map = TABLE.entry(loader_key).or_insert(DashMap::new());
-    assert!(sub_map.insert(fqn, klass).is_none(), "Duplicated.");
+pub fn put(loader_key: Option<LoaderKey>, fqn: String, klass: &Klass) {
+    unimplemented!()
 }

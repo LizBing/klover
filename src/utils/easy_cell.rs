@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-use std::ptr::null_mut;
 
+// Designed for pool objects.
 #[derive(Debug)]
 pub struct EasyCell<T: 'static> {
     _raw: *mut T
@@ -25,18 +25,8 @@ unsafe impl<T> Send for EasyCell<T> {}
 unsafe impl<T> Sync for EasyCell<T> {}
 
 impl<T> EasyCell<T> {
-    pub fn new() -> Self {
-        Self::with_raw(null_mut())
-    }
-
-    pub fn with_raw(raw: *mut T) -> Self {
+    pub fn new(raw: *mut T) -> Self {
         Self { _raw: raw }
-    }
-}
-
-impl<T> Clone for EasyCell<T> {
-    fn clone(&self) -> Self {
-        Self::with_raw(self._raw)
     }
 }
 

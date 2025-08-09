@@ -17,5 +17,4 @@
 pub mod class_loader;
 pub mod klass_table;
 mod class_file_stream;
-pub mod bootstrap_loader;
 pub mod java_classes;

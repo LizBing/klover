@@ -19,7 +19,6 @@ use crate::common::universe;
 use crate::memory::bump_alloc::BumpAllocator;
 use crate::memory::mem_region::MemRegion;
 use crate::memory::virt_space::VirtSpace;
-use crate::metaspace::klass_cell::KlassCell;
 use crate::OneBit;
 use crate::oops::klass::{Klass};
 use crate::runtime::tls;
@@ -28,8 +27,8 @@ use crate::utils::global_defs::{address, naddr, word_t, K, LOG_BYTES_PER_ARCH};
 const KLASS_MEM_SPACE_SIZE: usize = OneBit!() << (26 + LOG_BYTES_PER_ARCH);
 const KLASS_MEM_BUCKET_SIZE: usize = 16 * K;
 
-pub fn alloc_klass() -> KlassCell {
-    KlassCell::with_raw(tls::klass_mem_pool().alloc())
+pub fn alloc_klass() -> &'static mut Klass<'static> {
+    unsafe { &mut *tls::klass_mem_pool().alloc() }
 }
 
 pub struct KlassMemSpace {
@@ -52,14 +51,14 @@ impl KlassMemSpace {
 }
 
 impl KlassMemSpace {
-    pub fn compress(&self, raw: *mut Klass) -> naddr {
-        let addr = raw as address;
+    pub fn compress(&self, raw: &Klass) -> naddr {
+        let addr = raw as *const _ as address;
         (((addr - self._base) >> LOG_BYTES_PER_ARCH) + size_of::<word_t>()) as _
     }
 
-    pub fn reslove(&self, comp: naddr) -> KlassCell {
+    pub fn reslove(&self, comp: naddr) -> &'static Klass {
         let addr = self._base + ((comp as address - size_of::<word_t>()) << LOG_BYTES_PER_ARCH);
-        KlassCell::with_raw(addr as _)
+        unsafe { *(addr as *const _) }
     }
 }
 

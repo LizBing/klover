@@ -18,6 +18,7 @@ use std::ptr::null_mut;
 
 use crate::oops::oop::ObjPtr;
 
+// Strong ref to java object.
 #[derive(Debug)]
 pub struct ObjHandle {
     _oop: ObjPtr
@@ -39,11 +40,7 @@ impl ObjHandle {
 }
 
 impl ObjHandle {
-    pub fn oop(&self) -> ObjPtr {
-        self._oop
-    }
-
-    pub fn set_oop(&mut self, oop: ObjPtr) {
-        self._oop = oop;
+    pub fn invoke(mthd: String) {
+        unimplemented!()
     }
 }
