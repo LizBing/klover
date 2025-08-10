@@ -65,6 +65,7 @@ impl<T: Copy> VMFlagData<T> {
 
 pub enum VMFlag {
     UsizeFlag(&'static VMFlagData<usize>),
-    I32Flag(&'static VMFlagData<i32>)
+    I32Flag(&'static VMFlagData<i32>),
+    BoolFlag(&'static VMFlagData<bool>)
 }
 

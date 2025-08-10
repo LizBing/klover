@@ -18,14 +18,13 @@ use cafebabe::ClassFile;
 use cafebabe::descriptors::ClassName;
 use crate::class_data::{class_loader};
 use crate::class_data::java_classes::{JavaLangClass, JavaLangObject};
+use crate::oops::field::Field;
 use crate::oops::obj_handle::ObjHandle;
 use crate::oops::oop::ObjPtr;
 
-
-
 #[derive(Debug)]
 pub struct Klass<'a> {
-    _name: ClassName<'a>,
+    _name: Option<ClassName<'a>>,
     _super: Option<&'a Klass<'a>>,
     _loader: ObjHandle,
 
@@ -33,6 +32,8 @@ pub struct Klass<'a> {
     _class_file: Option<ClassFile<'a>>,
 
     _mirror: ObjHandle,
+
+    _fields: Vec<Field<'a>>
 }
 
 impl Klass<'static> {
@@ -42,6 +43,16 @@ impl Klass<'static> {
         loader: ObjPtr,
         metadata: Vec<u8>,
     ) -> bool {
+        *self = Self {
+            _name: None,
+            _super: None,
+            _loader: ObjHandle::with_oop(loader),
+            _metadata: Vec::new(),
+            _class_file: None,
+            _mirror: ObjHandle::new(),
+            _fields: Vec::new(),
+        };
+
         self._metadata = metadata;
         let md = &self._metadata;
 
@@ -50,30 +61,28 @@ impl Klass<'static> {
             Err(_) => return false,
         };
 
-        self._name = cf.this_class.clone();
+        self._name = Some(cf.this_class.clone());
+
         self._super = match cf.super_class.clone() {
             Some(s) => Some(class_loader::load_class(loader, s.to_string())),
-
             None => None
         };
-        self._loader = ObjHandle::with_oop(loader);
-        self._class_file = Some(cf);
 
-        // resolve the handle in define_class
-        self._mirror = ObjHandle::new();
+        self._class_file = Some(cf);
 
         true
     }
 
     pub fn init_array_class(&mut self, name: ClassName<'static>, loader: ObjPtr) {
-        self._name = name;
-        self._super = Some(JavaLangObject::this());
-        self._loader = ObjHandle::with_oop(loader);
-        
-        self._metadata = Vec::new();
-        self._class_file = None;
-        
-        self._mirror = ObjHandle::new();
+        *self = Self {
+            _name: Some(name),
+            _super: Some(JavaLangObject::this()),
+            _loader: ObjHandle::with_oop(loader),
+            _metadata: Vec::new(),
+            _class_file: None,
+            _mirror: ObjHandle::new(),
+            _fields: Vec::new(),
+        }
     }
 }
 
@@ -85,7 +94,7 @@ impl Drop for Klass<'_> {
 
 impl Klass<'_> {
     pub fn name(&self) -> ClassName {
-        self._name.clone()
+        self._name.as_ref().unwrap().clone()
     }
 
     pub fn super_class(&self) -> Option<&'static Klass> {

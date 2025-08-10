@@ -14,6 +14,19 @@
  * limitations under the License.
  */
 
-pub mod jvalue;
-pub mod runtime_globals;
-pub mod tls;
+use crate::{oops::{obj_handle::ObjHandle, oop::ObjPtr}, utils::global_defs::address};
+
+#[derive(Debug)]
+pub enum Jvalue {
+    Boolean(bool),
+    Byte(i8),
+    Char(u16),
+    Short(i16),
+    Int(i32),
+    Long(i64),
+    Float(f32),
+    Double(f64),
+    Ref(ObjPtr),
+
+    ReturnAddress(address)
+}

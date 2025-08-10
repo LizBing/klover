@@ -14,5 +14,6 @@
  * limitations under the License.
  */
 pub mod collected_heap;
+pub mod gc_globals;
 pub mod mem_allocator;
 mod barrier_set;

@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
-pub mod jvalue;
-pub mod runtime_globals;
-pub mod tls;
+use klover_flag_sys_proc_macro::def_vm_flags;
+
+def_vm_flags! {
+    RUNTIME_GLOBALS {
+        product(USE_COMPRESSED_OOPS, bool, true, None, "Use compressed oops.")
+    }
+}
