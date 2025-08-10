@@ -17,9 +17,14 @@
 use std::sync::Arc;
 
 use cafebabe::descriptors::ClassName;
+use dashmap::DashMap;
 use once_cell::{unsync::OnceCell};
-use crate::{class_data::{java_classes::JavaLangClass, klass_table::{self, LoaderKey}}, metaspace::{klass_allocator::alloc_klass,}, oops::{klass::Klass, oop::ObjPtr}};
+use crate::{class_data::java_classes::JavaLangClass, metaspace::klass_allocator::alloc_klass, oops::{klass::Klass, obj_handle::ObjHandle, oop::ObjPtr}, utils::easy_cell::EasyCell};
 
-pub fn load_class(loader: ObjPtr) -> &'static Klass<'static> {
+pub fn load_class(loader: ObjPtr, fqn: String) -> &'static Klass<'static> {
+    unimplemented!()
+}
+
+pub fn define_class(loader: ObjPtr, fqn: String) -> &'static Klass<'static> {
     unimplemented!()
 }

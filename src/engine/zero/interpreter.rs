@@ -21,6 +21,7 @@ use cafebabe::bytecode::Opcode;
 use crate::code::cp_cache::ConstantPoolCacheEntry;
 use crate::code::method::Method;
 use crate::engine::context::{slot_t, Context};
+use crate::gc::common::mem_allocator::{ArrayObjAllocator, MemAllocator};
 use crate::oops::obj_desc::ObjDesc;
 use crate::oops::oop::ObjPtr;
 use crate::utils::global_defs::{addr_cast, address};
@@ -196,6 +197,11 @@ impl<'a> ZeroEngine<'a> {
                     match mthd.cp_cache.acquire(index) {
                         ConstantPoolCacheEntry::None => {
                             // todo: resolve
+                            match t {
+                                cafebabe::constant_pool::ObjectArrayType::ArrayType(d) => {},
+                                
+                                _ => unreachable!()
+                            }
                         }
 
                         ConstantPoolCacheEntry::KlassHandle(klass) => {
@@ -222,11 +228,11 @@ impl<'a> ZeroEngine<'a> {
                 Opcode::Astore(index) => {
                     self.local_store_ptr(*index);
                 }
-
+*/
                 Opcode::Athrow => {
                     // ...
                 }
-
+/*
                 Opcode::Baload => {
                     self.array_load::<jbyte>();
                 }
@@ -782,7 +788,7 @@ impl<'a> ZeroEngine<'a> {
                 Opcode::Multianewarray(t, dims) => {
                     // ...
                 }
-
+*/
                 Opcode::New(t) => {
                     // ...
                 }
@@ -790,7 +796,7 @@ impl<'a> ZeroEngine<'a> {
                 Opcode::Newarray(t) => {
                     // ...
                 }
-
+/*
                 Opcode::Nop => {
                     // Do nothing
                 }

@@ -47,11 +47,11 @@ pub trait MemAllocator {
 }
 
 pub struct ClassAllocator<'a> {
-    _native: &'a Klass<'a>
+    _native: &'a Klass<'static>
 }
 
 impl<'a> ClassAllocator<'a> {
-    pub fn new(native: &'a Klass<'a>) -> Self {
+    pub fn new(native: &'a Klass<'static>) -> Self {
         Self {
             _native: native
         }
@@ -73,3 +73,54 @@ impl<'a> MemAllocator for ClassAllocator<'a> {
     } 
 }
 
+pub struct ObjAllocator<'a> {
+    _klass: &'a Klass<'static>,
+    _size: usize
+}
+
+impl<'a> ObjAllocator<'a> {
+    pub fn new(klass: &'a Klass<'static>, size: usize) -> Self {
+        Self {
+            _klass: klass,
+            _size: size
+        }
+    }
+}
+
+impl MemAllocator for ObjAllocator<'_> {
+    fn size(&self) -> usize {
+        self._size
+    }
+
+    fn klass(&self) -> &Klass<'static> {
+        self._klass
+    }
+
+    fn initialize(&self, mem: address) { }
+}
+
+pub struct ArrayObjAllocator<'a> {
+    _klass: &'a Klass<'static>,
+    _size: usize,
+    _len: i32
+}
+
+impl<'a> ArrayObjAllocator<'a> {
+    pub fn new(klass: &'a Klass<'static>, size: usize, len: i32) -> Self {
+        Self { _klass: klass, _size: size, _len: len }
+    }
+}
+
+impl MemAllocator for ArrayObjAllocator<'_> {
+    fn klass(&self) -> &Klass<'static> {
+        self._klass
+    }
+
+    fn size(&self) -> usize {
+        self._size
+    }
+
+    fn initialize(&self, mem: address) {
+        ObjDesc::set_array_len(mem, self._len);
+    }
+}

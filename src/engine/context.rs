@@ -15,7 +15,7 @@
  */
 
 use std::{ffi::c_void, ptr::null_mut};
-use std::cell::UnsafeCell;
+use std::cell::{Cell, UnsafeCell};
 use crate::engine::engine_globals::INTP_STACK_SIZE;
 use crate::{align_up, memory::{allocation::c_heap_alloc, mem_region::MemRegion, virt_space::VirtSpace}, utils::global_defs::{addr_cast, address, word_t}};
 
@@ -47,14 +47,16 @@ impl VMRegiters {
 #[derive(Debug)]
 pub struct Context {
     _regs: UnsafeCell<VMRegiters>,
-    _stack: MemRegion
+    _stack: MemRegion,
+    _depth: Cell<usize>
 }
 
 impl Context {
     pub fn new() -> Self {
         Self {
             _regs: UnsafeCell::new(VMRegiters::new()),
-            _stack: c_heap_alloc(align_up!(INTP_STACK_SIZE.get_value(), VirtSpace::page_size())).unwrap()
+            _stack: c_heap_alloc(align_up!(INTP_STACK_SIZE.get_value(), VirtSpace::page_size())).unwrap(),
+            _depth: Cell::new(0)
         }
     }
 }
@@ -68,6 +70,10 @@ impl Context {
 impl Context {
     fn get_regs(&self) -> &'_ mut VMRegiters {
         unsafe { &mut *self._regs.get() }
+    }
+
+    pub fn depth(&self) -> usize {
+        self._depth.get()
     }
 }
 
@@ -96,7 +102,7 @@ impl Context {
 
         res
     }
-
+/*
     pub fn try_free(&self, addr: address, slots: usize) -> bool {
         let size = Self::size_of_slots(slots);
         
@@ -107,7 +113,7 @@ impl Context {
 
         true
     }
-
+*/
     pub fn create_frame<T>(&self, data: T) -> bool {
         let regs = self.get_regs();
 
@@ -121,6 +127,8 @@ impl Context {
         new_frame.store(regs.bp, data);
         regs.bp = new_frame as *const _ as _;
 
+        self._depth.set(self.depth() + 1);
+
         true
     }
 
@@ -130,16 +138,22 @@ impl Context {
     }
 
     pub fn unwind<T: Copy>(&self) -> Option<T> {
+        if self.depth() == 0 {
+            return None;
+        }
+
         let regs = self.get_regs();
 
         let frame;
         match addr_cast::<Frame<T>>(regs.bp) {
-            None => return None,
             Some(n) => frame = n,
+            _ => unreachable!()
         }
 
         regs.sp = Self::cal_unwind_sp::<T>(regs.bp);
         regs.bp = frame.stored_bp;
+
+        self._depth.set(self.depth() - 1);
 
         Some(frame.stored_data)
     }

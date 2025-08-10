@@ -16,8 +16,6 @@
 
 use std::fs::File;
 use std::io::Read;
-use std::path::PathBuf;
-use cafebabe::descriptors::ClassName;
 use once_cell::sync::OnceCell;
 
 static CLASS_PATHS: OnceCell<Vec<String>> = OnceCell::new();

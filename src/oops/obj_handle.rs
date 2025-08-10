@@ -40,7 +40,7 @@ impl ObjHandle {
 }
 
 impl ObjHandle {
-    pub fn invoke(mthd: String) {
-        unimplemented!()
+    pub fn is_null(&self) -> bool {
+        self._oop.is_null()
     }
 }
