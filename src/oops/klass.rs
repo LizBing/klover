@@ -33,7 +33,11 @@ pub struct Klass<'a> {
 
     _mirror: ObjHandle,
 
-    _fields: Vec<Field<'a>>
+    _fields: Vec<Field<'a>>,
+
+    // hot fields
+    _cp_entries: usize,
+    _size_of_instance: usize
 }
 
 impl Klass<'static> {
@@ -51,15 +55,17 @@ impl Klass<'static> {
             _class_file: None,
             _mirror: ObjHandle::new(),
             _fields: Vec::new(),
+            _cp_entries: 0,
+            _size_of_instance: 0
         };
 
         self._metadata = metadata;
-        let md = &self._metadata;
 
-        let cf = match cafebabe::parse_class(md.as_slice()) {
+        self._class_file = Some(match cafebabe::parse_class(self._metadata.as_slice()) {
             Ok(n) => n,
             Err(_) => return false,
-        };
+        });
+        let cf = self._class_file.as_ref().unwrap();
 
         self._name = Some(cf.this_class.clone());
 
@@ -68,21 +74,15 @@ impl Klass<'static> {
             None => None
         };
 
-        self._class_file = Some(cf);
+        self._cp_entries = cf.constantpool_iter().count();
+
+        // todo: resolve fields and methods.
 
         true
     }
 
-    pub fn init_array_class(&mut self, name: ClassName<'static>, loader: ObjPtr) {
-        *self = Self {
-            _name: Some(name),
-            _super: Some(JavaLangObject::this()),
-            _loader: ObjHandle::with_oop(loader),
-            _metadata: Vec::new(),
-            _class_file: None,
-            _mirror: ObjHandle::new(),
-            _fields: Vec::new(),
-        }
+    pub fn init_array_class(&mut self, elem_type: &'static Klass, dimensions: usize) {
+        unimplemented!()
     }
 }
 
@@ -104,10 +104,14 @@ impl Klass<'_> {
     pub fn mirror(&self) -> &ObjHandle {
         &self._mirror
     }
+
+    pub fn cp_entries(&self) -> usize {
+        self._cp_entries
+    }
 }
 
 impl Klass<'_> {
-    pub fn size_of_instance() -> usize {
-        unimplemented!()
+    pub fn size_of_instance(&self) -> usize {
+        self._size_of_instance
     }
 }

@@ -25,33 +25,19 @@ pub struct Field<'a> {
     _static: Option<Jvalue>
 }
 
-pub fn convert<'a>(cf: &ClassFile) -> (Vec<Field<'a>>, usize) {
-    let mut res = Vec::new();
-    let mut size_of_instance = 0;
-
-    for n in &cf.fields {
-        let inc;
-        let desc = &n.descriptor;
-
-        if desc.dimensions != 0 {
-            if runtime_globals::USE_COMPRESSED_OOPS.get_value() {
-                inc = size_of::<naddr>();
-            } else {
-                inc = size_of::<address>();
-            }
-        } else {
-            match desc.field_type {
-                FieldType::Object(_) => {
-                    if runtime_globals::USE_COMPRESSED_OOPS.get_value() {
-                        inc = size_of::<naddr>();
-                    } else {
-                        inc = size_of::<address>();
-                    }
-                }
-            }
+impl<'a> Field<'a> {
+    pub fn new_non_static(info: &'a FieldInfo, offs: usize) -> Self {
+        Self {
+            _info: info,
+            _offs: offs,
+            _static: None
         }
     }
-
-    (res, size_of_instance)
 }
 
+impl Field<'_> {
+    // the offset from ObjPtr
+    pub fn offset(&self) -> usize {
+        self._offs
+    }
+}

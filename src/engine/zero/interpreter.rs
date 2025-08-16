@@ -15,7 +15,7 @@
  */
 
 use std::cell::{Cell, UnsafeCell};
-use std::ptr::null_mut;
+use std::ptr::{null, null_mut};
 
 use cafebabe::bytecode::Opcode;
 use crate::code::cp_cache::ConstantPoolCacheEntry;
@@ -28,20 +28,28 @@ use crate::utils::global_defs::{addr_cast, address};
 
 // Refs: JVMS 21 Table 2.11.1-B
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct ZeroProcData<'a> {
-    mthd: &'a Method<'a>,
+    _mthd: *const Method<'a>,
+
     pc: usize,
     locals: *mut slot_t
 }
 
 impl<'a> ZeroProcData<'a> {
-    fn new(mthd: &'a Method, locals: address) -> Self {
-        Self {
-            mthd: mthd,
-            pc: 0,
-            locals: locals as _
-        }
+    fn new() -> Self {
+        Self { _mthd: null(), pc: 0, locals: null_mut() }
+    }
+
+    fn init(&mut self, mthd: &'a Method<'a>, locals: *mut slot_t) {
+        self._mthd = mthd;
+        self.locals = locals;
+    }
+}
+
+impl ZeroProcData<'_> {
+    fn mthd(&self) -> &Method {
+        unsafe { &*self._mthd }
     }
 }
 
@@ -63,53 +71,40 @@ impl ZeroProcData<'_> {
 
 struct ZeroEngine<'a> {
     _ctx: &'a Context,
-    _proc_data: UnsafeCell<Option<ZeroProcData<'a>>>
+    _proc_data: UnsafeCell<ZeroProcData<'a>>
 }
 
 impl<'a> ZeroEngine<'a> {
-    pub fn new<'b: 'a>(ctx: &'b Context) -> Self {
-        Self { _ctx: ctx, _proc_data: UnsafeCell::new(None) }
+    pub fn new(ctx: &'a Context) -> Self {
+        Self { _ctx: ctx, _proc_data: UnsafeCell::new(ZeroProcData::new()) }
     }
 }
 
 impl<'a> ZeroEngine<'a> {
-    fn proc_data(&self) -> &'a mut ZeroProcData<'a> {
+    fn proc_data(&self) -> &mut ZeroProcData<'a> {
         unsafe {
-            self._proc_data.get().as_mut().unwrap().as_mut().unwrap()
+            &mut *self._proc_data.get()
         }
     }
 }
 
 impl<'a> ZeroEngine<'a> {
-    fn create_data(&self, mthd: &'a Method) {
-        let locals = self._ctx.alloca(mthd.code_data().max_locals as usize, true);
-        let pd = ZeroProcData::new(mthd, locals);
+    fn prepare_proc_data(&self, mthd: &'a Method) {
+        let locals = self._ctx.alloca(mthd.code_data().unwrap().max_locals as usize, true);
+        assert!(locals != 0);
 
-        unsafe {
-            *self._proc_data.get() = Some(pd);
-        }
+        self.proc_data().init(mthd, locals as _);
     }
 
     fn unwind(&self) -> bool {
         unsafe {
             match self._ctx.unwind() {
-                Some(n) => *self._proc_data.get() = Some(n),
+                Some(n) => *self.proc_data() = n,
                 None => return false
             }
         }
 
         true
-    }
-
-    fn reflect_cp_index(&self, bin_offs: usize) -> usize {
-        let code = self.proc_data().mthd.code_data().code;
-
-        let indexbyte1 = code[bin_offs + 1] as u16;
-        let indexbyte2 = code[bin_offs + 2] as u16;
-
-        let index = (indexbyte1 << 8) | indexbyte2;
-
-        index as usize
     }
 
     fn pop_ref(&self) -> Option<&'_ ObjDesc> {
@@ -169,12 +164,17 @@ impl<'a> ZeroEngine<'a> {
 
 impl<'a> ZeroEngine<'a> {
     fn process(&self, mthd: &'a Method) {
-        self.create_data(mthd);
+        self.prepare_proc_data(mthd);
 
         loop {
-            let mthd = self.proc_data().mthd;
+            let mthd = self.proc_data().mthd();
+            let opcodes = &mthd.code_data()
+                .expect("no available code data")
+                .bytecode.as_ref()
+                .unwrap()
+                .opcodes;
 
-            let opc_pair = mthd.opcodes()[self.proc_data().pc].clone();
+            let opc_pair = opcodes[self.proc_data().pc].clone();
             match opc_pair.1 {
                 Opcode::Aaload => {
                     self.array_load_oop()
@@ -193,23 +193,7 @@ impl<'a> ZeroEngine<'a> {
                 }
 
                 Opcode::Anewarray(t) => {
-                    let index = self.reflect_cp_index(opc_pair.0);
-                    match mthd.cp_cache.acquire(index) {
-                        ConstantPoolCacheEntry::None => {
-                            // todo: resolve
-                            match t {
-                                cafebabe::constant_pool::ObjectArrayType::ArrayType(d) => {},
-                                
-                                _ => unreachable!()
-                            }
-                        }
-
-                        ConstantPoolCacheEntry::KlassHandle(klass) => {
-                            // todo: new array
-                        }
-
-                        _ => { unreachable!( )}
-                    }
+                    ;
                 }
                 Opcode::Areturn => {
                     // to be implemented

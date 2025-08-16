@@ -28,6 +28,10 @@ impl JavaLangObject {
             JAVA_LANG_OBJECT.get().unwrap()
         }
     }
+
+    pub fn size_of_instance() -> usize {
+        universe::heap().min_obj_size()
+    }
 }
 
 static mut JAVA_LANG_CLASS: OnceCell<&'static Klass> = OnceCell::new();
@@ -40,8 +44,8 @@ impl JavaLangClass {
         }
     }
 
-    fn size_of_instance() -> usize {
-        universe::heap().min_obj_size()
+    pub fn size_of_instance() -> usize {
+        universe::heap().min_obj_size() + size_of::<&Klass>()
     }
 }
 

@@ -21,12 +21,12 @@ use crate::{align_up, memory::{allocation::c_heap_alloc, mem_region::MemRegion, 
 
 pub type slot_t = usize;
 
-struct Frame<T> {
+struct Frame<T: Clone> {
     stored_bp: address,
     stored_data: T,
 }
 
-impl<T> Frame<T> {
+impl<T: Clone> Frame<T> {
     fn store(&mut self, bp: address, data: T) {
         self.stored_bp = bp;
         self.stored_data = data;
@@ -64,6 +64,10 @@ impl Context {
 impl Context {
     pub const fn size_of_slots(n: usize) -> usize {
         size_of::<slot_t>() * n
+    }
+
+    pub const fn size_in_slots<T>() -> usize {
+        align_up!(size_of::<T>(), size_of::<slot_t>()) / size_of::<slot_t>()
     }
 }
 
@@ -114,7 +118,7 @@ impl Context {
         true
     }
 */
-    pub fn create_frame<T>(&self, data: T) -> bool {
+    pub fn create_frame<T: Clone>(&self, data: T) -> bool {
         let regs = self.get_regs();
 
         let mem = self.alloca(size_of::<Frame<T>>(), false);
@@ -133,11 +137,11 @@ impl Context {
     }
 
     // helper
-    fn cal_unwind_sp<T>(bp: address) -> address {
+    fn cal_unwind_sp<T: Clone>(bp: address) -> address {
         bp + size_of::<Frame<T>>()
     }
 
-    pub fn unwind<T: Copy>(&self) -> Option<T> {
+    pub fn unwind<T: Clone>(&self) -> Option<T> {
         if self.depth() == 0 {
             return None;
         }
@@ -155,11 +159,11 @@ impl Context {
 
         self._depth.set(self.depth() - 1);
 
-        Some(frame.stored_data)
+        Some(frame.stored_data.clone())
     }
 
     // Unsafe unless reserved.
-    pub fn push<const SLOTS: usize, T: Copy>(&self, n: T) {
+    pub fn push<const SLOTS: usize, T>(&self, n: T) {
         let regs = self.get_regs();
         regs.sp -= Self::size_of_slots(SLOTS);
 

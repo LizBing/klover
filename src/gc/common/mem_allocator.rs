@@ -60,7 +60,7 @@ impl<'a> ClassAllocator<'a> {
 
 impl<'a> MemAllocator for ClassAllocator<'a> {
     fn size(&self) -> usize {
-        universe::heap().min_obj_size() + size_of::<&Klass>()
+        JavaLangClass::size_of_instance()
     }
 
     fn klass(&self) -> &Klass<'static> {

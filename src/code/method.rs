@@ -1,5 +1,3 @@
-use std::borrow::Cow;
-
 /*
  * Copyright 2025 Lei Zaakjyu
  *
@@ -15,24 +13,67 @@ use std::borrow::Cow;
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-use cafebabe::{attributes::{AttributeData, AttributeInfo, CodeData}, bytecode::Opcode};
 
-use crate::code::cp_cache::ConstantPoolCache;
+use cafebabe::{attributes::{AttributeData, AttributeInfo, CodeData}, bytecode::Opcode, MethodInfo};
+
+use crate::{code::cp_cache::{self, ConstantPoolCache}, oops::klass::Klass};
 
 pub struct Method<'a> {
-    _name: Cow<'a, str>,
-    _code_data: &'a CodeData<'a>,
+    _info: &'a MethodInfo<'a>,
+    _code_data: Option<&'a CodeData<'a>>,
 
-    pub cp_cache: ConstantPoolCache
+    _klass: &'static Klass<'static>,
+    _cp_cache: ConstantPoolCache
+}
+
+impl<'a> Method<'a> {
+    // @cp_entries: If the value is 0, we make self._cp_cache None.
+    pub fn new(info: &'a MethodInfo, klass: &'static Klass) -> Self {
+        let mut code_data = None;
+        for n in &info.attributes {
+            match &n.data {
+                AttributeData::Code(cd) => {
+                    code_data = Some(cd);
+                    break;
+                }
+
+                _ => continue
+            }
+        }
+
+        Self {
+            _info: info,
+            _code_data: code_data,
+            _klass: klass,
+            _cp_cache: ConstantPoolCache::new(klass.cp_entries())
+        }
+    }
 }
 
 impl Method<'_> {
-    pub fn code_data(&self) -> &CodeData {
+    pub fn code_data(&self) -> Option<&CodeData> {
         self._code_data
     }
 
-    pub fn opcodes(&self) -> &Vec<(usize, Opcode)> {
-        &self._code_data.bytecode.as_ref().unwrap().opcodes
+    pub fn klass(&self) -> &'static Klass {
+        self._klass
+    }
+
+    pub fn cp_cache(&self) -> &ConstantPoolCache {
+        &self._cp_cache
+    }
+}
+
+impl Method<'_> {
+    pub fn reflect_cp_index(&self, code_offs: usize) -> usize {
+        let code = self._code_data.unwrap().code;
+
+        let indexbyte1 = code[code_offs + 1] as u16;
+        let indexbyte2 = code[code_offs + 2] as u16;
+
+        let index = (indexbyte1 << 8) | indexbyte2;
+
+        index as usize
     }
 }
 
