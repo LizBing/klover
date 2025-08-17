@@ -14,23 +14,21 @@
  * limitations under the License.
  */
 
-use cafebabe::{descriptors::FieldType, ClassFile, FieldInfo};
+use cafebabe::{descriptors::FieldType, AccessFlags, ClassFile, FieldAccessFlags, FieldInfo};
 
-use crate::{runtime::{jvalue::Jvalue, runtime_globals::{self, RUNTIME_GLOBALS}}, utils::global_defs::{address, naddr}};
+use crate::{align_up, common::universe, oops::{klass::Klass, obj_desc::{self, ObjDesc}}, runtime::runtime_globals::{self, USE_COMPRESSED_OOPS}, utils::{align, global_defs::{self, address, naddr}}};
 
 #[derive(Debug)]
 pub struct Field<'a> {
     _info: &'a FieldInfo<'a>,
     _offs: usize,   // offset from the obj header(ObjPtr)
-    _static: Option<Jvalue>
 }
 
 impl<'a> Field<'a> {
-    pub fn new_non_static(info: &'a FieldInfo, offs: usize) -> Self {
+    pub fn new(info: &'a FieldInfo, offs: usize) -> Self {
         Self {
             _info: info,
             _offs: offs,
-            _static: None
         }
     }
 }
@@ -39,5 +37,170 @@ impl Field<'_> {
     // the offset from ObjPtr
     pub fn offset(&self) -> usize {
         self._offs
+    }
+}
+
+pub struct Fields<'a> {
+    _infos: &'a Vec<FieldInfo<'a>>,
+
+    pub instance_fields: Vec<Field<'a>>,
+    pub size_of_instance: usize,
+    pub offs_of_instance_refs: usize,
+    pub instance_refs: usize,
+
+    // describes klass mirror
+    pub static_fields: Vec<Field<'a>>,
+    pub size_of_statics: usize,
+    pub offs_of_static_refs: usize,
+    pub static_refs: usize
+}
+
+impl<'a> Fields<'a> {
+    pub fn new(infos: &'a Vec<FieldInfo>) -> Self {
+        Self {
+            _infos: infos,
+            instance_fields: Vec::new(),
+            size_of_instance: 0,
+            offs_of_instance_refs: 0,
+            instance_refs: 0,
+            static_fields: Vec::new(),
+            size_of_statics: 0,
+            offs_of_static_refs: 0,
+            static_refs: 0,
+        }
+    }
+}
+
+struct SortResult<'a> {
+    _1_byte_ins: Vec<&'a FieldInfo<'a>>,
+    _2_bytes_ins: Vec<&'a FieldInfo<'a>>,
+    _4_bytes_ins: Vec<&'a FieldInfo<'a>>,
+    _8_bytes_ins: Vec<&'a FieldInfo<'a>>,
+    ref_ins: Vec<&'a FieldInfo<'a>>,
+    
+    _1_byte_sta: Vec<&'a FieldInfo<'a>>,
+    _2_bytes_sta: Vec<&'a FieldInfo<'a>>,
+    _4_bytes_sta: Vec<&'a FieldInfo<'a>>,
+    _8_bytes_sta: Vec<&'a FieldInfo<'a>>,
+    ref_sta: Vec<&'a FieldInfo<'a>>,
+}
+
+impl<'a> Fields<'a> {
+    fn sort(infos: &'a Vec<FieldInfo<'a>>) -> SortResult<'a> {
+        let mut res = SortResult {
+            _1_byte_ins: Vec::new(),
+            _2_bytes_ins: Vec::new(),
+            _4_bytes_ins: Vec::new(),
+            _8_bytes_ins: Vec::new(),
+            ref_ins: Vec::new(),
+
+            _1_byte_sta: Vec::new(),
+            _2_bytes_sta: Vec::new(),
+            _4_bytes_sta: Vec::new(),
+            _8_bytes_sta: Vec::new(),
+            ref_sta: Vec::new(),
+        };
+
+        for info in infos {
+            if info.descriptor.dimensions != 0 {
+                if info.access_flags.contains(FieldAccessFlags::STATIC) {
+                    res.ref_sta.push(info);
+                } else {
+                    res.ref_ins.push(info);
+                }
+            } else {
+                match info.descriptor.field_type {
+                    FieldType::Boolean | FieldType::Byte => {
+                        if info.access_flags.contains(FieldAccessFlags::STATIC) {
+                            res._1_byte_sta.push(info);
+                        } else {
+                            res._1_byte_ins.push(info);
+                        }
+                    }
+
+                    FieldType::Char | FieldType::Short => {
+                        if info.access_flags.contains(FieldAccessFlags::STATIC) {
+                            res._2_bytes_sta.push(info);
+                        } else {
+                            res._2_bytes_ins.push(info);
+                        }
+                    }
+
+                    FieldType::Integer | FieldType::Float => {
+                        if info.access_flags.contains(FieldAccessFlags::STATIC) {
+                            res._4_bytes_sta.push(info);
+                        } else {
+                            res._4_bytes_ins.push(info);
+                        }
+                    }
+
+                    FieldType::Long | FieldType::Double => {
+                        if info.access_flags.contains(FieldAccessFlags::STATIC) {
+                            res._8_bytes_sta.push(info);
+                        } else {
+                            res._8_bytes_ins.push(info);
+                        }
+                    }
+
+                    FieldType::Object(_) => {
+                        if info.access_flags.contains(FieldAccessFlags::STATIC) {
+                            res.ref_sta.push(info);
+                        } else {
+                            res.ref_ins.push(info);
+                        }
+                    }
+                }
+            }
+        }
+
+        res
+    }
+}
+
+impl<'a> Fields<'a> {
+    pub fn convert_info(&'a mut self, mut offs: usize) {
+        let ref_align;
+        if USE_COMPRESSED_OOPS.get_value() {
+            ref_align = size_of::<naddr>();
+        } else {
+            ref_align = size_of::<address>();
+        }
+
+        let sorted = Self::sort(self._infos);
+        self.instance_refs = sorted.ref_ins.len();
+        self.static_refs = sorted.ref_sta.len();
+
+        let mut instance_fields = Vec::new();
+        instance_fields.append(&mut Self::layout_fields(&sorted._8_bytes_ins, &mut offs, 8));
+        instance_fields.append(&mut Self::layout_fields(&sorted._4_bytes_ins, &mut offs, 4));
+        instance_fields.append(&mut Self::layout_fields(&sorted._2_bytes_ins, &mut offs, 2));
+        instance_fields.append(&mut Self::layout_fields(&sorted._1_byte_ins, &mut offs, 1));
+        self.offs_of_static_refs = align_up!(offs, ref_align);
+        instance_fields.append(&mut Self::layout_fields(&sorted.ref_ins, &mut offs, ref_align));
+        self.instance_fields = instance_fields;
+        self.size_of_instance = offs;
+
+        let mut offs_statics = universe::heap().min_obj_size() + size_of::<&Klass>();
+        let mut static_fields = Vec::new();
+        static_fields.append(&mut Self::layout_fields(&sorted._8_bytes_sta, &mut offs_statics, 8));
+        static_fields.append(&mut Self::layout_fields(&sorted._4_bytes_sta, &mut offs_statics, 4));
+        static_fields.append(&mut Self::layout_fields(&sorted._2_bytes_sta, &mut offs_statics, 2));
+        static_fields.append(&mut Self::layout_fields(&sorted._1_byte_sta, &mut offs_statics, 1));
+        self.offs_of_static_refs = align_up!(offs_statics, ref_align);
+        static_fields.append(&mut Self::layout_fields(&sorted.ref_sta, &mut offs_statics, ref_align));
+        self.size_of_statics = offs_statics;
+    }
+
+    // returns offset
+    fn layout_fields(src: &Vec<&'a FieldInfo<'a>>, offs: &mut usize, align: usize) -> Vec<Field<'a>> {
+        let mut res = Vec::new();
+
+        for n in src {
+            *offs = align_up!(*offs, align);
+            *offs += align;
+            res.push(Field::new(*n, *offs));
+        }
+
+        res
     }
 }
