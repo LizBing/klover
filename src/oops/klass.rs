@@ -18,7 +18,9 @@ use cafebabe::ClassFile;
 use cafebabe::descriptors::ClassName;
 use crate::class_data::{class_loader};
 use crate::class_data::java_classes::{JavaLangClass, JavaLangObject};
-use crate::oops::field::Field;
+use crate::common::universe;
+use crate::oops::field::{Field, Fields};
+use crate::oops::obj_desc::ObjDesc;
 use crate::oops::obj_handle::ObjHandle;
 use crate::oops::oop::ObjPtr;
 
@@ -33,7 +35,7 @@ pub struct Klass<'a> {
 
     _mirror: ObjHandle,
 
-    _fields: Vec<Field<'a>>,
+    _fields: Fields<'a>,
 
     // hot fields
     _cp_entries: usize,
@@ -54,7 +56,7 @@ impl Klass<'static> {
             _metadata: Vec::new(),
             _class_file: None,
             _mirror: ObjHandle::new(),
-            _fields: Vec::new(),
+            _fields: Fields::new(),
             _cp_entries: 0,
             _size_of_instance: 0
         };
@@ -77,6 +79,11 @@ impl Klass<'static> {
         self._cp_entries = cf.constantpool_iter().count();
 
         // todo: resolve fields and methods.
+        let offs = match self._super {
+            Some(s) => s.size_of_instance(),
+            None => ObjDesc::size_of_normal_desc()
+        };
+        self._fields.init(offs, &cf.fields);
 
         true
     }
