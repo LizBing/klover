@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-pub mod array_class;
-pub mod field;
-pub mod klass;
-pub(super) mod mark_word;
-pub mod obj_handle;
-pub mod oop;
-pub mod obj_desc;
+use crate::oops::{klass::Klass, obj_handle::ObjHandle};
+
+pub struct ArrayKlass {
+    _dimensions: usize,
+    _elem_type: &'static Klass<'static>,
+    _mirror: ObjHandle
+}

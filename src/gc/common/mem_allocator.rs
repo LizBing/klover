@@ -47,20 +47,20 @@ pub trait MemAllocator {
 }
 
 pub struct ClassAllocator<'a> {
-    _native: &'a Klass<'static>
+    _native: &'a Klass<'static>,
 }
 
 impl<'a> ClassAllocator<'a> {
-    pub fn new(native: &'a Klass<'static>) -> Self {
+    pub fn new(native: &'static Klass<'static>) -> Self {
         Self {
-            _native: native
+            _native: native,
         }
     }
 }
 
 impl<'a> MemAllocator for ClassAllocator<'a> {
     fn size(&self) -> usize {
-        JavaLangClass::size_of_instance()
+        self._native.size_of_mirror()
     }
 
     fn klass(&self) -> &Klass<'static> {

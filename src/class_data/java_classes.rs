@@ -43,10 +43,6 @@ impl JavaLangClass {
             JAVA_LANG_CLASS.get().unwrap()
         }
     }
-
-    pub fn size_of_instance() -> usize {
-        universe::heap().min_obj_size() + size_of::<&Klass>()
-    }
 }
 
 impl JavaLangClass {

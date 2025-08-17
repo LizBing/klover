@@ -18,6 +18,7 @@ use cafebabe::ClassFile;
 use cafebabe::descriptors::ClassName;
 use crate::class_data::{class_loader};
 use crate::class_data::java_classes::{JavaLangClass, JavaLangObject};
+use crate::code::cp_cache::ConstantPoolCache;
 use crate::common::universe;
 use crate::oops::field::{Field, Fields};
 use crate::oops::obj_desc::ObjDesc;
@@ -88,8 +89,18 @@ impl Klass<'static> {
         true
     }
 
-    pub fn init_array_class(&mut self, elem_type: &'static Klass, dimensions: usize) {
-        unimplemented!()
+    pub fn init_primitive(&mut self, name: ClassName<'static>, size_of_instance: usize) {
+        *self = Self {
+            _name: Some(name),
+            _super: Some(JavaLangObject::this()),
+            _loader: ObjHandle::new(),
+            _metadata: Vec::new(),
+            _class_file: None,
+            _mirror: ObjHandle::new(),
+            _fields: Fields::new(),
+            _cp_entries: 0,
+            _size_of_instance: size_of_instance
+        };
     }
 }
 
@@ -119,6 +130,10 @@ impl Klass<'_> {
 
 impl Klass<'_> {
     pub fn size_of_instance(&self) -> usize {
-        self._size_of_instance
+        self._fields.size_of_instance
+    }
+
+    pub fn size_of_mirror(&self) -> usize {
+        self._fields.size_of_statics
     }
 }
