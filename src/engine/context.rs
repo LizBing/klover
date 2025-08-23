@@ -14,10 +14,12 @@
  * limitations under the License.
  */
 
-use std::{ffi::c_void, ptr::null_mut};
-use std::cell::{Cell, UnsafeCell};
+use std::{ptr::null_mut};
+use std::cell::{Cell};
+use once_cell::unsync::OnceCell;
+
 use crate::engine::engine_globals::INTP_STACK_SIZE;
-use crate::{align_up, memory::{allocation::c_heap_alloc, mem_region::MemRegion, virt_space::VirtSpace}, utils::global_defs::{addr_cast, address, word_t}};
+use crate::{align_up, memory::{allocation::c_heap_alloc, mem_region::MemRegion}, utils::global_defs::{addr_cast, address, word_t}};
 
 pub type slot_t = usize;
 
@@ -33,31 +35,30 @@ impl<T: Clone> Frame<T> {
     }
 }
 
-pub struct VMRegiters {
-    sp: address,
-    bp: address
-}
-
-impl VMRegiters {
-    fn new() -> Self {
-        VMRegiters { sp: 0, bp: 0 }
-    }
-}
-
 #[derive(Debug)]
 pub struct Context {
-    _regs: UnsafeCell<VMRegiters>,
-    _stack: MemRegion,
+    _bp: Cell<address>,
+    _sp: Cell<*mut slot_t>,
+
+    _stack: once_cell::unsync::OnceCell<MemRegion>,
     _depth: Cell<usize>
 }
 
 impl Context {
     pub fn new() -> Self {
         Self {
-            _regs: UnsafeCell::new(VMRegiters::new()),
-            _stack: c_heap_alloc(align_up!(INTP_STACK_SIZE.get_value(), VirtSpace::page_size())).unwrap(),
+            _sp: Cell::new(null_mut()),
+            _bp: Cell::new(0),
+            _stack: OnceCell::new(),
             _depth: Cell::new(0)
         }
+    }
+
+    pub fn init(&self) {
+        let stack_mr = c_heap_alloc(INTP_STACK_SIZE.get_value()).expect("out of memory");
+        self._stack.set(stack_mr.clone()).unwrap();
+        self._sp.set(stack_mr.end() as _);
+        self._bp.set(stack_mr.end());
     }
 }
 
@@ -72,36 +73,30 @@ impl Context {
 }
 
 impl Context {
-    fn get_regs(&self) -> &'_ mut VMRegiters {
-        unsafe { &mut *self._regs.get() }
-    }
-
     pub fn depth(&self) -> usize {
         self._depth.get()
+    }
+
+    fn stack(&self) -> &MemRegion {
+        self._stack.get().unwrap()
     }
 }
 
 impl Context {
     // Ensure reachable.
     pub fn reserve(&self, slots: usize) -> bool {
-        let size = Self::size_of_slots(slots);
-        let regs = self.get_regs();
-
-        self._stack.contains(regs.sp - size)
+        unsafe { self.stack().contains(self._sp.get().sub(slots) as _) }
     }
 
     pub fn alloca(&self, slots: usize, zeroing: bool) -> address {
-        let size = Self::size_of_slots(slots);
-        let regs = self.get_regs();
-        
-        if !self._stack.contains(regs.sp - size) {
+        if !self.reserve(slots) {
             return 0;
         }
-        regs.sp -= size;
-        let res = regs.sp;
+        unsafe { self._sp.set(self._sp.get().sub(slots)); }
+        let res = self._sp.get() as _;
 
         if zeroing {
-            unsafe { MemRegion::with_size(res, size).memset(0); } 
+            MemRegion::with_size(res, Self::size_of_slots(slots)).memset(0);
         }
 
         res
@@ -119,17 +114,15 @@ impl Context {
     }
 */
     pub fn create_frame<T: Clone>(&self, data: T) -> bool {
-        let regs = self.get_regs();
-
-        let mem = self.alloca(size_of::<Frame<T>>(), false);
+        let mem = self.alloca(Self::size_in_slots::<Frame<T>>(), false);
         let new_frame;
         match addr_cast::<Frame<T>>(mem) {
             None => { return false; },
             Some(n) => new_frame = n,
         }
 
-        new_frame.store(regs.bp, data);
-        regs.bp = new_frame as *const _ as _;
+        new_frame.store(self._bp.get(), data);
+        self._bp.set(mem);
 
         self._depth.set(self.depth() + 1);
 
@@ -137,25 +130,18 @@ impl Context {
     }
 
     // helper
-    fn cal_unwind_sp<T: Clone>(bp: address) -> address {
-        bp + size_of::<Frame<T>>()
+    fn cal_unwind_sp<T: Clone>(bp: address) -> *mut slot_t {
+        (bp + Self::size_in_slots::<Frame<T>>()) as _
     }
 
     pub fn unwind<T: Clone>(&self) -> Option<T> {
         if self.depth() == 0 {
             return None;
         }
+        let frame = addr_cast::<Frame<T>>(self._bp.get()).unwrap();
 
-        let regs = self.get_regs();
-
-        let frame;
-        match addr_cast::<Frame<T>>(regs.bp) {
-            Some(n) => frame = n,
-            _ => unreachable!()
-        }
-
-        regs.sp = Self::cal_unwind_sp::<T>(regs.bp);
-        regs.bp = frame.stored_bp;
+        self._sp.set(Self::cal_unwind_sp::<T>(self._bp.get()));
+        self._bp.set(frame.stored_bp);
 
         self._depth.set(self.depth() - 1);
 
@@ -164,18 +150,18 @@ impl Context {
 
     // Unsafe unless reserved.
     pub fn push<const SLOTS: usize, T>(&self, n: T) {
-        let regs = self.get_regs();
-        regs.sp -= Self::size_of_slots(SLOTS);
+        unsafe {
+            self._sp.set(self._sp.get().sub(SLOTS));
 
-        unsafe { *(regs.sp as *mut c_void as *mut T) = n; }
+            *(self._sp.get() as address as *mut T) = n;
+        }
     }
 
     pub fn pop<const SLOTS: usize, T: Copy>(&self) -> T {
-        let regs = self.get_regs();
-
-        let res = regs.sp;
-        regs.sp += Self::size_of_slots(SLOTS);
-
-        unsafe { *(res as *const c_void as *const T) }
+        let addr = self._sp.get();
+        unsafe {
+            self._sp.set(addr.add(SLOTS));
+            *(addr as address as *const T)
+        }
     }
 }

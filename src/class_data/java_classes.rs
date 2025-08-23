@@ -16,14 +16,14 @@
 use std::cell::OnceCell;
 use crate::common::universe;
 use crate::gc::common::mem_allocator::{ClassAllocator, MemAllocator};
-use crate::oops::klass::Klass;
+use crate::oops::klass::{Klass, NormalKlass};
 use crate::oops::oop::ObjPtr;
 
-static mut JAVA_LANG_OBJECT: OnceCell<&'static Klass> = OnceCell::new();
+static mut JAVA_LANG_OBJECT: OnceCell<&'static NormalKlass> = OnceCell::new();
 pub struct JavaLangObject;
 
 impl JavaLangObject {
-    pub fn this() -> &'static Klass<'static> {
+    pub fn this() -> &'static NormalKlass<'static> {
         unsafe {
             JAVA_LANG_OBJECT.get().unwrap()
         }

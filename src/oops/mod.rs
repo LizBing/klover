@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-pub mod array_class;
 pub mod field;
 pub mod klass;
 pub(super) mod mark_word;

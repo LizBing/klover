@@ -19,10 +19,13 @@ use std::sync::Arc;
 use cafebabe::descriptors::ClassName;
 use dashmap::DashMap;
 use once_cell::{unsync::OnceCell};
-use crate::{class_data::java_classes::JavaLangClass, metaspace::klass_allocator::alloc_klass, oops::{klass::Klass, obj_handle::ObjHandle, oop::ObjPtr}, utils::easy_cell::EasyCell};
+use crate::{class_data::{class_file_stream::resolve_class_name, java_classes::JavaLangClass}, metaspace::klass_allocator::{self, alloc_klass}, oops::{klass::{Klass, NormalKlass}, obj_handle::ObjHandle, oop::ObjPtr}, utils::easy_cell::EasyCell};
 
 pub fn load_class(loader: ObjPtr, fqn: String) -> &'static Klass<'static> {
     unimplemented!()
+}
+
+pub fn load_normal_class<'a>(loader: ObjPtr, fqn: String) -> &'a NormalKlass<'a> {
 }
 
 pub fn define_class(loader: ObjPtr, fqn: String) -> &'static Klass<'static> {

@@ -17,22 +17,21 @@
 use cafebabe::ClassFile;
 use cafebabe::descriptors::ClassName;
 use crate::class_data::{class_loader};
-use crate::class_data::java_classes::{JavaLangClass, JavaLangObject};
-use crate::code::cp_cache::ConstantPoolCache;
-use crate::common::universe;
-use crate::oops::field::{Field, Fields};
+use crate::class_data::java_classes::{JavaLangObject};
+use crate::oops::field::{Fields};
 use crate::oops::obj_desc::ObjDesc;
 use crate::oops::obj_handle::ObjHandle;
 use crate::oops::oop::ObjPtr;
 
 #[derive(Debug)]
-pub struct Klass<'a> {
-    _name: Option<ClassName<'a>>,
-    _super: Option<&'a Klass<'a>>,
+pub struct NormalKlass<'a> {
+    _name: ClassName<'a>,
+    _super: Option<&'a NormalKlass<'a>>,
     _loader: ObjHandle,
 
-    _metadata: Vec<u8>,
-    _class_file: Option<ClassFile<'a>>,
+    // leaked memory
+    _metadata: &'a [u8],
+    _class_file: &'a ClassFile<'a>,
 
     _mirror: ObjHandle,
 
@@ -40,87 +39,64 @@ pub struct Klass<'a> {
 
     // hot fields
     _cp_entries: usize,
-    _size_of_instance: usize
 }
 
-impl Klass<'static> {
+impl NormalKlass<'static> {
     // Returning false means ClassNotFoundException.
-    pub fn init_normal(
-        &'static mut self,
+    pub fn new(
         loader: ObjPtr,
         metadata: Vec<u8>,
-    ) -> bool {
-        *self = Self {
-            _name: None,
-            _super: None,
-            _loader: ObjHandle::with_oop(loader),
-            _metadata: Vec::new(),
-            _class_file: None,
-            _mirror: ObjHandle::new(),
-            _fields: Fields::new(),
-            _cp_entries: 0,
-            _size_of_instance: 0
-        };
+    ) -> Option<Self> {
+        let leaked = metadata.leak();
 
-        self._metadata = metadata;
-
-        self._class_file = Some(match cafebabe::parse_class(self._metadata.as_slice()) {
+        let cf = Box::leak(Box::new(match cafebabe::parse_class(leaked) {
             Ok(n) => n,
-            Err(_) => return false,
-        });
-        let cf = self._class_file.as_ref().unwrap();
+            Err(_) => return None,
+        }));
 
-        self._name = Some(cf.this_class.clone());
+        let name = cf.this_class.clone();
 
-        self._super = match cf.super_class.clone() {
-            Some(s) => Some(class_loader::load_class(loader, s.to_string())),
+        let super_class = match cf.super_class.clone() {
+            Some(s) => Some(class_loader::load_normal_class(loader, s.to_string())),
             None => None
         };
 
-        self._cp_entries = cf.constantpool_iter().count();
-
         // todo: resolve fields and methods.
-        let offs = match self._super {
+        let offs = match super_class {
             Some(s) => s.size_of_instance(),
             None => ObjDesc::size_of_normal_desc()
         };
-        self._fields.init(offs, &cf.fields);
+        let fields = Fields::new(offs, &cf.fields);
 
-        true
-    }
-
-    pub fn init_primitive(&mut self, name: ClassName<'static>, size_of_instance: usize) {
-        *self = Self {
-            _name: Some(name),
-            _super: Some(JavaLangObject::this()),
-            _loader: ObjHandle::new(),
-            _metadata: Vec::new(),
-            _class_file: None,
+        Some(Self {
+            _name: name,
+            _super: super_class,
+            _loader: ObjHandle::with_oop(loader),
+            _metadata: leaked,
+            _class_file: cf,
             _mirror: ObjHandle::new(),
-            _fields: Fields::new(),
-            _cp_entries: 0,
-            _size_of_instance: size_of_instance
-        };
+            _fields: fields,
+            _cp_entries: cf.constantpool_iter().count()
+        })
     }
 }
 
-impl Drop for Klass<'_> {
+impl Drop for NormalKlass<'_> {
     fn drop(&mut self) {
-        unreachable!()
+        unsafe {
+            drop(Box::from_raw(self._metadata as *const _ as *mut [u8]));
+            drop(Box::from_raw(self._class_file as *const _ as *mut ClassFile));
+        }
     }
 }
 
-impl Klass<'_> {
-    pub fn name(&self) -> ClassName {
-        self._name.as_ref().unwrap().clone()
+impl NormalKlass<'_> {
+    pub fn size_of_instance(&self) -> usize {
+        self._fields.size_of_instance
     }
 
-    pub fn super_class(&self) -> Option<&'static Klass> {
-        self._super
-    }
-    
-    pub fn mirror(&self) -> &ObjHandle {
-        &self._mirror
+    pub fn size_of_mirror(&self) -> usize {
+        self._fields.size_of_statics
     }
 
     pub fn cp_entries(&self) -> usize {
@@ -128,12 +104,69 @@ impl Klass<'_> {
     }
 }
 
-impl Klass<'_> {
-    pub fn size_of_instance(&self) -> usize {
-        self._fields.size_of_instance
+pub struct PrimitiveKlass {
+    _name: String,
+    _mirror: ObjHandle,
+    _size_of_instance: usize
+}
+
+pub struct ArrayKlass<'a> {
+    _name: String,
+    _mirror: ObjHandle,
+    _dimensions: usize,
+    _elem_type: &'a Klass<'a>
+}
+
+pub enum Klass<'a> {
+    Normal(NormalKlass<'a>),
+    Primitive(PrimitiveKlass),
+    Array(ArrayKlass<'a>)
+}
+
+impl<'a> Klass<'a> {
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Normal(n) => n._name.as_ref(),
+            Self::Primitive(n) => n._name.as_str(),
+            Self::Array(n) => n._name.as_str()
+        }
+    }
+
+    pub fn mirror(&self) -> &ObjHandle {
+        match self {
+            Self::Normal(n) => &n._mirror,
+            Self::Primitive(n) => &n._mirror,
+            Self::Array(n) => &n._mirror,
+        }
+    }
+
+    pub fn super_class(&self) -> Option<&'static NormalKlass> {
+        match self {
+            Self::Normal(n) => n._super,
+            _ => Some(JavaLangObject::this())
+        }
+    }
+
+    pub fn size_of_instance(&self) -> Option<usize> {
+        match self {
+            Self::Normal(n) => Some(n.size_of_instance()),
+            Self::Primitive(n) => Some(n._size_of_instance),
+            Self::Array(_) => None
+        }
     }
 
     pub fn size_of_mirror(&self) -> usize {
-        self._fields.size_of_statics
+        match self {
+            Self::Normal(n) => n.size_of_mirror(),
+            _ => JavaLangObject::size_of_instance()
+        }
+    }
+
+    pub fn is_array_klass(&self) -> bool {
+        if let Self::Array(_) = self {
+            true
+        } else {
+            false
+        }
     }
 }

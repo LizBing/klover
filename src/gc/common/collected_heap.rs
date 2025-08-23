@@ -16,7 +16,7 @@
 use crate::oops::obj_desc::ObjDesc;
 use crate::utils::global_defs::address;
 
-pub trait CollectedHeap {
+pub trait CollectedHeap: Send + Sync {
     fn mem_alloc(&self, size: usize) -> address;
     
     fn min_obj_size(&self) -> usize {

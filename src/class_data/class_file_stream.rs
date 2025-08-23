@@ -22,7 +22,7 @@ static CLASS_PATHS: OnceCell<Vec<String>> = OnceCell::new();
 
 pub fn initialize() {}
 
-pub fn resolve_class_name(name: String, offs: usize) -> Option<Vec<u8>> {
+pub fn resolve_class_name(name: String) -> Option<Vec<u8>> {
     let relative = format!("{}.class", name);
 
     for n in CLASS_PATHS.get().unwrap().iter() {
@@ -32,7 +32,7 @@ pub fn resolve_class_name(name: String, offs: usize) -> Option<Vec<u8>> {
             let mut buf = Vec::new();
 
             return match f.read_to_end(&mut buf) {
-                Ok(_) => Some(buf.split_off(buf.len() - offs)),
+                Ok(_) => Some(buf),
                 _ => None,
             }
         }

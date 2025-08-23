@@ -16,10 +16,10 @@
 
 use once_cell::unsync::OnceCell;
 
-use crate::{engine::context::Context, memory::allocation::c_heap_alloc, metaspace::klass_allocator::KlassMemPool, utils::easy_cell::EasyCell};
+use crate::{engine::context::Context, memory::allocation::c_heap_alloc, metaspace::klass_allocator::KlassMemPool, utils::{easy_cell::EasyCell, global_defs::address}};
 
 thread_local! {
-    static TLS: OnceCell<EasyCell<ThrdLocalStorage>> = OnceCell::new();
+    static TLS: ThrdLocalStorage = ThrdLocalStorage::new();
 }
 
 #[derive(Debug)]
@@ -29,33 +29,24 @@ struct ThrdLocalStorage {
 }
 
 impl ThrdLocalStorage {
-    fn init(&mut self) {
-        *self = Self {
+    fn new() -> Self {
+        Self {
             _kmp: KlassMemPool::new(),
-            _ctx: Context::new(),
+            _ctx: Context::new()
         }
     }
 }
 
-pub fn initialize() {
+fn tls() -> &'static ThrdLocalStorage {
     TLS.with(|tls| {
-        let mem = c_heap_alloc(size_of::<ThrdLocalStorage>()).unwrap();
-        let cell = EasyCell::new(mem.begin() as *mut ThrdLocalStorage);
-
-        cell.get_mut().init();
-
-        tls.set(cell).unwrap();
+        unsafe { &*(tls as *const _) }
     })
 }
 
-pub fn klass_mem_pool() -> &'static mut KlassMemPool {
-    TLS.with(|tls|{
-        &mut tls.get().unwrap().get_mut()._kmp
-    })
+pub fn klass_mem_pool() -> &'static KlassMemPool {
+    &tls()._kmp
 }
 
 pub fn context() -> &'static Context {
-    TLS.with(|tls| {
-        &tls.get().unwrap().get()._ctx
-    })
+    &tls()._ctx
 }

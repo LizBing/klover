@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 /*
  * Copyright 2025 Lei Zaakjyu
  *
@@ -14,6 +15,7 @@
  * limitations under the License.
  */
 use std::mem::ManuallyDrop;
+use std::ptr::{self, null_mut};
 use std::sync::Mutex;
 use crate::common::universe;
 use crate::memory::bump_alloc::BumpAllocator;
@@ -27,13 +29,16 @@ use crate::utils::global_defs::{address, naddr, word_t, K, LOG_BYTES_PER_ARCH};
 const KLASS_MEM_SPACE_SIZE: usize = OneBit!() << (26 + LOG_BYTES_PER_ARCH);
 const KLASS_MEM_BUCKET_SIZE: usize = 16 * K;
 
-pub fn alloc_klass() -> &'static mut Klass<'static> {
-    unsafe { &mut *tls::klass_mem_pool().alloc() }
+pub fn alloc_klass(klass: Klass) -> &Klass {
+    let mem = tls::klass_mem_pool().alloc();
+    unsafe {
+        ptr::write(mem, klass);
+        &*mem
+    }
 }
 
 pub struct KlassMemSpace {
-    _mtx: Mutex<()>,
-    _vm: VirtSpace,
+    _vm: Mutex<VirtSpace>,
     _base: address
 }
 
@@ -43,12 +48,14 @@ impl KlassMemSpace {
         let base = vm.mr().begin();
 
         Self {
-            _mtx: Mutex::new(()),
-            _vm: vm,
+            _vm: Mutex::new(vm),
             _base: base
         }
     }
 }
+
+unsafe impl Send for KlassMemSpace {}
+unsafe impl Sync for KlassMemSpace {}
 
 impl KlassMemSpace {
     pub fn compress(&self, raw: &Klass) -> naddr {
@@ -56,18 +63,18 @@ impl KlassMemSpace {
         (((addr - self._base) >> LOG_BYTES_PER_ARCH) + size_of::<word_t>()) as _
     }
 
-    pub fn reslove(&self, comp: naddr) -> &'static Klass {
+    pub fn reslove(&self, comp: naddr) -> &Klass {
         let addr = self._base + ((comp as address - size_of::<word_t>()) << LOG_BYTES_PER_ARCH);
         unsafe { *(addr as *const _) }
     }
 }
 
 impl KlassMemSpace {
-    pub fn new_bucket(&mut self) -> MemRegion {
-        let guard = self._mtx.lock().unwrap();
+    pub fn new_bucket(&self) -> MemRegion {
+        let mut guard = self._vm.lock().unwrap();
 
-        let begin = self._vm.committed_region().end();
-        let size = self._vm.expand_by(KLASS_MEM_BUCKET_SIZE, false);
+        let begin = guard.committed_region().end();
+        let size = guard.expand_by(KLASS_MEM_BUCKET_SIZE, false);
         assert!(size != 0, "out of space");
 
         MemRegion::with_size(begin, size)
@@ -75,10 +82,10 @@ impl KlassMemSpace {
 }
 
 union KlassMemSpaceSlot {
-    // Class unloading is unsupported currently.
-    // _next: *mut Self,
     _data: ManuallyDrop<Klass<'static>>,
-    _dummy: word_t
+
+    // Class unloading is unsupported currently.
+    _dummy: word_t // _next: *mut Self,
 }
 
 
@@ -90,23 +97,26 @@ impl KlassMemSpaceSlot {
 
 #[derive(Debug)]
 pub struct KlassMemPool {
-    _bumper: BumpAllocator,
+    _bumper: RefCell<BumpAllocator>,
 }
 
 impl KlassMemPool {
     pub fn new() -> Self {
-        Self { _bumper: BumpAllocator::new() }
+        Self { _bumper: RefCell::new(BumpAllocator::new()) }
     }
 }
 
 impl KlassMemPool {
-    fn alloc(&mut self) -> *mut Klass {
-        let bumper = &mut self._bumper;
+    fn alloc(&self) -> *mut Klass {
+        let mut bumper = self._bumper.borrow_mut();
 
         let mut res = bumper.alloc(size_of::<KlassMemSpaceSlot>());
         if res == 0 {
+            bumper.clear();
             bumper.init_with_mr(universe::klass_mem_space().new_bucket());
             res = bumper.alloc(size_of::<KlassMemSpaceSlot>());
+
+            assert!(res != 0, "invariant");
         }
 
         res as _

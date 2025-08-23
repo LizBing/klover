@@ -16,19 +16,19 @@
 
 use cafebabe::{attributes::{AttributeData, AttributeInfo, CodeData}, bytecode::Opcode, MethodInfo};
 
-use crate::{code::cp_cache::{self, ConstantPoolCache}, oops::klass::Klass};
+use crate::{code::cp_cache::{self, ConstantPoolCache}, oops::klass::{Klass, NormalKlass}};
 
 pub struct Method<'a> {
     _info: &'a MethodInfo<'a>,
     _code_data: Option<&'a CodeData<'a>>,
 
-    _klass: &'static Klass<'static>,
+    _klass: &'static NormalKlass<'static>,
     _cp_cache: ConstantPoolCache
 }
 
 impl<'a> Method<'a> {
     // @cp_entries: If the value is 0, we make self._cp_cache None.
-    pub fn new(info: &'a MethodInfo, klass: &'static Klass) -> Self {
+    pub fn new(info: &'a MethodInfo, klass: &'static NormalKlass) -> Self {
         let mut code_data = None;
         for n in &info.attributes {
             match &n.data {
@@ -55,7 +55,7 @@ impl Method<'_> {
         self._code_data
     }
 
-    pub fn klass(&self) -> &'static Klass {
+    pub fn klass(&self) -> &'static NormalKlass {
         self._klass
     }
 

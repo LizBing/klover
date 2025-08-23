@@ -18,7 +18,7 @@ use once_cell::sync::OnceCell;
 use crate::gc::common::collected_heap::CollectedHeap;
 use crate::metaspace::klass_allocator::KlassMemSpace;
 
-static mut UNIVERSE: OnceCell<Universe> = OnceCell::new();
+static UNIVERSE: OnceCell<Universe> = OnceCell::new();
 
 pub fn initialize() {}
 
@@ -27,11 +27,11 @@ struct Universe {
     _heap: Box<dyn CollectedHeap>,
 }
 
-pub fn klass_mem_space() -> &'static mut KlassMemSpace {
-    unsafe { &mut UNIVERSE.get_mut().unwrap()._klass_mem_space }
+pub fn klass_mem_space() -> &'static KlassMemSpace {
+    &UNIVERSE.get().unwrap()._klass_mem_space
 }
 
-pub fn heap() -> &'static mut Box<dyn CollectedHeap> {
-    unsafe { &mut UNIVERSE.get_mut().unwrap()._heap }
+pub fn heap() -> &'static Box<dyn CollectedHeap> {
+    &UNIVERSE.get().unwrap()._heap
 }
 

@@ -153,20 +153,7 @@ impl<'a> Fields<'a> {
 }
 
 impl<'a> Fields<'a> {
-    pub fn new() -> Self {
-        Self {
-            instance_fields: Vec::new(),
-            size_of_instance: 0,
-            offs_of_instance_refs: 0,
-            instance_refs: 0,
-            static_fields: Vec::new(),
-            size_of_statics: 0,
-            offs_of_static_refs: 0,
-            static_refs: 0,
-        }
-    }
-
-    pub fn init(&mut self, mut offs: usize, infos: &'a Vec<FieldInfo>) {
+    pub fn new(mut offs: usize, infos: &'a Vec<FieldInfo>) -> Self {
         let ref_align;
         if USE_COMPRESSED_OOPS.get_value() {
             ref_align = size_of::<naddr>();
@@ -175,18 +162,16 @@ impl<'a> Fields<'a> {
         }
 
         let sorted = Self::sort(infos);
-        self.instance_refs = sorted.ref_ins.len();
-        self.static_refs = sorted.ref_sta.len();
 
         let mut instance_fields = Vec::new();
         instance_fields.append(&mut Self::layout_fields(&sorted._8_bytes_ins, &mut offs, 8));
         instance_fields.append(&mut Self::layout_fields(&sorted._4_bytes_ins, &mut offs, 4));
         instance_fields.append(&mut Self::layout_fields(&sorted._2_bytes_ins, &mut offs, 2));
         instance_fields.append(&mut Self::layout_fields(&sorted._1_byte_ins, &mut offs, 1));
-        self.offs_of_static_refs = align_up!(offs, ref_align);
+
+        let offs_of_instance_refs = align_up!(offs, ref_align);
         instance_fields.append(&mut Self::layout_fields(&sorted.ref_ins, &mut offs, ref_align));
-        self.instance_fields = instance_fields;
-        self.size_of_instance = offs;
+        let size_of_instance = offs;
 
         let mut offs_statics = ObjDesc::size_of_normal_desc() + size_of::<&Klass>();
         let mut static_fields = Vec::new();
@@ -194,9 +179,21 @@ impl<'a> Fields<'a> {
         static_fields.append(&mut Self::layout_fields(&sorted._4_bytes_sta, &mut offs_statics, 4));
         static_fields.append(&mut Self::layout_fields(&sorted._2_bytes_sta, &mut offs_statics, 2));
         static_fields.append(&mut Self::layout_fields(&sorted._1_byte_sta, &mut offs_statics, 1));
-        self.offs_of_static_refs = align_up!(offs_statics, ref_align);
+
+        let offs_of_static_refs = align_up!(offs_statics, ref_align);
         static_fields.append(&mut Self::layout_fields(&sorted.ref_sta, &mut offs_statics, ref_align));
-        self.size_of_statics = offs_statics;
+        let size_of_statics = offs_statics;
+
+        Self {
+            instance_fields: instance_fields,
+            size_of_instance: size_of_instance,
+            offs_of_instance_refs: offs_of_instance_refs,
+            instance_refs: sorted.ref_ins.len(),
+            static_fields: static_fields,
+            size_of_statics: size_of_statics,
+            offs_of_static_refs: offs_of_static_refs,
+            static_refs: sorted.ref_sta.len()
+        }
     }
 
 }
