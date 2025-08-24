@@ -13,20 +13,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-use std::cell::OnceCell;
+
+use once_cell::sync::OnceCell;
 use crate::common::universe;
 use crate::gc::common::mem_allocator::{ClassAllocator, MemAllocator};
 use crate::oops::klass::{Klass, NormalKlass};
 use crate::oops::oop::ObjPtr;
 
-static mut JAVA_LANG_OBJECT: OnceCell<&'static NormalKlass> = OnceCell::new();
+static JAVA_LANG_OBJECT: OnceCell<&'static Klass> = OnceCell::new();
 pub struct JavaLangObject;
 
 impl JavaLangObject {
-    pub fn this() -> &'static NormalKlass<'static> {
-        unsafe {
-            JAVA_LANG_OBJECT.get().unwrap()
-        }
+    pub fn this() -> &'static Klass<'static> {
+        JAVA_LANG_OBJECT.get().unwrap()
     }
 
     pub fn size_of_instance() -> usize {
@@ -34,14 +33,12 @@ impl JavaLangObject {
     }
 }
 
-static mut JAVA_LANG_CLASS: OnceCell<&'static Klass> = OnceCell::new();
+static JAVA_LANG_CLASS: OnceCell<&'static Klass> = OnceCell::new();
 pub struct JavaLangClass;
 
 impl JavaLangClass {
     pub fn this() -> &'static Klass<'static> {
-        unsafe {
-            JAVA_LANG_CLASS.get().unwrap()
-        }
+        JAVA_LANG_CLASS.get().unwrap()
     }
 }
 
@@ -51,6 +48,8 @@ impl JavaLangClass {
         allocator.allocate()
     }
 }
+
+static JAVA_LANG_CLASSLOADER: OnceCell<&'static Klass> = OnceCell::new();
 
 pub fn initialize() {
     unimplemented!()

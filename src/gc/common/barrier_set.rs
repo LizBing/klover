@@ -14,6 +14,31 @@
  * limitations under the License.
  */
 
-pub trait AccessBarrier {}
+use std::ptr::{null, null_mut};
 
-pub trait BarrierSet {}
+use crate::{common::universe, oops::oop::ObjPtr, utils::global_defs::{addr_cast, address, naddr, word_t, LOG_BYTES_PER_ARCH}};
+
+bitflags::bitflags! {
+    pub struct Decorator: u32 {
+        const IN_HEAP       = 1 << 0;
+        const COMPRESSED    = 1 << 1;
+        const LOAD_BARRIER  = 1 << 2;
+        const STORE_BARRIER = 1 << 3;
+    }
+}
+
+#[inline]
+fn encode_coop(addr: address) -> naddr {
+    if addr == 0 { return 0; }
+
+    let base = universe::coops_base();
+    ((addr - base - size_of::<word_t>()) >> LOG_BYTES_PER_ARCH) as _
+}
+
+#[inline]
+fn decode_coop(addr: naddr) -> address {
+    if addr == 0 { return 0;}
+    
+    let base = universe::coops_base();
+    ((addr as address) << LOG_BYTES_PER_ARCH) + base + size_of::<word_t>()
+}

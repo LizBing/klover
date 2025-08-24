@@ -10,6 +10,7 @@ crate-type = ["cdylib"]
 [dependencies]
 klover-flag-sys-proc-macro = { path = "./src/flag_sys/proc_macro" }
 
+bitflags = "2.9.3"
 cafebabe = "0.9.0"
 dashmap = "6.1.0"
 enum-map = "2.7.3"

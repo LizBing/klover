@@ -15,6 +15,7 @@ use std::cell::RefCell;
  * limitations under the License.
  */
 use std::mem::ManuallyDrop;
+use std::ops::{Deref, DerefMut};
 use std::ptr::{self, null_mut};
 use std::sync::Mutex;
 use crate::common::universe;
@@ -22,18 +23,18 @@ use crate::memory::bump_alloc::BumpAllocator;
 use crate::memory::mem_region::MemRegion;
 use crate::memory::virt_space::VirtSpace;
 use crate::OneBit;
-use crate::oops::klass::{Klass};
+use crate::oops::klass::{ArrayKlass, Klass, NormalKlass, PrimitiveKlass};
 use crate::runtime::tls;
 use crate::utils::global_defs::{address, naddr, word_t, K, LOG_BYTES_PER_ARCH};
 
 const KLASS_MEM_SPACE_SIZE: usize = OneBit!() << (26 + LOG_BYTES_PER_ARCH);
 const KLASS_MEM_BUCKET_SIZE: usize = 16 * K;
 
-pub fn alloc_klass(klass: Klass) -> &Klass {
-    let mem = tls::klass_mem_pool().alloc();
+pub fn alloc_klass(klass: Klass) -> &'static Klass {
+    let slot = tls::klass_mem_pool().alloc();
     unsafe {
-        ptr::write(mem, klass);
-        &*mem
+        ptr::write(slot._data.deref_mut(), klass);
+        &slot._data
     }
 }
 
@@ -107,18 +108,19 @@ impl KlassMemPool {
 }
 
 impl KlassMemPool {
-    fn alloc(&self) -> *mut Klass {
+    fn alloc(&self) -> &mut KlassMemSpaceSlot {
         let mut bumper = self._bumper.borrow_mut();
 
-        let mut res = bumper.alloc(size_of::<KlassMemSpaceSlot>());
-        if res == 0 {
+        let mut mem = bumper.alloc(size_of::<KlassMemSpaceSlot>());
+        if mem == 0 {
             bumper.clear();
-            bumper.init_with_mr(universe::klass_mem_space().new_bucket());
-            res = bumper.alloc(size_of::<KlassMemSpaceSlot>());
 
-            assert!(res != 0, "invariant");
+            bumper.init_with_mr(universe::klass_mem_space().new_bucket());
+            mem = bumper.alloc(size_of::<KlassMemSpaceSlot>());
+
+            assert!(mem != 0, "invariant");
         }
 
-        res as _
+        unsafe { &mut *(mem as *mut KlassMemSpaceSlot) }
     }
 }

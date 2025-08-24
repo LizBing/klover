@@ -13,8 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-use std::ptr::null_mut;
-use crate::class_data::java_classes::{initialize, JavaLangClass};
+
+use crate::class_data::java_classes::{JavaLangClass};
 use crate::common::universe;
 use crate::oops::klass::Klass;
 use crate::oops::mark_word::MarkWord;
@@ -47,11 +47,11 @@ pub trait MemAllocator {
 }
 
 pub struct ClassAllocator<'a> {
-    _native: &'a Klass<'static>,
+    _native: &'a Klass<'a>,
 }
 
 impl<'a> ClassAllocator<'a> {
-    pub fn new(native: &'static Klass<'static>) -> Self {
+    pub fn new(native: &'a Klass<'a>) -> Self {
         Self {
             _native: native,
         }

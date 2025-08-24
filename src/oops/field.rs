@@ -21,7 +21,7 @@ use crate::{align_up, common::universe, oops::{klass::Klass, obj_desc::{self, Ob
 #[derive(Debug)]
 pub struct Field<'a> {
     _info: &'a FieldInfo<'a>,
-    _offs: usize,   // offset from the obj header(ObjPtr)
+    _offs: usize,   // offset from ObjPtr
 }
 
 impl<'a> Field<'a> {

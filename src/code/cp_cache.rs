@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-use std::{cell::RefCell, sync::RwLock};
+use std::sync::RwLock;
 
 use crate::oops::klass::Klass;
 
@@ -25,13 +25,13 @@ pub enum ConstantPoolCacheEntry {
 }
 
 pub struct ConstantPoolCache {
-    _entries: RwLock<RefCell<Vec<ConstantPoolCacheEntry>>>
+    _entries: RwLock<Vec<ConstantPoolCacheEntry>>
 }
 
 impl ConstantPoolCache {
     pub fn new(capacity: usize) -> Self {
         Self {
-            _entries: RwLock::new(RefCell::new(Vec::with_capacity(capacity)))
+            _entries: RwLock::new(Vec::with_capacity(capacity))
         }
     }
 }
@@ -39,13 +39,13 @@ impl ConstantPoolCache {
 impl ConstantPoolCache {
     pub fn acquire(&self, index: usize) -> ConstantPoolCacheEntry {
         let guard = self._entries.read().unwrap();
-        let res = guard.borrow()[index].clone();
+        let res = guard[index].clone();
 
         res
     }
 
     pub fn resolve(&self, index: usize, data: ConstantPoolCacheEntry) {
-        let guard = self._entries.write().unwrap();
-        guard.borrow_mut()[index] = data;
+        let mut guard = self._entries.write().unwrap();
+        guard[index] = data;
     }
 }

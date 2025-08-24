@@ -1,3 +1,5 @@
+use crate::gc::common::barrier_set::BarrierSet;
+use crate::memory::mem_region::MemRegion;
 /*
  * Copyright 2025 Lei Zaakjyu
  *
@@ -22,4 +24,6 @@ pub trait CollectedHeap: Send + Sync {
     fn min_obj_size(&self) -> usize {
         ObjDesc::size_of_normal_desc()
     }
+
+    fn mem_region(&self) -> &MemRegion;
 }

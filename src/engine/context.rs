@@ -40,7 +40,7 @@ pub struct Context {
     _bp: Cell<address>,
     _sp: Cell<*mut slot_t>,
 
-    _stack: once_cell::unsync::OnceCell<MemRegion>,
+    _stack: OnceCell<MemRegion>,
     _depth: Cell<usize>
 }
 

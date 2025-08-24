@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-use std::sync::Arc;
 
 use cafebabe::descriptors::ClassName;
 use dashmap::DashMap;
@@ -25,9 +24,10 @@ pub fn load_class(loader: ObjPtr, fqn: String) -> &'static Klass<'static> {
     unimplemented!()
 }
 
-pub fn load_normal_class<'a>(loader: ObjPtr, fqn: String) -> &'a NormalKlass<'a> {
+pub fn load_normal_class<'a>(loader: ObjPtr, fqn: String) -> Option<&'a NormalKlass<'a>> {
+    unimplemented!()
 }
 
-pub fn define_class(loader: ObjPtr, fqn: String) -> &'static Klass<'static> {
+pub fn define_normal_class(loader: ObjPtr, fqn: String) -> Option<&'static Klass<'static>> {
     unimplemented!()
 }

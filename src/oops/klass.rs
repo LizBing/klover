@@ -57,8 +57,8 @@ impl NormalKlass<'static> {
         let name = cf.this_class.clone();
 
         let super_class = match cf.super_class.clone() {
-            Some(s) => Some(class_loader::load_normal_class(loader, s.to_string())),
-            None => None
+            Some(s) => Some(class_loader::load_normal_class(loader, s.to_string())?),
+            None => None    // invariant: loading of java.lang.Object
         };
 
         // todo: resolve fields and methods.
@@ -80,6 +80,9 @@ impl NormalKlass<'static> {
         })
     }
 }
+
+unsafe impl Send for NormalKlass<'_> {}
+unsafe impl Sync for NormalKlass<'_> {}
 
 impl Drop for NormalKlass<'_> {
     fn drop(&mut self) {
@@ -124,6 +127,15 @@ pub enum Klass<'a> {
 }
 
 impl<'a> Klass<'a> {
+    pub fn as_normal(&self) -> &'a NormalKlass {
+        match self {
+            Self::Normal(n) => n,
+            _ => panic!()
+        }
+    }
+}
+
+impl<'a> Klass<'a> {
     pub fn name(&self) -> &str {
         match self {
             Self::Normal(n) => n._name.as_ref(),
@@ -143,7 +155,7 @@ impl<'a> Klass<'a> {
     pub fn super_class(&self) -> Option<&'static NormalKlass> {
         match self {
             Self::Normal(n) => n._super,
-            _ => Some(JavaLangObject::this())
+            _ => Some(JavaLangObject::this().as_normal())
         }
     }
 
