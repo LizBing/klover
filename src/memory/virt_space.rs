@@ -15,38 +15,32 @@
  */
 
 
-use std::ffi::c_void;
+use std::{ffi::c_void, fs::File, num::NonZero, os::fd::AsFd, ptr::NonNull};
 
-use region::Protection;
+use nix::sys::mman::{mmap, mmap_anonymous, munmap, MapFlags, ProtFlags};
 
 use crate::{align_up, is_page_aligned, utils::global_defs::address};
 use super::mem_region::MemRegion;
 
 pub struct VirtSpace {
-    _guard: Option<region::Allocation>,
+    _mr: MemRegion,
 
     _commit_top: address,
     _executable: bool
 }
 
 fn commit_region(start: address, size: usize, exec: bool) -> bool {
-    let mut prot = Protection::READ_WRITE;
-    if exec { prot |= Protection::EXECUTE; }
+    let mut prot = ProtFlags::PROT_READ | ProtFlags::PROT_WRITE;
+    if exec { prot |= ProtFlags::PROT_EXEC; }
 
     unsafe {
-        match region::protect(start as *const c_void, size, prot) {
-            Ok(_) => true,
-            _ => false
-        }
+        nix::sys::mman::mprotect(NonNull::new_unchecked(start as _), size, prot).is_ok()
     }
 }
 
 fn uncommit_region(start: address, size: usize) -> bool {
     unsafe { 
-        match region::protect(start as *const c_void, size, Protection::NONE) {
-            Ok(_) => true,
-            _ => false
-        }
+        nix::sys::mman::mprotect(NonNull::new_unchecked(start as _), size, ProtFlags::PROT_NONE).is_ok()
     }
 }
 
@@ -54,51 +48,60 @@ impl VirtSpace {
     pub fn new(base: address,
                size: usize,
                init_commit: usize,
-               executable: bool,
+               fd: Option<&File>,
+               offs: i64,
+               exec: bool,
                pretouch: bool
-        ) -> Result<Self, String> {
+        ) -> Self {
+        assert!(size != 0);
         assert!(is_page_aligned!(size));
+        assert!(is_page_aligned!(init_commit));
 
-        let mut vs = Self {
-            _guard: None,
-            _commit_top: 0,
-            _executable: executable
-        };
-
-        let res = {
-            if base == 0 { region::alloc(size, Protection::NONE) }
-            else { region::alloc_at(base as *const c_void, size, Protection::NONE) }
-        };
-
-        match res {
-            Ok(a) => {
-                vs._guard = Some(a);
-            }
-            Err(e) => { return Err(e.to_string()); }
+        let mut flags = MapFlags::MAP_PRIVATE;
+        if base != 0 {
+            flags |= MapFlags::MAP_FIXED;
         }
 
-        vs._commit_top = vs.mr().begin() + init_commit;
+        let mm = match fd {
+            Some(f) => unsafe { mmap(NonZero::new(base), NonZero::new(size).unwrap(), ProtFlags::PROT_NONE, flags, f.as_fd(), offs) },
+            None => unsafe { mmap_anonymous(NonZero::new(base), NonZero::new(size).unwrap(), ProtFlags::PROT_NONE, flags) }
+        }.unwrap();
+
+        let mr = MemRegion::with_size(mm.addr().get(), size);
+        let commit_top = mr.begin() + init_commit;
+    
         if init_commit != 0 {
-            commit_region(vs._commit_top, init_commit, executable);
+            assert!(commit_region(mr.begin(), init_commit, exec));
             if pretouch {
-                vs.committed_region().pretouch();
+                mr.pretouch();
             }
         }
 
-        Ok(vs)
+        Self {
+            _mr: mr,
+            _commit_top: commit_top,
+            _executable: exec
+        }
+    }
+}
+
+impl Drop for VirtSpace {
+    fn drop(&mut self) {
+        unsafe {
+            munmap(NonNull::new_unchecked(self.mr().begin() as _), self.mr().size()).unwrap()
+        }
     }
 }
 
 impl VirtSpace {
     pub fn page_size() -> usize {
-        region::page::size()
+        unsafe { nix::libc::vm_page_size }
     }
 }
 
 impl VirtSpace {
-    pub fn mr(&self) -> MemRegion {
-        let guard = self._guard.as_ref().unwrap();
-        MemRegion::with_size(guard.as_ptr::<c_void>() as address, guard.len())
+    pub fn mr(&self) -> &MemRegion {
+        &self._mr
     }
 
     pub fn committed_region(&self) -> MemRegion {

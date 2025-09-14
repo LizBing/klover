@@ -31,7 +31,7 @@ macro_rules! is_arch_aligned {
 #[macro_export]
 macro_rules! is_page_aligned {
     ($n: expr) => {
-        crate::is_aligned!($n, region::page::size())
+        crate::is_aligned!($n, crate::memory::virt_space::VirtSpace::page_size())
     };
 }
 

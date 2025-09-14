@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+pub mod access;
 pub mod field;
 pub mod klass;
 pub(super) mod mark_word;

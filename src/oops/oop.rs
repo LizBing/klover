@@ -18,7 +18,7 @@ use crate::{oops::mark_word::MarkWord, utils::global_defs::address};
 use crate::oops::obj_desc::ObjDesc;
 
 // Ordinary Object Pointer
-pub type ObjPtr = *mut ObjDesc;
+pub type ObjPtr = *const ObjDesc;
 
 pub fn as_addr(n: ObjPtr) -> address {
     n as address

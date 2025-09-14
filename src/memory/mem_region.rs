@@ -16,9 +16,7 @@
 
 use std::ffi::c_void;
 
-use libc::memset;
-
-use crate::{is_page_aligned, utils::global_defs::{address, word_t}};
+use crate::{is_page_aligned, memory::virt_space::VirtSpace, utils::global_defs::{address, word_t}};
 
 #[derive(Debug)]
 pub struct MemRegion {
@@ -119,7 +117,7 @@ impl MemRegion {
 
         unsafe {
             let ptr = self._begin as *mut u8;
-            let page_size = region::page::size();
+            let page_size = VirtSpace::page_size();
 
             for i in (0..self.size()).step_by(page_size) {
                 ptr.add(i).write_volatile(0);
@@ -128,6 +126,6 @@ impl MemRegion {
     }
 
     pub fn memset(&self, c: i32) {
-        unsafe { memset(self._begin as *mut c_void, c, self.size()); }
+        unsafe { nix::libc::memset(self._begin as *mut c_void, c, self.size()); }
     }
 }

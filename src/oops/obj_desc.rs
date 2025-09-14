@@ -62,21 +62,3 @@ impl ObjDesc {
         self.data_base() + size_of::<word_t>()
     }
 }
-
-impl ObjDesc {
-    pub fn array_get<T: Copy>(&self, index: i32) -> Option<T> {
-        if index < self.array_len() {
-            let addr = self.array_data_base() + size_of::<T>() * (index as usize);
-            Some(*addr_cast::<T>(addr).unwrap())
-        } else { None }
-    }
-
-    pub fn array_set<T>(&self, index: i32, value: T) -> bool {
-        if index < self.array_len() {
-            let addr = self.array_data_base() + size_of::<T>() * (index as usize);
-            *addr_cast::<T>(addr).unwrap() = value;
-
-            true
-        } else { false }
-    }
-}

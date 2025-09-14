@@ -45,7 +45,7 @@ pub struct KlassMemSpace {
 
 impl KlassMemSpace {
     pub fn new() -> Self {
-        let vm = VirtSpace::new(0, KLASS_MEM_SPACE_SIZE, 0, false, false).unwrap();
+        let vm = VirtSpace::new(0, KLASS_MEM_SPACE_SIZE, 0, None, 0, false, false);
         let base = vm.mr().begin();
 
         Self {

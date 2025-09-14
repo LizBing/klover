@@ -1,5 +1,3 @@
-use crate::gc::common::barrier_set::BarrierSet;
-use crate::memory::mem_region::MemRegion;
 /*
  * Copyright 2025 Lei Zaakjyu
  *
@@ -15,6 +13,9 @@ use crate::memory::mem_region::MemRegion;
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+use crate::gc::common::barrier_set::AccessBarriers;
+use crate::memory::mem_region::MemRegion;
 use crate::oops::obj_desc::ObjDesc;
 use crate::utils::global_defs::address;
 
