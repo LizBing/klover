@@ -24,31 +24,14 @@ pub trait AccessBarriers<const D: u32> {
         DecoratorSet::from_bits_truncate(D)
     }
 
-    fn load_at<T: Copy>(slot: &mut address, offs: usize) -> T;
-    fn oop_load(slot: &mut address) -> address;
-    fn oop_load_at(slot: &mut address, offs: usize) -> address;
+    fn oop_load_in_heap(addr: address) -> ObjPtr;
+    fn oop_load_not_in_heap(addr: address) -> ObjPtr;
+    fn load_at<T: Copy>(oop: ObjPtr, offs: usize) -> T;
+    fn oop_load_at(oop: ObjPtr, offs: usize) -> ObjPtr;
 
-    fn store_at<T: Copy>(slot: &mut address, offs: usize, value: T);
-    fn oop_store(slot: &mut address, value: address);
-    fn oop_store_at(slot: &mut address, offs: usize, value: address);
-}
-
-pub struct NoBarrier;
-
-impl<const D: u32> AccessBarriers<D> for NoBarrier {
-    #[inline]
-    fn load_at<T: Copy>(slot: &mut address, offs: usize) -> T {
-       *addr_cast(*slot + offs).expect("null pointer exception")
-    }
-
-    #[inline]
-    fn oop_load(slot: &mut address) -> address {
-        unimplemented!()
-    }
-
-    #[inline]
-    fn oop_load_at(slot: &mut address, offs: usize) -> address {
-        unimplemented!()
-    }
+    fn oop_store_in_heap(addr: address, value: ObjPtr);
+    fn oop_store_not_in_heap(addr: address, value: ObjPtr);
+    fn store_at<T: Copy>(oop: ObjPtr, offs: usize, value: T);
+    fn oop_store_at(oop: ObjPtr, offs: usize, value: ObjPtr);
 }
 

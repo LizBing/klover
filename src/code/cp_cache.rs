@@ -19,16 +19,16 @@ use std::sync::RwLock;
 use crate::oops::klass::Klass;
 
 #[derive(Clone)]
-pub enum ConstantPoolCacheEntry {
+pub enum ConstantPoolCacheEntry<'a> {
     None,
-    KlassHandle(&'static Klass<'static>),
+    KlassHandle(&'a Klass<'a>),
 }
 
-pub struct ConstantPoolCache {
-    _entries: RwLock<Vec<ConstantPoolCacheEntry>>
+pub struct ConstantPoolCache<'a> {
+    _entries: RwLock<Vec<ConstantPoolCacheEntry<'a>>>
 }
 
-impl ConstantPoolCache {
+impl ConstantPoolCache<'_> {
     pub fn new(capacity: usize) -> Self {
         Self {
             _entries: RwLock::new(Vec::with_capacity(capacity))
@@ -36,15 +36,15 @@ impl ConstantPoolCache {
     }
 }
 
-impl ConstantPoolCache {
-    pub fn acquire(&self, index: usize) -> ConstantPoolCacheEntry {
+impl<'a> ConstantPoolCache<'a> {
+    pub fn acquire(&self, index: usize) -> ConstantPoolCacheEntry<'a> {
         let guard = self._entries.read().unwrap();
         let res = guard[index].clone();
 
         res
     }
 
-    pub fn resolve(&self, index: usize, data: ConstantPoolCacheEntry) {
+    pub fn resolve(&self, index: usize, data: ConstantPoolCacheEntry<'a>) {
         let mut guard = self._entries.write().unwrap();
         guard[index] = data;
     }

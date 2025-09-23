@@ -23,11 +23,10 @@ pub struct Method<'a> {
     _code_data: Option<&'a CodeData<'a>>,
 
     _klass: &'static NormalKlass<'static>,
-    _cp_cache: ConstantPoolCache
+    _cp_cache: ConstantPoolCache<'a>
 }
 
 impl<'a> Method<'a> {
-    // @cp_entries: If the value is 0, we make self._cp_cache None.
     pub fn new(info: &'a MethodInfo, klass: &'static NormalKlass) -> Self {
         let mut code_data = None;
         for n in &info.attributes {
@@ -50,7 +49,7 @@ impl<'a> Method<'a> {
     }
 }
 
-impl Method<'_> {
+impl<'a> Method<'a> {
     pub fn code_data(&self) -> Option<&CodeData> {
         self._code_data
     }
@@ -59,7 +58,7 @@ impl Method<'_> {
         self._klass
     }
 
-    pub fn cp_cache(&self) -> &ConstantPoolCache {
+    pub fn cp_cache(&self) -> &'a ConstantPoolCache {
         &self._cp_cache
     }
 }

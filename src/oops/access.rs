@@ -138,7 +138,9 @@ trait AccessOps<Barriers: AccessBarriers<D>, const D: u32> {
         if Self::flags().contains(DecoratorSet::COMPRESSED) {
             unsafe { slot = decode_coop(RawAccess::load_raw(slot_addr)); }
             let tmp = slot;
+
             res = f(&mut slot);
+
             if tmp != slot {
                 if Self::flags().contains(DecoratorSet::CAS) {
                     MemoryAccess::cas_int(slot_addr, encode_coop(tmp) as _, encode_coop(slot) as _);
@@ -149,7 +151,9 @@ trait AccessOps<Barriers: AccessBarriers<D>, const D: u32> {
         } else {
             unsafe { slot = RawAccess::load_raw(slot_addr); }
             let tmp = slot;
+
             res = f(&mut slot);
+
             if tmp != slot {
                 if Self::flags().contains(DecoratorSet::CAS) {
                     MemoryAccess::cas_ptr(slot_addr, tmp, slot);
@@ -169,28 +173,28 @@ pub trait HeapAccess<Barriers: AccessBarriers<D>, const D: u32> {
     #[inline]
     fn load_at<T: Copy>(slot_addr: address, offs: usize) -> T {
         Self::Ops::do_slot(slot_addr, |slot| {
-            Barriers::load_at(slot, offs)
+            let 8
         })
     }
 
     #[inline]
     fn oop_load_at(slot_addr: address, offs: usize) -> address {
         Self::Ops::do_slot(slot_addr, |slot| {
-            Barriers::oop_load_at(slot, offs)
+            Barriers::oop_load_at(*slot, offs)
         })
     }
 
     #[inline]
     fn store_at<T: Copy>(slot_addr: address, offs: usize, value: T) {
         Self::Ops::do_slot(slot_addr, |slot| {
-            Barriers::store_at(slot, offs, value);
+            Barriers::store_at(*slot, offs, value);
         })
     }
 
     #[inline]
     fn oop_store_at(slot_addr: address, offs: usize, value: address) {
         Self::Ops::do_slot(slot_addr, |slot| {
-            Barriers::oop_store_at(slot, offs, value);
+            Barriers::oop_store_at(*slot, offs, value);
         })
     }
 }
