@@ -16,7 +16,7 @@
 
 use cafebabe::{descriptors::FieldType, AccessFlags, ClassFile, FieldAccessFlags, FieldInfo};
 
-use crate::{align_up, common::universe, oops::{klass::Klass, obj_desc::{self, ObjDesc}}, runtime::runtime_globals::{self, USE_COMPRESSED_OOPS}, utils::{align, global_defs::{self, address, naddr}}};
+use crate::{align_up, common::universe, oops::{klass_handle::KlassHandle, obj_desc::{self, ObjDesc}}, runtime::runtime_globals::{self, USE_COMPRESSED_OOPS}, utils::{align, global_defs::{self, address, naddr}}};
 
 #[derive(Debug)]
 pub struct Field<'a> {
@@ -173,7 +173,7 @@ impl<'a> Fields<'a> {
         instance_fields.append(&mut Self::layout_fields(&sorted.ref_ins, &mut offs, ref_align));
         let size_of_instance = offs;
 
-        let mut offs_statics = ObjDesc::size_of_normal_desc() + size_of::<&Klass>();
+        let mut offs_statics = ObjDesc::size_of_normal_desc() + size_of::<KlassHandle>();
         let mut static_fields = Vec::new();
         static_fields.append(&mut Self::layout_fields(&sorted._8_bytes_sta, &mut offs_statics, 8));
         static_fields.append(&mut Self::layout_fields(&sorted._4_bytes_sta, &mut offs_statics, 4));

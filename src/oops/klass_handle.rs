@@ -14,6 +14,5 @@
  * limitations under the License.
  */
 
-pub mod klass_allocator;
-
-pub fn initialize() {}
+struct Klass;
+pub type KlassHandle = *mut Klass;

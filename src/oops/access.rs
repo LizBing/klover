@@ -16,64 +16,8 @@
 
 use std::{marker::PhantomData, ptr::null_mut, sync::atomic::{AtomicI32, AtomicI64, AtomicI8, AtomicUsize, Ordering}};
 
-use crate::{common::universe, gc::common::barrier_set::AccessBarriers, oops::oop::{as_oop, ObjPtr}, utils::global_defs::{naddr, word_t, LOG_BYTES_PER_ARCH}, OneBit};
+use crate::{common::universe, gc::common::barrier_set::AccessBarriers, oops::oop::{self, as_oop, ObjPtr}, utils::global_defs::{naddr, word_t, LOG_BYTES_PER_ARCH}, OneBit};
 use crate::utils::global_defs::address;
-
-pub struct RawAccess;
-impl RawAccess {
-    #[inline]
-    pub unsafe fn load_raw<T: Copy>(addr: address) -> T {
-        *(addr as *const _)
-    }
-
-    #[inline]
-    pub unsafe fn store_raw<T>(addr: address, value: T) {
-        *(addr as *mut _) = value;
-    }
-}
-
-pub struct MemoryAccess;
-impl MemoryAccess {
-    #[inline]
-    pub fn load_volatile<T: Copy>(addr: address) -> T {
-        unsafe { (addr as *const T).read_volatile() }
-    }
-
-    #[inline]
-    pub fn store_volatile<T>(addr: address, value: T) {
-        unsafe { (addr as *mut T).write_volatile(value); }
-    }
-
-    #[inline]
-    pub fn cas_int(addr: address, exp: i32, des: i32) -> bool {
-        unsafe { AtomicI32::from_ptr(addr as _).compare_exchange(exp, des, Ordering::SeqCst, Ordering::SeqCst).is_ok() }
-    }
-
-    #[inline]
-    pub fn cas_int_weak(addr: address, exp: i32, des: i32) -> bool {
-        unsafe { AtomicI32::from_ptr(addr as _).compare_exchange_weak(exp, des, Ordering::SeqCst, Ordering::SeqCst).is_ok() }
-    }
-
-    #[inline]
-    pub fn cas_long(addr: address, exp: i64, des: i64) -> bool {
-        unsafe { AtomicI64::from_ptr(addr as _).compare_exchange(exp, des, Ordering::SeqCst, Ordering::SeqCst).is_ok() }
-    }
-
-    #[inline]
-    pub fn cas_long_weak(addr: address, exp: i64, des: i64) -> bool {
-        unsafe { AtomicI64::from_ptr(addr as _).compare_exchange_weak(exp, des, Ordering::SeqCst, Ordering::SeqCst).is_ok() }
-    }
-    
-    #[inline]
-    pub fn cas_ptr(addr: address, exp: address, des: address) -> bool {
-        unsafe { AtomicUsize::from_ptr(addr as _).compare_exchange(exp, des, Ordering::SeqCst, Ordering::SeqCst).is_ok() }
-    }
-
-    #[inline]
-    pub fn cas_ptr_weak(addr: address, exp: address, des: address) -> bool {
-        unsafe { AtomicUsize::from_ptr(addr as _).compare_exchange_weak(exp, des, Ordering::SeqCst, Ordering::SeqCst).is_ok() }
-    }
-}
 
 bitflags::bitflags! {
     pub struct DecoratorSet: u32 {
@@ -81,12 +25,22 @@ bitflags::bitflags! {
 
         // const AS_RAW = OneBit!() << 1;
         // const AS_OOP = OneBit!() << 2;
-        const VOLATILE = OneBit!() << 3;
-        const COMPRESSED = OneBit!() << 4;
-        const CAS = OneBit!() << 5;
+        // const COMPRESSED = OneBit!() << 3;
+
+        const MO_UNORDERED      = OneBit!() << 6;
+        const MO_RELAXED        = OneBit!() << 7;
+        const MO_ACQUIRE        = OneBit!() << 8;
+        const MO_RELEASE        = OneBit!() << 9;
+        const MO_SEQ_CST        = OneBit!() << 10;
+
+        const IN_HEAP = OneBit!() << 11;
+
+        const ACCESS_READ = OneBit!() << 20;
+        const ACCESS_WRITE = OneBit!() << 21;
     }
 }
 
+/*
 #[inline]
 pub fn encode_coop(addr: address) -> naddr {
     if addr == 0 { return 0; }
@@ -102,117 +56,97 @@ pub fn decode_coop(addr: naddr) -> address {
     let base = universe::coops_base();
     ((addr as address) << LOG_BYTES_PER_ARCH) + base + size_of::<word_t>()
 }
+*/
 
-trait AccessOps<Barriers: AccessBarriers<D>, const D: u32> {
+pub struct AccessOps<const D: u32>;
+impl<const D: u32> AccessOps<D> {
+    pub const fn flags() -> DecoratorSet {
+        DecoratorSet::from_bits_truncate(D)
+    }
+
+    pub const fn cast_mem_order() -> Option<Ordering> {
+        if Self::flags().contains(DecoratorSet::MO_RELAXED) {
+            Some(Ordering::Relaxed)
+        } else if Self::flags().contains(DecoratorSet::MO_ACQUIRE) {
+            Some(Ordering::Acquire)
+        } else if Self::flags().contains(DecoratorSet::MO_RELAXED) {
+            Some(Ordering::Release)
+        } else if Self::flags().contains(DecoratorSet::MO_SEQ_CST) {
+            Some(Ordering::SeqCst)
+        } else {
+            None
+        }
+    }
+
     #[inline]
-    fn flags() -> DecoratorSet {
+    pub fn load<T: Copy>(addr: address) -> T {
+        
+    }
+
+    #[inline]
+    pub fn store<T>(addr: address, value: T) {
+    }
+}
+
+pub struct Access<Barrier: AccessBarriers<D>, const D: u32>(PhantomData<Barrier>);
+impl<Barrier: AccessBarriers<D>, const D: u32> Access<Barrier, D> {
+    const fn flags() -> DecoratorSet {
         DecoratorSet::from_bits_truncate(D)
     }
 
     #[inline]
-    fn load<T: Copy>(addr: address) -> T {
-        if Self::flags().contains(DecoratorSet::VOLATILE) {
-            MemoryAccess::load_volatile(addr)
+    pub fn load_at<T: Copy>(oop: ObjPtr, offs: usize) -> T {
+        if Self::flags().contains(DecoratorSet::IN_HEAP) {
+            Barrier::load_in_heap_at(oop, offs)
         } else {
-            unsafe { RawAccess::load_raw(addr) }
+            let addr = oop as address + offs;
+            AccessOps::<D>::load(addr)
         }
     }
 
     #[inline]
-    fn store<T>(addr: address, value: T) {
-        if Self::flags().contains(DecoratorSet::VOLATILE) {
-            MemoryAccess::store_volatile(addr, value);
-        } else {
-            unsafe { RawAccess::store_raw(addr, value); }
-        }
+    pub fn oop_load_at(oop: ObjPtr, offs: usize) -> ObjPtr {
+        Barrier::oop_load_in_heap_at(oop, offs)
     }
 
     #[inline]
-    fn do_slot<Ret, F>(slot_addr: address, f: F) -> Ret
-    where
-        Ret: Copy,
-        F: Fn(&mut address) -> Ret
+    pub fn store_at<T: Copy>(oop: ObjPtr, offs: usize, value: T) {
+        Barrier::store_in_heap_at(oop, offs, value);
+    }
+
+    #[inline]
+    pub fn oop_store_at(oop: ObjPtr, offs: usize, value: ObjPtr) {
+        Barrier::oop_store_in_heap_at(oop, offs, value);
+    }
+
+    #[inline]
+    pub fn oop_cas_in_heap_at(oop: ObjPtr, offs: usize, exp: ObjPtr, des: ObjPtr) -> bool {
+        Barrier::oop_cas_in_heap_at(oop, offs, exp, des)
+    }
+
+    #[inline]
+    pub fn oop_xchg_in_heap_at(oop: ObjPtr, offs: usize, new_value: ObjPtr) -> ObjPtr {
+        Barrier::oop_xchg_in_heap_at(oop, offs, new_value)
+    }
+
+    #[inline]
+    pub fn array_copy(dst: ObjPtr, dst_offs: usize,
+                              src: ObjPtr, src_offs: usize,
+                              elem: usize, length: usize)
     {
-        let res;
-        let mut slot;
-        if Self::flags().contains(DecoratorSet::COMPRESSED) {
-            unsafe { slot = decode_coop(RawAccess::load_raw(slot_addr)); }
-            let tmp = slot;
-
-            res = f(&mut slot);
-
-            if tmp != slot {
-                if Self::flags().contains(DecoratorSet::CAS) {
-                    MemoryAccess::cas_int(slot_addr, encode_coop(tmp) as _, encode_coop(slot) as _);
-                } else {
-                    unsafe { RawAccess::store_raw(slot_addr, encode_coop(slot)); }
-                }
-            }
-        } else {
-            unsafe { slot = RawAccess::load_raw(slot_addr); }
-            let tmp = slot;
-
-            res = f(&mut slot);
-
-            if tmp != slot {
-                if Self::flags().contains(DecoratorSet::CAS) {
-                    MemoryAccess::cas_ptr(slot_addr, tmp, slot);
-                } else {
-                    unsafe { RawAccess::store_raw(slot_addr, slot); }
-                }
-            }
-        }
-
-        res
-    }
-}
-
-pub trait HeapAccess<Barriers: AccessBarriers<D>, const D: u32> {
-    type Ops: AccessOps<Barriers, D>;
-
-    #[inline]
-    fn load_at<T: Copy>(slot_addr: address, offs: usize) -> T {
-        Self::Ops::do_slot(slot_addr, |slot| {
-            let 8
-        })
+        Barrier::array_copy_in_heap(dst, dst_offs, src, src_offs, elem, length);
     }
 
     #[inline]
-    fn oop_load_at(slot_addr: address, offs: usize) -> address {
-        Self::Ops::do_slot(slot_addr, |slot| {
-            Barriers::oop_load_at(*slot, offs)
-        })
+    pub fn oop_array_copy(dst: ObjPtr, dst_offs: usize,
+                                  src: ObjPtr, src_offs: usize,
+                                  length: usize)
+    {
+        Barrier::oop_array_copy_in_heap(dst, dst_offs, src, src_offs, length);
     }
 
     #[inline]
-    fn store_at<T: Copy>(slot_addr: address, offs: usize, value: T) {
-        Self::Ops::do_slot(slot_addr, |slot| {
-            Barriers::store_at(*slot, offs, value);
-        })
-    }
-
-    #[inline]
-    fn oop_store_at(slot_addr: address, offs: usize, value: address) {
-        Self::Ops::do_slot(slot_addr, |slot| {
-            Barriers::oop_store_at(*slot, offs, value);
-        })
-    }
-}
-
-pub trait InterpreterAccess<Barriers: AccessBarriers<D>, const D: u32> {
-    type Ops: AccessOps<Barriers, D>;
-
-    #[inline]
-    fn oop_load(slot_addr: address) -> address {
-        Self::Ops::do_slot(slot_addr, |slot| {
-            Barriers::oop_load(slot)
-        })
-    }
-
-    #[inline]
-    fn oop_store(slot_addr: address, value: address) {
-        Self::Ops::do_slot(slot_addr, |slot| {
-            Barriers::oop_store(slot, value);
-        })
+    pub fn clone_in_heap(dst: ObjPtr, src: ObjPtr, size: usize) {
+        Barrier::clone_in_heap(dst, src, size);
     }
 }

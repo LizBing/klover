@@ -14,11 +14,9 @@
  * limitations under the License.
  */
 
-pub(crate) mod class_data;
 pub(crate) mod engine;
 pub(crate) mod flag_sys;
 pub(crate) mod memory;
-pub(crate) mod metaspace;
 pub(crate) mod oops;
 pub(crate) mod utils;
 

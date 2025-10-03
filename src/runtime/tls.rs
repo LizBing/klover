@@ -14,9 +14,7 @@
  * limitations under the License.
  */
 
-use once_cell::unsync::OnceCell;
-
-use crate::{engine::context::Context, memory::allocation::c_heap_alloc, metaspace::klass_allocator::KlassMemPool, utils::{easy_cell::EasyCell, global_defs::address}};
+use crate::{engine::context::Context, metaspace::klass_allocator::KlassMemPool};
 
 thread_local! {
     static TLS: ThrdLocalStorage = ThrdLocalStorage::new();

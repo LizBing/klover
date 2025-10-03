@@ -1,7 +1,17 @@
-/target
+/target/
+/build/
 
 # VS Code
 /.vscode/
 
 # Idea
 /.idea/
+
+# LSP CACHE
+/.cache/
+
+# XMake Cache
+/.xmake/
+/CMakeLists.txt
+
+/src/core/

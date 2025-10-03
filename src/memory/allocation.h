@@ -14,4 +14,15 @@
  * limitations under the License.
  */
 
-mod interpreter;
+#ifndef MEMORY_ALLOCATION_H_
+#define MEMORY_ALLOCATION_H_
+
+#include <stdbool.h>
+#include <stddef.h>
+
+// C Heap Allocation
+void* cheap_alloc(size_t, bool oom_if_failed);
+void cheap_free(void*);
+
+#endif // MEMORY_ALLOCATION_H_
+

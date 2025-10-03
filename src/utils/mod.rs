@@ -15,6 +15,5 @@
  */
 
 pub mod align;
-pub mod easy_cell;
 pub mod global_defs;
 pub mod lock_free_stack;

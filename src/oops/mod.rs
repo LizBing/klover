@@ -16,7 +16,7 @@
 
 pub mod access;
 pub mod field;
-pub mod klass;
+pub mod klass_handle;
 pub(super) mod mark_word;
 pub mod obj_handle;
 pub mod oop;

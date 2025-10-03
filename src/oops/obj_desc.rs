@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 use crate::common::universe;
-use crate::oops::klass::{Klass};
 use crate::oops::mark_word;
 use crate::oops::mark_word::MarkWord;
 use crate::utils::global_defs::{addr_cast, address, word_t};

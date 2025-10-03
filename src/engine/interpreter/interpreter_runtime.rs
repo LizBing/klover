@@ -15,36 +15,3 @@
  */
 
 
-// Designed for pool objects.
-#[derive(Debug)]
-pub struct EasyCell<T: 'static> {
-    _raw: *mut T
-}
-
-unsafe impl<T> Send for EasyCell<T> {}
-unsafe impl<T> Sync for EasyCell<T> {}
-
-impl<T> EasyCell<T> {
-    pub fn new(raw: *mut T) -> Self {
-        Self { _raw: raw }
-    }
-}
-
-impl<T> EasyCell<T> {
-    pub fn raw(&self) -> *mut T { self._raw }
-}
-
-impl<T> EasyCell<T> {
-    pub fn get(&self) -> &'static T {
-        unsafe {
-            &*self._raw
-        }
-    }
-
-    pub fn get_mut(&self) -> &'static mut T {
-        unsafe {
-            &mut *self._raw
-        }
-    }
-}
-

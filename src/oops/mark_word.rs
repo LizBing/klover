@@ -17,7 +17,7 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::common::universe;
-use crate::oops::klass::Klass;
+use crate::oops::klass_handle::KlassHandle;
 use crate::{utils::global_defs::uintx, OneBit};
 use crate::utils::global_defs::naddr;
 use super::mark_word;
@@ -25,24 +25,12 @@ use super::mark_word;
 #[repr(C)]
 pub struct MarkWord {
     _encoded: AtomicU64,
+    _klass: KlassHandle,
 }
 
 impl MarkWord {
-    pub fn with_value(value: u64) -> Self {
-        Self { _encoded: AtomicU64::new(value) }
-    }
-
-    pub fn prototype(klass: &Klass) -> Self {
-        let mut mw_val = 0u64;
-        mw_val = MarkWord::set_lock(mw_val, UNLOCKED_VALUE);
-        mw_val = MarkWord::unset_biased_tag(mw_val);
-        mw_val = MarkWord::set_age(mw_val, 0);
-        mw_val = MarkWord::set_hash(mw_val, 0);
-
-        let klass_ptr = universe::klass_mem_space().compress(klass);
-        mw_val = MarkWord::set_klass_ptr(mw_val, klass_ptr);
-
-        MarkWord::with_value(mw_val)
+    pub fn prototype(klass: KlassHandle) -> Self {
+        unimplemented!()
     }
 }
 
@@ -59,13 +47,7 @@ impl MarkWord {
 const LOCK_BITS      :i32 =  2;
 const BIASED_TAG_BIT :i32 =  1;
 const AGE_BITS       :i32 =  4;
-#[cfg(target_pointer_width = "32")]
-const HASH_BITS      :i32 = 25;
-#[cfg(target_pointer_width = "64")]
 const HASH_BITS      :i32 = 31;
-#[cfg(target_pointer_width = "32")]
-const KLASS_PTR_BITS :i32 = 32;
-#[cfg(target_pointer_width = "64")]
 const KLASS_PTR_BITS :i32 = 26;
 
 const LOCK_SHIFT       :i32 = 0;

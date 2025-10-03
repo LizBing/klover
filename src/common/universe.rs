@@ -29,7 +29,7 @@ struct Universe {
     _heap: Box<dyn CollectedHeap>,
 
     // hot field
-    _coops_base: address
+    // _coops_base: address
 }
 
 pub fn klass_mem_space() -> &'static KlassMemSpace {
@@ -40,9 +40,11 @@ pub fn heap() -> &'static Box<dyn CollectedHeap> {
     &UNIVERSE.get().unwrap()._heap
 }
 
+/*
 pub fn coops_base() -> address {
     debug_assert!(USE_COMPRESSED_OOPS.get_value());
 
     UNIVERSE.get().unwrap()._coops_base
 }
+*/
 

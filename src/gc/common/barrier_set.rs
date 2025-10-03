@@ -16,22 +16,30 @@
 
 use std::ptr::{null, null_mut};
 
-use crate::{common::universe, oops::{access::DecoratorSet, oop::ObjPtr}, utils::global_defs::{addr_cast, address, naddr, word_t, LOG_BYTES_PER_ARCH}};
+use crate::{common::universe, oops::{access::{AccessOps, DecoratorSet}, oop::ObjPtr}, utils::global_defs::{addr_cast, address, naddr, word_t, LOG_BYTES_PER_ARCH}};
 
 pub trait AccessBarriers<const D: u32> {
-    #[inline]
-    fn flags() -> DecoratorSet {
-        DecoratorSet::from_bits_truncate(D)
-    }
-
-    fn oop_load_in_heap(addr: address) -> ObjPtr;
     fn oop_load_not_in_heap(addr: address) -> ObjPtr;
-    fn load_at<T: Copy>(oop: ObjPtr, offs: usize) -> T;
-    fn oop_load_at(oop: ObjPtr, offs: usize) -> ObjPtr;
+    fn load_in_heap_at<T: Copy>(oop: ObjPtr, offs: usize) -> T;
+    fn oop_load_in_heap_at(oop: ObjPtr, offs: usize) -> ObjPtr;
 
-    fn oop_store_in_heap(addr: address, value: ObjPtr);
     fn oop_store_not_in_heap(addr: address, value: ObjPtr);
-    fn store_at<T: Copy>(oop: ObjPtr, offs: usize, value: T);
-    fn oop_store_at(oop: ObjPtr, offs: usize, value: ObjPtr);
+    fn store_in_heap_at<T: Copy>(oop: ObjPtr, offs: usize, value: T);
+    fn oop_store_in_heap_at(oop: ObjPtr, offs: usize, value: ObjPtr);
+
+    fn oop_cas_in_heap_at(oop: ObjPtr, offs: usize, exp: ObjPtr, des: ObjPtr) -> bool;
+    fn oop_cas_not_in_heap(addr: address, exp: ObjPtr, des: ObjPtr) -> bool;
+    fn oop_xchg_in_heap_at(oop: ObjPtr, offs: usize, new_value: ObjPtr) -> ObjPtr;
+    fn oop_xchg_not_in_heap(addr: address, new_value: ObjPtr) -> ObjPtr;
+
+    fn array_copy_in_heap(dst: ObjPtr, dst_offs: usize,
+                          src: ObjPtr, src_offs: usize,
+                          elem: usize, length: usize);
+
+    fn oop_array_copy_in_heap(dst: ObjPtr, dst_offs: usize,
+                              src: ObjPtr, src_offs: usize,
+                              length: usize);
+
+    fn clone_in_heap(dst: ObjPtr, src: ObjPtr, size: usize);
 }
 
