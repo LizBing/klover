@@ -15,30 +15,11 @@
  */
 use once_cell::sync::OnceCell;
 
-use crate::gc::common::collected_heap::CollectedHeap;
-use crate::metaspace::klass_allocator::KlassMemSpace;
-use crate::runtime::runtime_globals::USE_COMPRESSED_OOPS;
-use crate::utils::global_defs::address;
-
 static UNIVERSE: OnceCell<Universe> = OnceCell::new();
 
 pub fn initialize() {}
 
-struct Universe {
-    _klass_mem_space: KlassMemSpace,
-    _heap: Box<dyn CollectedHeap>,
-
-    // hot field
-    // _coops_base: address
-}
-
-pub fn klass_mem_space() -> &'static KlassMemSpace {
-    &UNIVERSE.get().unwrap()._klass_mem_space
-}
-
-pub fn heap() -> &'static Box<dyn CollectedHeap> {
-    &UNIVERSE.get().unwrap()._heap
-}
+struct Universe {}
 
 /*
 pub fn coops_base() -> address {

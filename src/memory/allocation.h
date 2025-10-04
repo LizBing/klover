@@ -17,12 +17,11 @@
 #ifndef MEMORY_ALLOCATION_H_
 #define MEMORY_ALLOCATION_H_
 
-#include <stdbool.h>
-#include <stddef.h>
+#include "utils/global_defs.h"
 
 // C Heap Allocation
-void* cheap_alloc(size_t, bool oom_if_failed);
-void cheap_free(void*);
+void* c_heap_alloc(size_t byte_size, bool oom_if_failed);
+void c_heap_free(void*);
 
 #endif // MEMORY_ALLOCATION_H_
 

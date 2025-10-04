@@ -22,6 +22,5 @@ pub(crate) mod utils;
 
 mod prims;
 mod code;
-pub(crate) mod gc;
 mod runtime;
 pub mod common;

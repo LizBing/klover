@@ -14,16 +14,31 @@
  * limitations under the License.
  */
 
-use crate::{oops::mark_word::MarkWord, utils::global_defs::address};
-use crate::oops::obj_desc::ObjDesc;
+use crate::{engine::{context::Context, engine_globals::INTP_STACK_SIZE}, utils::global_defs::M};
 
-// Ordinary Object Pointer
-pub type ObjPtr = *const ObjDesc;
-
-pub fn as_addr(n: ObjPtr) -> address {
-    n as address
+thread_local! {
+    static TLS: ThrdLocalStorage = ThrdLocalStorage::new();
 }
 
-pub fn as_oop(n: address) -> ObjPtr {
-    n as _
+#[derive(Debug)]
+struct ThrdLocalStorage {
+    _ctx: Context,
+}
+
+impl ThrdLocalStorage {
+    fn new() -> Self {
+        Self {
+            _ctx: Context::new(INTP_STACK_SIZE.get_value() * M)
+        }
+    }
+}
+
+fn tls() -> &'static ThrdLocalStorage {
+    TLS.with(|tls| {
+        unsafe { &*(tls as *const _) }
+    })
+}
+
+pub fn context() -> &'static Context {
+    &tls()._ctx
 }

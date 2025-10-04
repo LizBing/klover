@@ -14,33 +14,18 @@
  * limitations under the License.
  */
 
-use std::ptr::null_mut;
+#include "memory/allocation.h"
+#include "memory/box.h"
+#include "utils/global_defs.h"
 
-use crate::oops::oop::ObjPtr;
+typedef struct ContextImpl ContextImpl;
+struct ContextImpl {};
 
-// Strong ref to java object.
-#[derive(Debug)]
-pub struct ObjHandle {
-    _oop: ObjPtr
+ContextImpl* ContextImpl_new(size_t stack_byte_size) {
+  ContextImpl res = {};
+  box_and_return(&res, true);
 }
 
-unsafe impl Send for ObjHandle {}
-unsafe impl Sync for ObjHandle {}
-
-impl ObjHandle {
-    pub fn new() -> Self {
-        Self {
-            _oop: null_mut()
-        }
-    }
-    
-    pub fn with_oop(oop: ObjPtr) -> Self {
-        Self { _oop: oop }
-    }
-}
-
-impl ObjHandle {
-    pub fn is_null(&self) -> bool {
-        self._oop.is_null()
-    }
+void ContextImpl_delete(ContextImpl* this) {
+  c_heap_free(this);
 }

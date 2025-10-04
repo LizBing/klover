@@ -14,17 +14,25 @@
  * limitations under the License.
  */
 
-use crate::gc::common::barrier_set::AccessBarriers;
-use crate::memory::mem_region::MemRegion;
-use crate::oops::obj_desc::ObjDesc;
-use crate::utils::global_defs::address;
+#ifndef MEMORY_BOX_H_
+#define MEMORY_BOX_H_
 
-pub trait CollectedHeap: Send + Sync {
-    fn mem_alloc(&self, size: usize) -> address;
-    
-    fn min_obj_size(&self) -> usize {
-        ObjDesc::size_of_normal_desc()
-    }
+#include <string.h>
 
-    fn mem_region(&self) -> &MemRegion;
+#include "memory/allocation.h"
+
+static inline void* _box_and_return(void* src, size_t byte_size, bool oom_if_failed) {
+  void* res = c_heap_alloc(byte_size, oom_if_failed);
+  if (NULL != res) {
+    memcpy(res, src, byte_size);
+  }
+
+  return res;
 }
+
+#define box_and_return(ptr, oom_if_failed) \
+  return _box_and_return(ptr, sizeof(*(ptr)), oom_if_failed)
+
+
+#endif // MEMORY_BOX_H_
+

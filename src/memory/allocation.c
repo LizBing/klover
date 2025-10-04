@@ -14,6 +14,21 @@
  * limitations under the License.
  */
 
+#include <stdlib.h>
+
+#include "utils/global_defs.h"
 #include "memory/allocation.h"
 
+void* c_heap_alloc(size_t byte_size, bool oom_if_failed) {
+  void* res = malloc(byte_size);
 
+  if (oom_if_failed && NULL == res) {
+    panic("out of memory(metaspace)");
+  }
+
+  return res;
+}
+
+void c_heap_free(void* n) {
+  free(n);
+}

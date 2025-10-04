@@ -14,10 +14,4 @@
  * limitations under the License.
  */
 
-pub mod access;
-pub mod field;
-pub mod klass_handle;
-pub(super) mod mark_word;
-pub mod obj_handle;
-pub mod oop;
-pub mod obj_desc;
+pub mod klass;

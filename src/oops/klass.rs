@@ -14,5 +14,5 @@
  * limitations under the License.
  */
 
-struct Klass;
+pub struct Klass;
 pub type KlassHandle = *mut Klass;

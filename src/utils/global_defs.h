@@ -14,19 +14,33 @@
  * limitations under the License.
  */
 
-use crate::{oops::{obj_handle::ObjHandle, oop::ObjPtr}, utils::global_defs::address};
+#ifndef UTILS_GLOBAL_DEFS_H_
+#define UTILS_GLOBAL_DEFS_H_
 
-#[derive(Debug)]
-pub enum Jvalue {
-    Boolean(bool),
-    Byte(i8),
-    Char(u16),
-    Short(i16),
-    Int(i32),
-    Long(i64),
-    Float(f32),
-    Double(f64),
-    Ref(ObjPtr),
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdlib.h>
+#include <stdio.h>
 
-    ReturnAddress(address)
-}
+typedef char byte_t;
+
+#define assert(e, ...) \
+do {\
+  if (!(e)) {\
+    printf("Assert: '" #e "' at File '%s', Line %d\n\t", __FILE__, __LINE__);\
+    printf(__VA_ARGS__);\
+    printf("\n");\
+    exit(1);\
+  }\
+} while (0)
+
+#define panic(...) \
+do {\
+  printf("Panicked at File '%s', Line %d\n\t", __FILE__, __LINE__);\
+  printf(__VA_ARGS__);\
+  printf("\n");\
+  exit(1);\
+} while (0)\
+
+#endif // UTILS_GLOBAL_DEFS_H_
+

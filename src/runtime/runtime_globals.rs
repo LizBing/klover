@@ -18,6 +18,6 @@ use klover_flag_sys_proc_macro::def_vm_flags;
 
 def_vm_flags! {
     RUNTIME_GLOBALS {
-        product(USE_COMPRESSED_OOPS, bool, true, None, "Use compressed oops.")
+        // product(USE_COMPRESSED_OOPS, bool, true, None, "Use compressed oops.")
     }
 }

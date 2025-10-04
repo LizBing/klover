@@ -14,118 +14,76 @@
  * limitations under the License.
  */
 
-use std::ffi::c_void;
+use std::ptr::{null, null_mut};
 
-use crate::{is_page_aligned, memory::virt_space::VirtSpace, utils::global_defs::{address, word_t}};
+use crate::utils::global_defs::{HeapAddress, LOG_BYTES_PER_WORD};
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct MemRegion {
-    _begin: address,
-    _end:   address
+    _start: HeapAddress,
+    _word_size: usize
 }
 
 impl MemRegion {
     pub fn new() -> Self {
         Self {
-            _begin: 0,
-            _end: 0
+            _start: HeapAddress::new(null()),
+            _word_size: 0
         }
     }
 
-    pub fn with_size(begin: address, size: usize) -> Self {
-        Self::with_end(begin, begin + size)
-    }
-
-    pub fn with_end(begin: address, end: address) -> Self {
-        let mut mr = Self::new();
-        mr.init_with_end(begin, end);
-
-        mr
-    }
-
-    pub fn init_with_size(&mut self, begin: address, size: usize) {
-        self.init_with_end(begin, begin + size);
-    }
-
-    pub fn init_with_end(&mut self, begin: address, end: address) {
-        debug_assert!(end >= begin, "bad memory region");
-
-        self._begin = begin;
-        self._end = end;
-    }
-}
-
-impl Clone for MemRegion {
-    fn clone(&self) -> Self {
+    pub fn with_size(start: HeapAddress, word_size: usize) -> Self {
         Self {
-            _begin: self._begin,
-            _end: self._end
+            _start: start,
+            _word_size: word_size
+        }
+    }
+
+    pub fn with_end(start: HeapAddress, end: HeapAddress) -> Self {
+        Self {
+            _start: start,
+            _word_size: HeapAddress::delta_in_words(end, start)
         }
     }
 }
 
-impl Copy for MemRegion {}
-
 impl MemRegion {
-    pub fn assert_page_alignment(&self) {
-        debug_assert!(is_page_aligned!(self._begin));
+    pub fn start(&self) -> HeapAddress {
+        self._start
     }
 
-    pub fn assert_available(&self) {
-        debug_assert!(self._begin != 0 && self._end != 0);
+    pub fn end(&self) -> HeapAddress {
+        self.start().offset_in_words(self._word_size as _)
+    }
+
+    pub fn last_word(&self) -> HeapAddress {
+        self.end().offset_in_words(-1)
+    }
+
+    pub fn size_in_words(&self) -> usize {
+        self._word_size
+    }
+
+    pub fn size_in_bytes(&self) -> usize {
+        self._word_size << LOG_BYTES_PER_WORD
+    }
+
+    pub fn contains(&self, addr: HeapAddress) -> bool {
+        HeapAddress::diff_in_bytes(self._start, addr) <= 0 &&
+        HeapAddress::diff_in_bytes(self.end(), addr) > 0
+    }
+
+    pub fn set_begin(&mut self, n: HeapAddress) {
+        self._start = n
+    }
+
+    pub fn set_end(&mut self, n: HeapAddress) {
+        self._word_size = HeapAddress::delta_in_words(n, self._start)
+    }
+
+    pub fn set_size(&mut self, word_size: usize) {
+        self._word_size = word_size
     }
 }
 
-impl MemRegion {
-    pub fn begin(&self) -> address {
-        self._begin
-    }
 
-    pub fn end(&self) -> address {
-        self._end
-    }
-
-    pub fn last_word(&self) -> address {
-        self.end() - size_of::<word_t>()
-    }
-
-    pub fn size(&self) -> usize {
-        self.end() - self.begin()
-    }
-
-    pub fn contains(&self, addr: address) -> bool {
-        addr >= self.begin() && addr < self.end()
-    }
-
-    pub fn set_begin(&mut self, n: address) {
-        self._begin = n;
-    }
-
-    pub fn set_end(&mut self, n: address) {
-        self._end = n;
-    }
-
-    pub fn set_size(&mut self, s: usize) {
-        self._end = self._begin + s;
-    }
-}
-
-impl MemRegion {
-    pub fn pretouch(&self) {
-        self.assert_available();
-        self.assert_page_alignment();
-
-        unsafe {
-            let ptr = self._begin as *mut u8;
-            let page_size = VirtSpace::page_size();
-
-            for i in (0..self.size()).step_by(page_size) {
-                ptr.add(i).write_volatile(0);
-            }
-        }
-    }
-
-    pub fn memset(&self, c: i32) {
-        unsafe { nix::libc::memset(self._begin as *mut c_void, c, self.size()); }
-    }
-}

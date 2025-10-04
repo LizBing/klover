@@ -14,6 +14,4 @@
  * limitations under the License.
  */
 
-pub mod jvalue;
 pub mod runtime_globals;
-pub mod tls;

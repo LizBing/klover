@@ -16,7 +16,7 @@
 
 use std::sync::RwLock;
 
-use crate::oops::klass_handle::KlassHandle;
+use crate::oops::klass::KlassHandle;
 
 #[derive(Clone)]
 pub enum ConstantPoolCacheEntry {

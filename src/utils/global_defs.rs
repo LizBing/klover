@@ -14,47 +14,75 @@
  * limitations under the License.
  */
 
-#[macro_export]
-macro_rules! OneBit {
-    () => { 0x1 }
+use core::fmt;
+use std::ptr::null;
+
+pub struct HeapWordImpl;
+pub type HeapWord = *const HeapWordImpl;
+
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug)]
+pub struct HeapAddress(*const HeapWord);
+
+impl HeapAddress {
+    pub fn new<T: Into<*const HeapWord>>(n: T) -> Self {
+        Self(n.into())
+    }
+
+    pub fn as_ptr<T>(self) -> *const T {
+        self.0 as _
+    }
+
+    pub fn is_null(self) -> bool {
+        self.0 == null()
+    }
+
+    pub fn equals(left: Self, right: Self) -> bool {
+        left.0 == right.0
+    }
+
+    pub fn diff_in_bytes(left: Self, right: Self) -> isize {
+        left.0 as isize - right.0 as isize
+    }
+
+    pub fn diff_in_words(left: Self, right: Self) -> isize {
+        Self::diff_in_bytes(left, right) >> LOG_BYTES_PER_WORD
+    }
+
+    pub fn delta_in_bytes(left: Self, right: Self) -> usize {
+        assert!(left.0 >= right.0, "left({}) should be greater than right({})", left, right);
+
+        left.0 as usize - right.0 as usize
+    }
+
+    pub fn delta_in_words(left: Self, right: Self) -> usize {
+        Self::delta_in_bytes(left, right) >> LOG_BYTES_PER_WORD
+    }
+
+    pub fn offset_in_bytes(self, offs: isize) -> Self {
+        Self::new(self.0.wrapping_byte_offset(offs))
+    }
+
+    pub fn offset_in_words(self, offs: isize) -> Self {
+        Self::new(self.0.wrapping_offset(offs))
+    }
 }
 
-pub type intx = isize;
-pub type uintx = usize;
-
-pub type word_t = uintx;
-pub type address = uintx;
-pub type naddr = u32;
-
-pub const fn addr_cast<'a, T>(n: address) -> Option<&'a mut T> {
-    if n == 0 { None }
-    else { Some(unsafe { &mut *(n as *mut T) }) }
+impl fmt::Display for HeapAddress {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:p}", self.0)
+    }
 }
 
-pub const LOG_BITS_PER_BYTE: i32 = 3;
-pub const BITS_PER_BYTE: i32 = OneBit!() << LOG_BITS_PER_BYTE;
-
-pub const LOG_BYTES_PER_SHORT: i32 = 1;
-pub const LOG_BYTES_PER_INT: i32 = 2;
-pub const LOG_BYTES_PER_LONG: i32 = 3;
-pub const LOG_BYTES_PER_ARCH: i32 = 3;  // for x64 machines
-
-pub const BYTES_PER_SHORT: usize = OneBit!() << LOG_BYTES_PER_SHORT;
-pub const BYTES_PER_INT: usize = OneBit!() << LOG_BYTES_PER_INT;
-pub const BYTES_PER_LONG: usize = OneBit!() << LOG_BYTES_PER_LONG;
-pub const BYTES_PER_ARCH: usize = OneBit!() << LOG_BYTES_PER_ARCH;
-
-pub const LOG_BITS_PER_ARCH: i32 = LOG_BITS_PER_BYTE + LOG_BYTES_PER_ARCH;
-
-pub const BITS_PER_ARCH: i32 = OneBit!() << LOG_BITS_PER_ARCH;
+pub const LOG_BYTES_PER_WORD: i32 = 3;
 
 pub const K: usize = 1024;
 pub const M: usize = K * K;
 pub const G: usize = M * K;
 
-pub const fn log2(x: usize) -> usize {
-    if x <= 1 { 0 }
-    else {
-        1 + log2(x >> 1)
-    }
+#[macro_export]
+macro_rules! PTR_FORMAT {
+    () => {
+        "{:p}"
+    };
 }
