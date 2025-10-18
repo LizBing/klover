@@ -1,11 +1,11 @@
 [package]
-name = "klover-rf"
+name = "klover"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "jvm"
-crate-type = ["cdylib"]
+name = "core"
+crate-type = ["staticlib"]
 
 [dependencies]
 klover-flag-sys-proc-macro = { path = "./src/flag_sys/proc_macro" }

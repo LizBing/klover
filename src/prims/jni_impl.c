@@ -19,10 +19,44 @@
  * under the License.
  */
 
-#ifndef _JNI_IMPLEMENTATION_
-#define _JNI_IMPLEMENTATION_
-
 #include "prims/jni.h"
+#include "utils/global_defs.h"
+
+// stubs in JavaVM
+
+jint JavaVM_DestroyJavaVM(JavaVM* vm) {
+  return JNI_ERR;
+}
+
+jint JavaVM_AttachCurrentThread(JavaVM* vm, void** penv, void* args) {
+  return JNI_ERR;
+}
+
+jint JavaVM_DetachCurrentThread(JavaVM* vm) {
+  return JNI_ERR;
+}
+
+jint JavaVM_GetEnv(JavaVM* vm, void** penv, jint version) {
+  return JNI_ERR;
+}
+
+jint JavaVM_AttachCurrentThreadAsDaemon(JavaVM* vm, void** penv, void* args) {
+  return JNI_ERR;
+}
+
+static const struct JNIInvokeInterface_ JAVA_VM = {
+  .reserved0 = NULL,
+  .reserved1 = NULL,
+  .reserved2 = NULL,
+
+  .DestroyJavaVM = JavaVM_DestroyJavaVM,
+  .AttachCurrentThread = JavaVM_AttachCurrentThread,
+  .DetachCurrentThread = JavaVM_DetachCurrentThread,
+  .GetEnv = JavaVM_GetEnv,
+  .AttachCurrentThreadAsDaemon = JavaVM_AttachCurrentThreadAsDaemon,
+};
+
+static atomic_bool JVM_CREATED = false;
 
 static JavaVMInitArgs DEFAULT_INIT_ARGS = {
   .version = JNI_VERSION_21,
@@ -31,12 +65,54 @@ static JavaVMInitArgs DEFAULT_INIT_ARGS = {
   .ignoreUnrecognized = 1
 };
 
+static struct JNINativeInterface_ JNI_ENV;
+
 jint JNI_GetDefaultJavaVMInitArgs(void* args) {
   *(JavaVMInitArgs*)args = DEFAULT_INIT_ARGS;
 
   return JNI_OK;
 }
 
-jint JNI_CreateJavaVM(JavaVM** pvm, void** penv, void* args) {}
+jint JNI_CreateJavaVM(JavaVM** pvm, void** penv, void* args) {
+  assert(NULL != args, "should not be null");
 
-#endif /* _JNI_IMPLEMENTATION_ */
+  JavaVMInitArgs* init_args = args;
+  printf("%d args received.", init_args->nOptions);
+
+  return JNI_ERR;
+}
+
+jint JNI_GetCreatedJavaVMs(JavaVM** vmBuf, jsize bufLen, jsize* nVMs) {
+  assert(NULL != vmBuf, "should not be null");
+
+  if (atomic_load(&JVM_CREATED)) {
+    **vmBuf = &JAVA_VM;
+    if (NULL != nVMs) {
+      *nVMs = 1;
+    }
+  } else if (NULL != nVMs) {
+    *nVMs = 0;
+  }
+
+  return JNI_OK;
+}
+
+jint JNI_OnLoad(JavaVM* vm, void* reserved) {
+  return JNI_ERR;
+}
+
+void JNI_OnUnload(JavaVM* vm, void* reserved) { }
+
+jint JNI_GetVersion(JNIEnv* _env) {
+  return JNI_VERSION_21;
+}
+
+static struct JNINativeInterface_ JNI_ENV = {
+  .reserved0 = NULL,
+  .reserved1 = NULL,
+  .reserved2 = NULL,
+  .reserved3 = NULL,
+
+  .GetVersion = JNI_GetVersion,
+};
+

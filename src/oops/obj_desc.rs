@@ -14,9 +14,4 @@
  * limitations under the License.
  */
 
-pub mod klass;
 
-mod array_klass;
-mod normal_klass;
-mod obj_desc;
-mod prim_klass;

@@ -14,22 +14,18 @@
  * limitations under the License.
  */
 
-use crate::{engine::{context::Context, engine_globals::INTP_STACK_SIZE}, utils::global_defs::M};
+use crate::{engine::{engine_globals::INTP_STACK_SIZE}, utils::global_defs::M};
 
 thread_local! {
     static TLS: ThrdLocalStorage = ThrdLocalStorage::new();
 }
 
 #[derive(Debug)]
-struct ThrdLocalStorage {
-    _ctx: Context,
-}
+struct ThrdLocalStorage { }
 
 impl ThrdLocalStorage {
     fn new() -> Self {
-        Self {
-            _ctx: Context::new(INTP_STACK_SIZE.get_value() * M)
-        }
+        Self { }
     }
 }
 
@@ -39,6 +35,3 @@ fn tls() -> &'static ThrdLocalStorage {
     })
 }
 
-pub fn context() -> &'static Context {
-    &tls()._ctx
-}

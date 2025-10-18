@@ -14,9 +14,12 @@
  * limitations under the License.
  */
 
-pub mod klass;
+#ifndef UTILS_ALIGN_H_
+#define UTILS_ALIGN_H_
 
-mod array_klass;
-mod normal_klass;
-mod obj_desc;
-mod prim_klass;
+#define align_down(n, a) ((n) & ~(a - 1))
+#define align_up(n, a) (align_down((n) + a - 1, a))
+
+#define is_aligned(n, a) ((n) % (a) == 0)
+
+#endif /* UTILS_ALIGN_H_ */

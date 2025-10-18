@@ -21,6 +21,7 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdatomic.h>
 
 typedef char byte_t;
 
@@ -41,6 +42,22 @@ do {\
   printf("\n");\
   exit(1);\
 } while (0)\
+
+#ifdef _LP64
+#define LP64_ONLY(x) x
+#define NOT_LP64(x)
+#else
+#define LP64_ONLY(x)
+#define NOT_LP64(x) x
+#endif /* _LP64 */
+
+#ifdef _LP32
+#define LP32_ONLY(x) x
+#define NOT_LP32(x)
+#else
+#define LP32_ONLY(x)
+#define NOT_LP32(x) x
+#endif /* _LP64 */
 
 #endif // UTILS_GLOBAL_DEFS_H_
 

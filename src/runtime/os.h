@@ -14,34 +14,19 @@
  * limitations under the License.
  */
 
-#[repr(C)]
-struct ContextImpl;
+#ifndef RUNTIME_OS_H_
+#define RUNTIME_OS_H_
 
-extern "C" {
-    fn ContextImpl_new(stack_byte_size: usize) -> *mut ContextImpl;
-    fn ContextImpl_delete(this: *mut ContextImpl);
-}
+#include "utils/global_defs.h"
 
-#[derive(Debug)]
-pub struct Context {
-    _impl: *mut ContextImpl
-}
+size_t os_vm_page_size();
 
-impl Context {
-    pub fn new(stack_byte_size: usize) -> Self {
-        unsafe {
-            Self {
-                _impl: ContextImpl_new(stack_byte_size)
-            }
-        }
-    }
-}
+byte_t* os_reserve_memory(byte_t*, size_t byte_size);
+bool os_commit_memory(byte_t*, size_t byte_size, bool executable);
+bool os_uncommit_memory(byte_t*, size_t byte_size);
+bool os_release_memory(byte_t*, size_t byte_size);
 
-impl Drop for Context {
-    fn drop(&mut self) {
-        unsafe { ContextImpl_delete(self._impl); }
-    }
-}
+void os_pretouch_memory(byte_t*, size_t byte_size);
 
-
+#endif // RUNTIME_OS_H_
 

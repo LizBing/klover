@@ -21,7 +21,7 @@ use crate::oops::{array_klass::ArrayKlass, normal_klass::NormalKlass, prim_klass
 enum Klass<'a> {
     Normal(NormalKlass<'a>),
     Primitive(PrimKlass),
-    ArrayKlass(ArrayKlass)
+    ArrayKlass(ArrayKlass),
 }
 
 impl Klass<'_> {

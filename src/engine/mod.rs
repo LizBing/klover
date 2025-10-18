@@ -15,6 +15,5 @@
  */
 
 mod bytecodes;
-pub mod context;
 pub mod engine_globals;
 pub mod interpreter;

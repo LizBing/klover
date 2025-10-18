@@ -14,18 +14,20 @@
  * limitations under the License.
  */
 
-#include "memory/allocation.h"
-#include "memory/box.h"
+#include "oops/mark_word.h"
 #include "utils/global_defs.h"
 
-typedef struct ContextImpl ContextImpl;
-struct ContextImpl {};
+typedef struct ObjDesc ObjDesc;
+struct ObjDesc {
+  MarkWord _mark_word;
+  byte_t _data[0];
+};
 
-ContextImpl* ContextImpl_new(size_t stack_byte_size) {
-  ContextImpl res = {};
-  box_and_return(&res, true);
-}
+typedef struct ArrayObjDesc ArrayObjDesc;
+struct ArrayObjDesc {
+  ObjDesc _super;
+  uint32_t _len;
 
-void ContextImpl_delete(ContextImpl* this) {
-  c_heap_free(this);
-}
+  LP64_ONLY(uint32_t _;)
+  byte_t _data[0];
+};

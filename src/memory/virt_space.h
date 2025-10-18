@@ -14,9 +14,30 @@
  * limitations under the License.
  */
 
-pub mod klass;
+#ifndef MEMORY_VIRT_SPACE_H_
+#define MEMORY_VIRT_SPACE_H_
 
-mod array_klass;
-mod normal_klass;
-mod obj_desc;
-mod prim_klass;
+#include "utils/global_defs.h"
+
+typedef struct VirtSpace VirtSpace;
+struct VirtSpace {
+  byte_t* start;
+  size_t reserved;
+  size_t committed;
+
+  size_t _alignment;
+  
+  bool _executable;
+};
+
+bool VirtSpace_init(VirtSpace*, byte_t* start, size_t byte_size, size_t alignment, bool executable);
+void VirtSpace_dtor(VirtSpace*);
+
+bool VirtSpace_contains(VirtSpace*, void*);
+
+bool VirtSpace_expand_by(VirtSpace*, size_t byte_size, bool pretouch);
+bool VirtSpace_shrink_by(VirtSpace*, size_t byte_size);
+
+#endif // MEMORY_VIRT_SPACE_H_
+
+

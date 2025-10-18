@@ -19,6 +19,9 @@
  * under the License.
  */
 
+#ifndef PRIMS_JNI_MD_H_
+#define PRIMS_JNI_MD_H_
+
 #include <stdint.h>
 
 #define JNICALL
@@ -28,3 +31,5 @@
 typedef int jint;
 typedef intptr_t jlong;
 typedef signed char jbyte;
+
+#endif /* PRIMS_JNI_MD_H_ */

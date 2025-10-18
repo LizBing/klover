@@ -14,9 +14,16 @@
  * limitations under the License.
  */
 
-pub mod klass;
+#ifndef OOPS_MARK_WORD_H_
+#define OOPS_MARK_WORD_H_
 
-mod array_klass;
-mod normal_klass;
-mod obj_desc;
-mod prim_klass;
+#include "utils/global_defs.h"
+
+typedef struct MarkWord MarkWord;
+struct MarkWord {
+  atomic_intptr_t _value;
+};
+
+
+#endif // OOPS_MARK_WORD_H_
+
