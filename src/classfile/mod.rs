@@ -14,5 +14,4 @@
  * limitations under the License.
  */
 
-mod jni;
-mod jni_impl;
+

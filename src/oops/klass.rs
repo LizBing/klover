@@ -14,5 +14,18 @@
  * limitations under the License.
  */
 
-pub struct Klass;
-pub type KlassHandle = *mut Klass;
+use cafebabe::ClassFile;
+
+use crate::oops::{array_klass::ArrayKlass, normal_klass::NormalKlass, prim_klass::PrimKlass};
+
+enum Klass<'a> {
+    Normal(NormalKlass<'a>),
+    Primitive(PrimKlass),
+    ArrayKlass(ArrayKlass)
+}
+
+impl Klass<'_> {
+    fn name() -> String {
+        unimplemented!()
+    }
+}

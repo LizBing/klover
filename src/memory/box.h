@@ -30,8 +30,9 @@ static inline void* _box_and_return(void* src, size_t byte_size, bool oom_if_fai
   return res;
 }
 
-#define box_and_return(ptr, oom_if_failed) \
-  return _box_and_return(ptr, sizeof(*(ptr)), oom_if_failed)
+#define box_and_return(ptr /*, oom_if_failed */) \
+  return _box_and_return(ptr, sizeof(*(ptr)), true)
+  // return _box_and_return(ptr, sizeof(*(ptr)), oom_if_failed)
 
 
 #endif // MEMORY_BOX_H_

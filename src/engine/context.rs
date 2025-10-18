@@ -14,7 +14,9 @@
  * limitations under the License.
  */
 
+#[repr(C)]
 struct ContextImpl;
+
 extern "C" {
     fn ContextImpl_new(stack_byte_size: usize) -> *mut ContextImpl;
     fn ContextImpl_delete(this: *mut ContextImpl);

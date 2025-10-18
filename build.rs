@@ -14,35 +14,4 @@
  * limitations under the License.
  */
 
-fn add_c_src(dir: &str, src_file_name: &str, include_path: &str) {
-    let src_path = format!("{}/{}", dir, src_file_name);
-    let output = format!("{}_c", src_file_name);
-
-    cc::Build::new()
-        .file(&src_path)
-        .include(include_path)
-        .compile(&output);
-
-    println!("cargo::rerun-if-changed={}", &src_path);
-}
-
-fn add_c_module(dir: &str, name: &str, include_path: &str) {
-    let src_file_name = format!("{}.c", name);
-    let header_path = format!("{}/{}.h", dir, name);
-    let header_output_path = format!("{}/{}.rs", dir, name);
-
-    add_c_src(dir, &src_file_name, include_path);
-
-    let bindings = bindgen::Builder::default()
-        .header(header_path)
-        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
-        .generate()
-        .expect("Unable to generate bindings");
-
-    bindings.write_to_file(header_output_path)
-        .expect("Couldn't write bindings!");
-}
-
-fn main() {
-    add_c_src("src/prims", "jni_impl.c", "src/prims");
-}
+fn main() {}

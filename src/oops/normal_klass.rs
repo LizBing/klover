@@ -14,3 +14,8 @@
  * limitations under the License.
  */
 
+use cafebabe::ClassFile;
+
+pub struct NormalKlass<'a> {
+    _cf: ClassFile<'a>
+}

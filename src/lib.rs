@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-pub(crate) mod engine;
-pub(crate) mod flag_sys;
-pub(crate) mod memory;
-pub(crate) mod oops;
-pub(crate) mod utils;
+mod classfile;
+mod engine;
+mod flag_sys;
+mod memory;
+mod oops;
+mod utils;
 
-mod prims;
 mod code;
 mod runtime;
-pub mod common;
+mod common;
