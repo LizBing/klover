@@ -43,6 +43,8 @@ do {\
   exit(1);\
 } while (0)\
 
+#define unimplemented() panic("unimplemented")
+
 #ifdef _LP64
 #define LP64_ONLY(x) x
 #define NOT_LP64(x)

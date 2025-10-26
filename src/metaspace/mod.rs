@@ -14,20 +14,4 @@
  * limitations under the License.
  */
 
-#include "oops/mark_word.h"
-#include "utils/global_defs.h"
-
-typedef struct ObjDesc ObjDesc;
-struct ObjDesc {
-  MarkWord _mark_word;
-  byte_t _data[0];
-};
-
-typedef struct ArrayObjDesc ArrayObjDesc;
-struct ArrayObjDesc {
-  ObjDesc _super;
-  uint32_t _len;
-
-  LP64_ONLY(uint32_t _;)
-  byte_t _data[0];
-};
+pub mod klass_space;

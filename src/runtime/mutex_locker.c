@@ -14,14 +14,10 @@
  * limitations under the License.
  */
 
-use cafebabe::ClassFile;
+#include "runtime/mutex_locker.h"
 
-use crate::oops::{array_klass::ArrayKlass, normal_klass::NormalKlass, prim_klass::PrimKlass};
+Mutex* KLASS_SPACE_LOCK = NULL;
 
-enum Klass<'a> {
-    Normal(NormalKlass<'a>),
-    Primitive(PrimKlass),
-    ArrayKlass(ArrayKlass),
+bool Mutexes_initialize() {
+  return ((KLASS_SPACE_LOCK = Mutex_new()) != NULL);
 }
-
-impl Klass<'_> {}

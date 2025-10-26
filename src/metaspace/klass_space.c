@@ -14,14 +14,23 @@
  * limitations under the License.
  */
 
-use cafebabe::ClassFile;
+#include "memory/virt_space.h"
+#include "runtime/mutex_locker.h"
+#include "utils/global_defs.h"
 
-use crate::oops::{array_klass::ArrayKlass, normal_klass::NormalKlass, prim_klass::PrimKlass};
+static VirtSpace VIRT_SPACE = { 0 };
 
-enum Klass<'a> {
-    Normal(NormalKlass<'a>),
-    Primitive(PrimKlass),
-    ArrayKlass(ArrayKlass),
-}
+void KlassSpace_initialize(size_t _log_slot_byte_size) { unimplemented(); }
 
-impl Klass<'_> {}
+void* KlassSpace_allocate() { unimplemented(); }
+
+void* KlassSpace_base() { unimplemented(); }
+
+/*
+int KlassSpace_encode(void* raw) { unimplemented(); }
+
+void* KlassSpace_decode(int narrow) { unimplemented(); }
+*/
+
+// Class unloading is not supported currently.
+void KlassSpace_free(void* ptr) { ; }

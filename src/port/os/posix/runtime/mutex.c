@@ -13,15 +13,3 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-use cafebabe::ClassFile;
-
-use crate::oops::{array_klass::ArrayKlass, normal_klass::NormalKlass, prim_klass::PrimKlass};
-
-enum Klass<'a> {
-    Normal(NormalKlass<'a>),
-    Primitive(PrimKlass),
-    ArrayKlass(ArrayKlass),
-}
-
-impl Klass<'_> {}

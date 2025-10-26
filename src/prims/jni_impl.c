@@ -101,7 +101,7 @@ jint JNI_OnLoad(JavaVM* vm, void* reserved) {
   return JNI_ERR;
 }
 
-void JNI_OnUnload(JavaVM* vm, void* reserved) { }
+void JNI_OnUnload(JavaVM* vm, void* reserved) { unimplemented(); }
 
 jint JNI_GetVersion(JNIEnv* _env) {
   return JNI_VERSION_21;

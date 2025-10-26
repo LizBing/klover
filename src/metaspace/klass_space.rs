@@ -14,14 +14,17 @@
  * limitations under the License.
  */
 
-use cafebabe::ClassFile;
+use std::ffi::c_void;
 
-use crate::oops::{array_klass::ArrayKlass, normal_klass::NormalKlass, prim_klass::PrimKlass};
+unsafe extern "C" {
+    unsafe fn KlassSpace_initialize(log_slot_byte_size: usize);
 
-enum Klass<'a> {
-    Normal(NormalKlass<'a>),
-    Primitive(PrimKlass),
-    ArrayKlass(ArrayKlass),
+    unsafe fn KlassSpace_allocate() -> *mut c_void;
+
+    unsafe fn KlassSpace_base() -> *mut c_void;
 }
 
-impl Klass<'_> {}
+struct KlassSpace;
+impl KlassSpace {
+    // pub fn KlassSpace_encode()
+}

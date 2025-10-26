@@ -14,16 +14,26 @@
  * limitations under the License.
  */
 
-#ifndef OOPS_MARK_WORD_H_
-#define OOPS_MARK_WORD_H_
+#ifndef RUNTIME_MUTEX_LOCKER_H_
+#define RUNTIME_MUTEX_LOCKER_H_
 
+#include "runtime/mutex.h"
 #include "utils/global_defs.h"
 
-typedef struct MarkWord MarkWord;
-struct MarkWord {
-  atomic_intptr_t _value;
-};
+extern Mutex* KLASS_SPACE_LOCK;
 
+#define mutex_locker(mtx, block) \
+{\
+  assert(Mutex_lock(mtx), "bad lock");\
+  block\
+  assert(Mutex_unlock(mtx), "bad lock");\
+}
 
-#endif // OOPS_MARK_WORD_H_
+#define mutex_unlocker(mtx, block) \
+{\
+  assert(Mutex_unlock(mtx), "bad lock");\
+  block\
+  assert(Mutex_lock(mtx), "bad lock");\
+}
 
+#endif // RUNTIME_MUTEX_LOCKER_H_

@@ -14,14 +14,13 @@
  * limitations under the License.
  */
 
-use cafebabe::ClassFile;
+#include "utils/global_defs.h"
 
-use crate::oops::{array_klass::ArrayKlass, normal_klass::NormalKlass, prim_klass::PrimKlass};
+typedef struct Mutex Mutex;
 
-enum Klass<'a> {
-    Normal(NormalKlass<'a>),
-    Primitive(PrimKlass),
-    ArrayKlass(ArrayKlass),
-}
+Mutex* Mutex_new();
+void Mutex_delete(Mutex*);
 
-impl Klass<'_> {}
+bool Mutex_lock(Mutex*);
+bool Mutex_unlock(Mutex*);
+bool Mutex_try_lock(Mutex*);
