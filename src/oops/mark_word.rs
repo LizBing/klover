@@ -14,17 +14,14 @@
  * limitations under the License.
  */
 
-#include "memory/virt_space.h"
-#include "runtime/mutex_locker.h"
-#include "utils/global_defs.h"
+use modular_bitfield::{bitfield, prelude::{B1, B2, B26, B31, B4}};
 
-static VirtSpace VIRT_SPACE = { 0 };
-
-void KlassSpace_initialize(size_t _log_slot_byte_size) { unimplemented(); }
-
-void* KlassSpace_allocate() { unimplemented(); }
-
-void* KlassSpace_base() { unimplemented(); }
-
-// Class unloading is not supported currently.
-void KlassSpace_free(void* ptr) { ; }
+#[bitfield(bits = 64)]
+#[derive(Clone, Copy)]
+struct MarkWord {
+    _lock: B2,
+    _biased: B1,
+    _age: B4,
+    _hash: B31,
+    _klass_ptr: B26
+}
