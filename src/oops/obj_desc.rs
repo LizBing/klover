@@ -14,4 +14,14 @@
  * limitations under the License.
  */
 
+use crate::oops::mark_word::AtomicMarkWord;
 
+#[repr(C)]
+pub struct ObjDesc {
+    _mw: AtomicMarkWord
+}
+#[repr(C)]
+pub struct ArrayObjDesc {
+    _super: ObjDesc,
+    _len: u32
+}
