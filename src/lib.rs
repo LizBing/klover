@@ -17,6 +17,7 @@
 mod classfile;
 mod engine;
 mod flag_sys;
+mod gc;
 mod memory;
 mod metaspace;
 mod oops;

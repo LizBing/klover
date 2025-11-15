@@ -26,5 +26,5 @@ unsafe extern "C" {
 
 struct KlassSpace;
 impl KlassSpace {
-    // pub fn KlassSpace_encode()
+    pub fn initialize() { unimplemented!() }
 }

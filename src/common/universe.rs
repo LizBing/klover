@@ -20,12 +20,3 @@ static UNIVERSE: OnceCell<Universe> = OnceCell::new();
 pub fn initialize() {}
 
 struct Universe {}
-
-/*
-pub fn coops_base() -> address {
-    debug_assert!(USE_COMPRESSED_OOPS.get_value());
-
-    UNIVERSE.get().unwrap()._coops_base
-}
-*/
-

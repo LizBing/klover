@@ -14,4 +14,4 @@
  * limitations under the License.
  */
 
-mod interpreter_runtime; 
+mod template_interpreter;

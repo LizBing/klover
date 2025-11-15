@@ -20,6 +20,7 @@ use crate::oops::mark_word::AtomicMarkWord;
 pub struct ObjDesc {
     _mw: AtomicMarkWord
 }
+
 #[repr(C)]
 pub struct ArrayObjDesc {
     _super: ObjDesc,

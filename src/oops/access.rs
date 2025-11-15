@@ -14,7 +14,19 @@
  * limitations under the License.
  */
 
-mod bytecodes;
-pub mod engine_globals;
-pub mod engine_runtime;
-pub mod interpreter;
+use std::marker::PhantomData;
+
+use bitflags::bitflags;
+
+use crate::gc::barrier_set::AccessBarrier;
+
+bitflags! {
+    pub struct DecoratorSet : u32 {
+        const IN_HEAP = 1u32 << 0;
+        const NOT_IN_HEAP = 1u32 << 1;
+    }
+}
+
+pub struct AccessAPI<Barrier: AccessBarrier<D>, const D: u32>(PhantomData<Barrier>);
+
+impl<Barrier: AccessBarrier<D>, const D: u32> AccessAPI<Barrier, D> {}

@@ -14,7 +14,20 @@
  * limitations under the License.
  */
 
-mod bytecodes;
-pub mod engine_globals;
-pub mod engine_runtime;
-pub mod interpreter;
+use std::borrow::Cow;
+
+use cafebabe::{attributes::CodeData, MethodInfo};
+
+use crate::oops::klass::Klass;
+
+pub struct Method<'a> {
+    _klass: &'a Klass<'a>,
+    _info: &'a MethodInfo<'a>,
+    _code_data: Option<&'a CodeData<'a>>,
+}
+
+impl Method<'_> {
+    pub fn code_data(&self) -> Option<&CodeData> {
+        self._code_data
+    }
+}

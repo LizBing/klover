@@ -15,3 +15,4 @@
  */
 
 pub mod cp_cache;
+pub mod method;

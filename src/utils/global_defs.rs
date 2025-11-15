@@ -17,6 +17,8 @@
 use core::fmt;
 use std::ptr::null;
 
+pub type Address = usize;
+
 pub struct HeapWordImpl;
 pub type HeapWord = *const HeapWordImpl;
 
@@ -75,6 +77,7 @@ impl fmt::Display for HeapAddress {
 }
 
 pub const LOG_BYTES_PER_WORD: i32 = 3;
+pub const LOG_BITS_PER_BYTE: i32 = 3;
 
 pub const K: usize = 1024;
 pub const M: usize = K * K;

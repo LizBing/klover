@@ -14,7 +14,26 @@
  * limitations under the License.
  */
 
-mod bytecodes;
-pub mod engine_globals;
-pub mod engine_runtime;
-pub mod interpreter;
+use crate::{code::method::Method, utils::global_defs::Address};
+
+#[derive(Clone)]
+pub struct DispatchTable {
+    _table: [Address; 1usize << u8::BITS]
+}
+
+impl DispatchTable {
+    pub fn new() -> Self {
+        unimplemented!()
+    }
+}
+
+type OPStackSlot = isize;
+
+#[derive(Clone)]
+pub struct TemplateInterpreter {
+    _dispatch_table: DispatchTable,
+
+    _slots: *const OPStackSlot
+}
+
+

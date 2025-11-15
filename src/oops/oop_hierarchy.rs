@@ -14,4 +14,22 @@
  * limitations under the License.
  */
 
+use crate::oops::obj_desc::{ArrayObjDesc, ObjDesc};
 
+#[repr(transparent)]
+pub struct OOP(*const ObjDesc);
+
+#[repr(transparent)]
+pub struct ArrayOOP(*const ObjDesc);
+
+impl From<OOP> for ArrayOOP {
+    fn from(value: OOP) -> Self {
+        Self(value.0 as _)
+    }
+}
+
+impl From<ArrayOOP> for OOP {
+    fn from(value: ArrayOOP) -> Self {
+        Self(value.0 as _)
+    }
+}

@@ -14,8 +14,13 @@
  * limitations under the License.
  */
 
-use cafebabe::ClassFile;
+use cafebabe::{parse_class, ClassFile};
 
 pub struct NormalKlass<'a> {
-    _cf: ClassFile<'a>
+    _cf: ClassFile<'a>,
+}
+
+fn foo() {
+    let cf = parse_class("".as_bytes()).unwrap();
+    let m = &cf.methods[0];
 }

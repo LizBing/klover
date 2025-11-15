@@ -14,10 +14,12 @@
  * limitations under the License.
  */
 
+pub mod access;
 pub mod klass;
+pub mod obj_desc;
+pub mod oop_hierarchy;
 
 mod array_klass;
 mod mark_word;
 mod normal_klass;
-mod obj_desc;
 mod prim_klass;
