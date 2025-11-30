@@ -18,6 +18,7 @@ use cafebabe::ClassFile;
 
 use crate::oops::{array_klass::ArrayKlass, normal_klass::NormalKlass, prim_klass::PrimKlass};
 
+#[derive(Debug)]
 pub enum Klass<'a> {
     Normal(NormalKlass<'a>),
     Primitive(PrimKlass),

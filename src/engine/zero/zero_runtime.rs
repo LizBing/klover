@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 
-use crate::code::method::Method;
+use crate::engine::engine_runtime::StackSlot;
 
-pub type StackSlot = usize;
+pub struct ZeroFrame {
+    pub last_frame: *const ZeroFrame,
+    pub locals: *mut StackSlot,
+}
 
-pub const SLOTS_PER_INT: usize = 1;
-pub const SLOTS_PER_REF: usize = 1;
-
-#[derive(Debug)]
-pub struct Frame<'a> {
-    _last_frame: *const Frame<'a>,
-    _last_mthd: Option<&'a Method<'a>>
+pub struct ZeroRegisters {
+    pub sp: *const StackSlot,
+    pub bp: *const ZeroFrame,
+    pub pc: *const u8,
 }

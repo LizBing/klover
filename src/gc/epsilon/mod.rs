@@ -14,15 +14,4 @@
  * limitations under the License.
  */
 
-use crate::code::method::Method;
-
-pub type StackSlot = usize;
-
-pub const SLOTS_PER_INT: usize = 1;
-pub const SLOTS_PER_REF: usize = 1;
-
-#[derive(Debug)]
-pub struct Frame<'a> {
-    _last_frame: *const Frame<'a>,
-    _last_mthd: Option<&'a Method<'a>>
-}
+pub mod epsilon_barrier_set;

@@ -14,15 +14,9 @@
  * limitations under the License.
  */
 
-use crate::code::method::Method;
+use std::ffi::c_void;
 
-pub type StackSlot = usize;
-
-pub const SLOTS_PER_INT: usize = 1;
-pub const SLOTS_PER_REF: usize = 1;
-
-#[derive(Debug)]
-pub struct Frame<'a> {
-    _last_frame: *const Frame<'a>,
-    _last_mthd: Option<&'a Method<'a>>
+unsafe extern "C" {
+    pub unsafe fn c_heap_alloc(byte_size: usize, oom_if_failed: bool) -> *mut c_void;
+    pub unsafe fn c_heap_free(ptr: *mut c_void);
 }

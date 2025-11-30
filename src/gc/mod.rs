@@ -15,3 +15,6 @@
  */
 
 pub mod barrier_set;
+pub mod mem_allocator;
+
+mod epsilon;

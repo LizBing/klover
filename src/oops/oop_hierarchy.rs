@@ -14,22 +14,36 @@
  * limitations under the License.
  */
 
-use crate::oops::obj_desc::{ArrayObjDesc, ObjDesc};
+use std::{mem::offset_of, ptr::null};
+
+use crate::{gc::barrier_set::AccessBarrier, oops::{access::AccessAPI, mark_word::AtomicMarkWord, obj_desc::{ArrayObjDesc, ObjDesc}}};
 
 #[repr(transparent)]
+#[derive(Debug, Clone, Copy)]
 pub struct OOP(*const ObjDesc);
 
-#[repr(transparent)]
-pub struct ArrayOOP(*const ObjDesc);
+impl OOP {
+    pub fn is_null(self) -> bool {
+        self.0 == null()
+    }
 
-impl From<OOP> for ArrayOOP {
-    fn from(value: OOP) -> Self {
-        Self(value.0 as _)
+    pub fn mark_word<'a>(base: Self) -> &'a AtomicMarkWord {
+        unsafe { 
+            &*(base.0.byte_add(ObjDesc::mark_word_offset()) as *const _)
+        }
+    }
+
+    pub fn null() -> OOP {
+        OOP(null())
     }
 }
 
-impl From<ArrayOOP> for OOP {
-    fn from(value: ArrayOOP) -> Self {
-        Self(value.0 as _)
+pub struct ArrayOOP;
+
+impl ArrayOOP {
+    pub fn length(base: OOP) -> usize {
+        unsafe {
+            *(base.0.byte_add(ArrayObjDesc::length_offset()) as *const u32) as usize
+        }
     }
 }

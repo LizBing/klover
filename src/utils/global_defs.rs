@@ -78,6 +78,8 @@ impl fmt::Display for HeapAddress {
 
 pub const LOG_BYTES_PER_WORD: i32 = 3;
 pub const LOG_BITS_PER_BYTE: i32 = 3;
+pub const LOG_BYTES_PER_INT: i32 = 2;
+pub const LOG_BITS_PER_INT: i32 = LOG_BITS_PER_BYTE + LOG_BYTES_PER_INT;
 
 pub const K: usize = 1024;
 pub const M: usize = K * K;

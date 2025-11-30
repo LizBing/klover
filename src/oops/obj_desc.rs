@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+use std::mem::offset_of;
+
 use crate::oops::mark_word::AtomicMarkWord;
 
 #[repr(C)]
@@ -21,8 +23,28 @@ pub struct ObjDesc {
     _mw: AtomicMarkWord
 }
 
+impl ObjDesc {
+    pub const fn mark_word_offset() -> usize {
+        offset_of!(Self, _mw)
+    }
+
+    pub const fn data_start_offset() -> usize {
+        size_of::<Self>()
+    }
+}
+
 #[repr(C)]
 pub struct ArrayObjDesc {
     _super: ObjDesc,
     _len: u32
+}
+
+impl ArrayObjDesc {
+    pub const fn data_start_offset() -> usize {
+        size_of::<Self>()
+    }
+
+    pub const fn length_offset() -> usize {
+        offset_of!(Self, _len)
+    }
 }

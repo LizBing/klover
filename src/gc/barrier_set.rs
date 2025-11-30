@@ -14,42 +14,80 @@
  * limitations under the License.
  */
 
-use crate::oops::oop_hierarchy::{ArrayOOP, OOP};
+use crate::oops::oop_hierarchy::OOP;
 
-pub trait AccessBarrier<const D: u32> {
-    fn load_in_heap_at<T: Copy>(base: OOP, offs_in_bytes: usize) -> T;
-    fn store_in_heap_at<T: Copy>(base: OOP, offs_in_bytes: usize, value: T);
+pub trait AccessBarrier {
+    fn load_in_heap_at<const D: u32, T: Copy>(base: OOP, offs_in_bytes: usize) -> T {
+        unimplemented!()
+    }
 
-    fn cmp_xchg_in_heap_at<T: Copy>(base: OOP, offs_in_bytes: usize, exp: T, des: T)
-        -> Result<T, T>;
+    fn store_in_heap_at<const D: u32, T: Copy>(base: OOP, offs_in_bytes: usize, value: T) {
+        unimplemented!()
+    }
 
-    fn xchg_in_heap_at<T: Copy>(base: OOP, offs_in_bytes: usize, new: T) -> T;
+    fn cmp_xchg_in_heap_at<const D: u32, T: Copy>(base: OOP, offs_in_bytes: usize, exp: T, des: T)
+        -> Result<T, T>
+    {
+        unimplemented!()
+    }
 
-    fn array_copy_in_heap<T: Copy>(
-        src_obj: ArrayOOP, src_offs_in_bytes: usize,
-        dst_obj: ArrayOOP, dst_offs_in_bytes: usize,
+    fn xchg_in_heap_at<const D: u32, T: Copy>(base: OOP, offs_in_bytes: usize, new: T) -> T {
+        unimplemented!()
+    }
+
+    fn array_copy_in_heap<const D: u32, T: Copy>(
+        src_obj: OOP, src_offs_in_bytes: usize,
+        dst_obj: OOP, dst_offs_in_bytes: usize,
         length: usize
-    );
+    ) {
+        unimplemented!()
+    }
 
-    fn oop_load_in_heap_at(base: OOP, offs_in_bytes: usize) -> OOP;
-    fn oop_store_in_heap_at(base: OOP, offs_in_bytes: usize, oop: OOP);
+    fn oop_load_in_heap_at<const D: u32>(base: OOP, offs_in_bytes: usize) -> OOP {
+        unimplemented!()
+    }
 
-    fn oop_cmp_xchg_in_heap_at(base: OOP, offs_in_bytes: usize, exp: OOP, des: OOP)
-        -> Result<OOP, OOP>;
-    fn oop_xchg_in_heap_at(base: OOP, offs_in_bytes: usize, new: OOP) -> OOP;
+    fn oop_store_in_heap_at<const D: u32>(base: OOP, offs_in_bytes: usize, oop: OOP) {
+        unimplemented!()
+    }
 
-    fn oop_array_copy_in_heap(
-        src_obj: ArrayOOP, src_offs_in_bytes: usize,
-        dst_obj: ArrayOOP, dst_offs_in_bytes: usize,
+    fn oop_cmp_xchg_in_heap_at<const D: u32>(base: OOP, offs_in_bytes: usize, exp: OOP, des: OOP)
+        -> Result<OOP, OOP>
+    {
+        unimplemented!()
+    }
+
+    fn oop_xchg_in_heap_at<const D: u32>(base: OOP, offs_in_bytes: usize, new: OOP) -> OOP {
+        unimplemented!()
+    }
+
+    fn oop_array_copy_in_heap<const D: u32>(
+        src_obj: OOP, src_offs_in_bytes: usize,
+        dst_obj: OOP, dst_offs_in_bytes: usize,
         length: usize
-    );
+    ) {
+        unimplemented!()
+    }
 
-    fn oop_load_not_in_heap<T>(addr: *const T) -> OOP;
-    fn oop_store_not_in_heap<T>(addr: *mut T, oop: OOP);
+    fn oop_load_not_in_heap<const D: u32, T>(addr: *const T) -> OOP {
+        unimplemented!()
+    }
 
-    fn oop_cmp_xchg_not_in_heap<T>(addr: *mut T, exp: OOP, des: OOP)
-        -> Result<OOP, OOP>;
-    fn oop_xchg_not_in_heap<T>(addr: *mut T, new: OOP) -> OOP;
+    fn oop_store_not_in_heap<const D: u32, T>(addr: *mut T, oop: OOP) {
+        unimplemented!()
+    }
 
-    fn clone_in_heap(src: OOP, dst: OOP, size_in_bytes: usize);
+    fn oop_cmp_xchg_not_in_heap<const D: u32, T>(addr: *mut T, exp: OOP, des: OOP)
+        -> Result<OOP, OOP>
+    {
+        unimplemented!()
+    }
+
+    fn oop_xchg_not_in_heap<const D: u32, T>(addr: *mut T, new: OOP) -> OOP {
+        unimplemented!()
+    }
+
+    fn clone_in_heap<const D: u32>(src: OOP, dst: OOP, size_in_bytes: usize) {
+        unimplemented!()
+    }
 }

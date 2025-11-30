@@ -14,15 +14,16 @@
  * limitations under the License.
  */
 
-use crate::code::method::Method;
+use crate::oops::oop_hierarchy::OOP;
 
-pub type StackSlot = usize;
-
-pub const SLOTS_PER_INT: usize = 1;
-pub const SLOTS_PER_REF: usize = 1;
-
-#[derive(Debug)]
-pub struct Frame<'a> {
-    _last_frame: *const Frame<'a>,
-    _last_mthd: Option<&'a Method<'a>>
+pub trait MemAllocator {
+    fn allocate(&self) -> OOP {
+        unimplemented!()
+    }
 }
+
+pub struct ObjAllocator;
+
+impl ObjAllocator {}
+
+impl MemAllocator for ObjAllocator {}

@@ -16,6 +16,7 @@
 
 use cafebabe::{parse_class, ClassFile};
 
+#[derive(Debug)]
 pub struct NormalKlass<'a> {
     _cf: ClassFile<'a>,
 }

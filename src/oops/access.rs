@@ -18,15 +18,40 @@ use std::marker::PhantomData;
 
 use bitflags::bitflags;
 
-use crate::gc::barrier_set::AccessBarrier;
+use crate::{gc::barrier_set::AccessBarrier, oops::oop_hierarchy::OOP};
+
+pub const DECORATOR_NONE: u32 = 0;
+pub const DECORATOR_IN_HEAP: u32 = 1u32 << 1;
+pub const DECORATOR_NOT_IN_HEAP: u32 = 1u32 << 2;
 
 bitflags! {
     pub struct DecoratorSet : u32 {
-        const IN_HEAP = 1u32 << 0;
-        const NOT_IN_HEAP = 1u32 << 1;
+        const IN_HEAP = DECORATOR_IN_HEAP;
+        const NOT_IN_HEAP = DECORATOR_NOT_IN_HEAP;
     }
 }
 
-pub struct AccessAPI<Barrier: AccessBarrier<D>, const D: u32>(PhantomData<Barrier>);
+pub struct AccessAPI<const D: u32>;
 
-impl<Barrier: AccessBarrier<D>, const D: u32> AccessAPI<Barrier, D> {}
+impl<const D: u32> AccessAPI<D> {
+    pub fn oop_load<Barrier: AccessBarrier, P>(addr: *const P) -> OOP {
+        unimplemented!()
+    }
+    
+    pub fn oop_load_at<Barrier: AccessBarrier>(base: OOP, byte_offs: usize) -> OOP {
+        unimplemented!()
+    }
+
+    pub fn load_at<Barrier: AccessBarrier, T: Copy>(base: OOP,  byte_offs: usize) -> T {
+        unimplemented!()
+    }
+
+    pub fn oop_store<Barrier: AccessBarrier, P>(addr: *const P, n: OOP) {
+        unimplemented!()
+    }
+
+    pub fn oop_store_at<Barrier: AccessBarrier>(base: OOP, byte_offs: usize, oop: OOP) {
+        unimplemented!()
+    }
+}
+

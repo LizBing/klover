@@ -17,4 +17,4 @@
 mod bytecodes;
 pub mod engine_globals;
 pub mod engine_runtime;
-pub mod interpreter;
+mod zero;

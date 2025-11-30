@@ -14,4 +14,5 @@
  * limitations under the License.
  */
 
+pub mod allocation;
 pub mod mem_region;

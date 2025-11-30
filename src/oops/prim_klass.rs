@@ -14,4 +14,5 @@
  * limitations under the License.
  */
 
+#[derive(Debug)]
 pub struct PrimKlass {}

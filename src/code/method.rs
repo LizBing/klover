@@ -20,6 +20,7 @@ use cafebabe::{attributes::CodeData, MethodInfo};
 
 use crate::oops::klass::Klass;
 
+#[derive(Debug)]
 pub struct Method<'a> {
     _klass: &'a Klass<'a>,
     _info: &'a MethodInfo<'a>,
