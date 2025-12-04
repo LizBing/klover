@@ -17,6 +17,7 @@
 pub mod access;
 pub mod klass;
 pub mod obj_desc;
+pub mod oop_handle;
 pub mod oop_hierarchy;
 
 mod array_klass;

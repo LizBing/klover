@@ -14,15 +14,16 @@
  * limitations under the License.
  */
 
-use crate::engine::engine_runtime::StackSlot;
+use crate::engine::engine_runtime::{Frame, StackSlot};
 
-pub struct ZeroFrame {
-    pub last_frame: *const ZeroFrame,
+pub struct ZeroFrameData {
     pub locals: *mut StackSlot,
 }
 
-pub struct ZeroRegisters {
+pub type ZeroFrame<'a> = Frame<'a, ZeroFrameData>;
+
+pub struct ZeroRegisters<'a> {
     pub sp: *const StackSlot,
-    pub bp: *const ZeroFrame,
+    pub bp: *const ZeroFrame<'a>,
     pub pc: *const u8,
 }

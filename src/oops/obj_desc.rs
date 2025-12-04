@@ -36,7 +36,7 @@ impl ObjDesc {
 #[repr(C)]
 pub struct ArrayObjDesc {
     _super: ObjDesc,
-    _len: u32
+    _len: i32
 }
 
 impl ArrayObjDesc {

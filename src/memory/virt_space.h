@@ -30,8 +30,8 @@ struct VirtSpace {
   bool _executable;
 };
 
-bool VirtSpace_init(VirtSpace*, byte_t* start, size_t byte_size, size_t alignment, bool executable);
-void VirtSpace_dtor(VirtSpace*);
+VirtSpace* VirtSpace_new(byte_t* start, size_t byte_size, size_t alignment, bool executable);
+void VirtSpace_delete(VirtSpace*);
 
 bool VirtSpace_contains(VirtSpace*, void*);
 

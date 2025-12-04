@@ -22,7 +22,36 @@ use crate::oops::{array_klass::ArrayKlass, normal_klass::NormalKlass, prim_klass
 pub enum Klass<'a> {
     Normal(NormalKlass<'a>),
     Primitive(PrimKlass),
-    ArrayKlass(ArrayKlass),
+    ArrayKlass(ArrayKlass<'a>),
 }
 
-impl Klass<'_> {}
+unsafe impl Sync for Klass<'_> {}
+
+impl<'a> Klass<'a> {
+    pub fn as_normal(&self) -> &NormalKlass<'a> {
+        match self {
+            Self::Normal(x) => x,
+            _ => unreachable!()
+        }
+    }
+
+    pub fn as_prim(&self) -> &PrimKlass {
+        match self {
+            Self::Primitive(x) => x,
+            _ => unreachable!()
+        }
+    }
+
+    pub fn as_array_klass(&self) -> &ArrayKlass<'a> {
+        match self {
+            Self::ArrayKlass(x) => x,
+            _ => unreachable!()
+        }
+    }
+}
+
+impl Klass<'_> {
+    pub fn word_size_of_instance(&self) -> usize {
+        unimplemented!()
+    }
+}

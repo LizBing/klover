@@ -14,20 +14,10 @@
  * limitations under the License.
  */
 
-use crate::oops::klass::Klass;
+use crate::oops::oop_hierarchy::OOP;
 
-#[derive(Debug)]
-pub struct ArrayKlass<'a> {
-    _elem_type: &'a Klass<'a>,
-    _dimemsions: usize
-}
+pub struct ClassLoader;
 
-impl<'a> ArrayKlass<'a> {
-    pub fn dimemsions(&self) -> usize {
-        self._dimemsions
-    }
-
-    pub fn elem_type(&self) -> &Klass<'a> {
-        self._elem_type
-    }
+impl ClassLoader {
+    pub fn define_class(loader: OOP, stream: Vec<u8>) {}
 }

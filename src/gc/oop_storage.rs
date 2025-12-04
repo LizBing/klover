@@ -14,20 +14,23 @@
  * limitations under the License.
  */
 
-use crate::oops::klass::Klass;
+use crate::oops::oop_hierarchy::OOP;
 
-#[derive(Debug)]
-pub struct ArrayKlass<'a> {
-    _elem_type: &'a Klass<'a>,
-    _dimemsions: usize
-}
+pub struct OOPStorage;
 
-impl<'a> ArrayKlass<'a> {
-    pub fn dimemsions(&self) -> usize {
-        self._dimemsions
+// temporary implementation
+impl OOPStorage {
+    pub fn new() -> Self {
+        Self {}
     }
 
-    pub fn elem_type(&self) -> &Klass<'a> {
-        self._elem_type
+    pub fn allocate(&self) -> *mut OOP {
+        Box::leak(Box::new(OOP::null()))
+    }
+
+    pub fn alloc_array(&self, arr: &mut *mut OOP, size: usize) -> usize {
+        *arr = Vec::with_capacity(size).leak().as_mut_ptr();
+
+        size
     }
 }

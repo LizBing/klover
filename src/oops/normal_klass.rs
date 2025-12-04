@@ -16,12 +16,15 @@
 
 use cafebabe::{parse_class, ClassFile};
 
+use crate::oops::{klass::Klass, oop_handle::OOPHandle};
+
 #[derive(Debug)]
 pub struct NormalKlass<'a> {
+    _stream: Vec<u8>,
     _cf: ClassFile<'a>,
-}
 
-fn foo() {
-    let cf = parse_class("".as_bytes()).unwrap();
-    let m = &cf.methods[0];
+    _super: Option<&'a Klass<'a>>,
+
+    _mirror: OOPHandle,
+    _loader: OOPHandle,
 }

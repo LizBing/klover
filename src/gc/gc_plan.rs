@@ -14,20 +14,7 @@
  * limitations under the License.
  */
 
-use crate::oops::klass::Klass;
-
-#[derive(Debug)]
-pub struct ArrayKlass<'a> {
-    _elem_type: &'a Klass<'a>,
-    _dimemsions: usize
-}
-
-impl<'a> ArrayKlass<'a> {
-    pub fn dimemsions(&self) -> usize {
-        self._dimemsions
-    }
-
-    pub fn elem_type(&self) -> &Klass<'a> {
-        self._elem_type
-    }
+pub enum GCKind {
+    None,
+    Epsilon,
 }

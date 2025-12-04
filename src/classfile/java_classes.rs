@@ -14,20 +14,10 @@
  * limitations under the License.
  */
 
+use once_cell::sync::OnceCell;
+
 use crate::oops::klass::Klass;
 
-#[derive(Debug)]
-pub struct ArrayKlass<'a> {
-    _elem_type: &'a Klass<'a>,
-    _dimemsions: usize
-}
-
-impl<'a> ArrayKlass<'a> {
-    pub fn dimemsions(&self) -> usize {
-        self._dimemsions
-    }
-
-    pub fn elem_type(&self) -> &Klass<'a> {
-        self._elem_type
-    }
-}
+pub static JAVA_LANG_OBJECT: OnceCell<&'static Klass> = OnceCell::new();
+pub struct JavaLangObject;
+impl JavaLangObject {}

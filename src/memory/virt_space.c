@@ -14,11 +14,13 @@
  * limitations under the License.
  */
 
+#include "memory/allocation.h"
 #include "memory/virt_space.h"
+#include "memory/box.h"
 #include "runtime/os.h"
 #include "utils/align.h"
 
-bool VirtSpace_init(VirtSpace* this, byte_t* start, size_t byte_size, size_t alignment, bool executable) {
+VirtSpace* VirtSpace_new(byte_t* start, size_t byte_size, size_t alignment, bool executable) {
   alignment = align_up(alignment, os_vm_page_size());
   byte_size = align_up(byte_size, alignment);
 
@@ -27,7 +29,7 @@ bool VirtSpace_init(VirtSpace* this, byte_t* start, size_t byte_size, size_t ali
     return false;
   }
 
-  *this = (VirtSpace) {
+  VirtSpace space = (VirtSpace) {
     .start = start,
     .reserved = byte_size,
     .committed = 0,
@@ -37,11 +39,12 @@ bool VirtSpace_init(VirtSpace* this, byte_t* start, size_t byte_size, size_t ali
     ._executable = executable
   };
 
-  return true;
+  box_and_return(&space);
 }
 
-void VirtSpace_dtor(VirtSpace* this) {
+void VirtSpace_delete(VirtSpace* this) {
   os_release_memory(this->start, this->reserved);
+  c_heap_free(this);
 }
 
 bool VirtSpace_contains(VirtSpace* this, void* addr) {

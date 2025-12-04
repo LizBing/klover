@@ -16,7 +16,7 @@
 
 use cafebabe::bytecode::Opcode;
 
-use crate::{code::method::Method, engine::{engine_globals::INTP_STACK_SIZE, engine_runtime::{SLOTS_PER_REF, StackSlot}}, gc::barrier_set::AccessBarrier, memory::allocation::c_heap_alloc, oops::{access::AccessAPI, oop_hierarchy::OOP}, utils::global_defs::{LOG_BYTES_PER_INT, M}};
+use crate::{code::method::Method, engine::{engine_globals::INTP_STACK_SIZE, engine_runtime::{SLOTS_PER_REF, StackSlot}, vm_engine::VMEngine}, gc::barrier_set::AccessBarrier, memory::allocation::c_heap_alloc, oops::{access::AccessAPI, oop_hierarchy::OOP}, utils::global_defs::{LOG_BYTES_PER_INT, M}};
 
 struct ZeroInterpreter {
     _stack: *const StackSlot,
@@ -39,5 +39,11 @@ impl ZeroInterpreter {
 
     fn stack_slot_size() -> usize {
         Self::stack_byte_size() / size_of::<StackSlot>()
+    }
+}
+
+impl VMEngine for ZeroInterpreter {
+    fn process(&self, mthd: &Method) {
+        unimplemented!()
     }
 }

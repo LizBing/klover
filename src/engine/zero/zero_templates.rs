@@ -46,6 +46,24 @@ fn push_ref<Barrier: AccessBarrier>(rsp: &mut *const StackSlot, n: OOP) {
     AccessAPI::<DECORATOR_NOT_IN_HEAP>::oop_store::<Barrier, _>(*rsp, n);
 }
 
+#[inline]
+fn pc_read_u8(rpc: &mut *const u8) -> u8 {
+    unsafe { *rpc = rpc.byte_add(1); }
+    unsafe { **rpc }
+}
+
+#[inline]
+fn pc_read_u16(rpc: &mut *const u8) -> u16 {
+    unsafe {
+        *rpc = rpc.byte_add(1);
+        let byte1 = **rpc as u16;
+        *rpc = rpc.byte_add(1);
+        let byte2 = **rpc as u16;
+
+        (byte1 << 8) | byte2
+    }
+}
+
 struct ZeroTemplates;
 
 impl ZeroTemplates {
@@ -93,17 +111,21 @@ impl ZeroTemplates {
     }
 
     pub fn aload<Barrier: AccessBarrier>(regs: &mut ZeroRegisters) {
-        unsafe { regs.pc = regs.pc.byte_add(1); }
-        let index = unsafe { *regs.pc } as usize;
+        let index = pc_read_u8(&mut regs.pc) as usize;
 
-        let objectref = unsafe { *((*regs.bp).locals.add(index) as *const OOP) };
+        let objectref = unsafe { *((*regs.bp).data().locals.add(index) as *const OOP) };
         
         push_ref::<Barrier>(&mut regs.sp, objectref);
     }
 
     pub fn aload_n<Barrier: AccessBarrier, const INDEX: usize>(regs: &mut ZeroRegisters) {
-        let objectref = unsafe { *((*regs.bp).locals.add(INDEX) as *const OOP) };
+        let objectref = unsafe { *((*regs.bp).data().locals.add(INDEX) as *const OOP) };
         
         push_ref::<Barrier>(&mut regs.sp, objectref);
+    }
+
+    pub fn anewarray<Barrier: AccessBarrier>(regs: &mut ZeroRegisters) {
+        let index = pc_read_u16(&mut regs.pc) as usize;
+        let count = pop::<i32, SLOTS_PER_INT>(&mut regs.sp);
     }
 }

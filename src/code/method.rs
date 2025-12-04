@@ -27,8 +27,12 @@ pub struct Method<'a> {
     _code_data: Option<&'a CodeData<'a>>,
 }
 
-impl Method<'_> {
+impl<'a> Method<'a> {
     pub fn code_data(&self) -> Option<&CodeData> {
         self._code_data
+    }
+
+    pub fn klass(&self) -> &Klass<'a> {
+        self._klass
     }
 }

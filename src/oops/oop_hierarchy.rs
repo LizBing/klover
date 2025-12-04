@@ -46,4 +46,10 @@ impl ArrayOOP {
             *(base.0.byte_add(ArrayObjDesc::length_offset()) as *const u32) as usize
         }
     }
+
+    pub fn set_length(base: OOP, length: i32) {
+        unsafe {
+            *(base.0.byte_add(ArrayObjDesc::length_offset()) as *mut _) = length
+        }
+    }
 }
