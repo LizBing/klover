@@ -1,6 +1,0 @@
-target("jvm")
-    set_kind("shared")
-    add_includedirs("src", {public = true})
-    add_files("src/memory/*.c")
-    add_files("src/prims/*.c")
-    add_files("src/port/os/posix/**/*.c")

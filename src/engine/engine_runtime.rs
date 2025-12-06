@@ -22,18 +22,12 @@ pub const SLOTS_PER_INT: usize = 1;
 pub const SLOTS_PER_REF: usize = 1;
 
 #[derive(Debug)]
-pub struct Frame<'a, T> {
+pub struct Frame<'a> {
     _last_frame: *const Self,
     _mthd: &'a Method<'a>,
-
-    _data: T
 }
 
-impl<'a, T> Frame<'a, T> {
-    pub fn data(&self) -> &T {
-        &self._data
-    }
-
+impl<'a> Frame<'a> {
     pub fn last_frame(&self) -> *const Self {
         self._last_frame
     }

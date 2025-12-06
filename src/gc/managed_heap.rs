@@ -14,19 +14,19 @@
  * limitations under the License.
  */
 
-#ifndef RUNTIME_OS_H_
-#define RUNTIME_OS_H_
+use once_cell::sync::OnceCell;
 
-#include "utils/global_defs.h"
+use crate::utils::global_defs::HeapAddress;
 
-size_t os_vm_page_size();
+static MANAGED_HEAP: OnceCell<ManagedHeap> = OnceCell::new();
+pub struct ManagedHeap {}
 
-byte_t* os_reserve_memory(byte_t*, size_t byte_size);
-bool os_commit_memory(byte_t*, size_t byte_size, bool executable);
-bool os_uncommit_memory(byte_t*, size_t byte_size);
-bool os_release_memory(byte_t*, size_t byte_size);
+impl ManagedHeap {
+    pub fn description() -> &'static str {
+        "Do-nothing GC"
+    }
 
-void os_pretouch_memory(byte_t*, size_t byte_size);
-
-#endif // RUNTIME_OS_H_
-
+    pub fn mem_allocation(word_size: usize) -> HeapAddress {
+        unimplemented!()
+    }
+}

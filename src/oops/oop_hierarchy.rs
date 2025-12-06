@@ -14,51 +14,67 @@
  * limitations under the License.
  */
 
-use std::{mem::offset_of, ptr::null};
+use std::ptr::null;
 
-use crate::{gc::barrier_set::AccessBarrier, oops::{access::{Access, DecoratorSet}, mark_word::MarkWord, obj_desc::{ArrayObjDesc, ObjDesc}}};
+use crate::oops::{mark_word::MarkWord, obj_desc::ObjDesc};
 
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy)]
 pub struct OOP(*const ObjDesc);
 
 impl OOP {
-    const fn decorators(d: u32) -> DecoratorSet {
-        DecoratorSet::from_bits_truncate(d)
+    pub fn null() -> OOP {
+        Self(null())
     }
+}
 
+impl OOP {
     pub fn is_null(self) -> bool {
         self.0 == null()
     }
 
-    pub fn mark_word<'a, const D: u32>(self) -> MarkWord {
-        if Self::decorators(D).contains(DecoratorSet::IN_HEAP) {
-            AccessBarrier::<D>::load_in_heap_at(self, ObjDesc::mark_word_offset())
-        } else {
-            AccessBarrier::<D>::load_not_in_heap_at(self, ObjDesc::mark_word_offset())
-        }
+    // atomic
+    pub fn mark_word(self) -> MarkWord {
+        unimplemented!()
     }
 
-    pub fn null() -> OOP {
-        OOP(null())
+    // atomic
+    pub fn set_mark_word(self, value: MarkWord) {
+        unimplemented!()
+    }
+
+    pub fn cas_mark_word(self, exp: MarkWord, des: MarkWord) -> bool {
+        unimplemented!()
+    }
+
+    // raw access
+    pub fn get_field<const VOLATILE: bool, T: Copy>(self, offset: usize) -> T {
+        unimplemented!()
+    }
+
+    pub fn put_field<const VOLATILE: bool, T>(self, offset: usize, value: T) {
+        unimplemented!()
     }
 }
 
 pub struct ArrayOOP;
 impl ArrayOOP {
-    const fn decorators(d: u32) -> DecoratorSet {
-        DecoratorSet::from_bits_truncate(d)
+    pub fn length(base: OOP) -> i32 {
+        unimplemented!()
     }
 
-    pub fn length<const D: u32>(base: OOP) -> usize {
-        if Self::decorators(D).contains(DecoratorSet::IN_HEAP) {
-            AccessBarrier::<D>::load_in_heap_at::<i32>(base, ArrayObjDesc::length_offset()) as _
-        } else {
-            AccessBarrier::<D>::load_not_in_heap_at::<i32>(base, ArrayObjDesc::length_offset()) as _
-        }
+    // once
+    pub fn set_length(base: OOP, length: i32) {
+        unimplemented!()
     }
 
-    pub fn set_length<const D: u32>(base: OOP, length: i32) {
+    // raw access
+    pub fn get<const VOLATILE: bool, T: Copy>(base: OOP, index: i32) -> T {
+        unimplemented!()
+    }
+
+    pub fn put<const VOLATILE: bool, T>(base: OOP, index: i32, value: T) {
+        unimplemented!()
     }
 }
 

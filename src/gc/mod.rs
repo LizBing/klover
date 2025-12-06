@@ -15,7 +15,7 @@
  */
 
 pub mod barrier_set;
+pub mod managed_heap;
 pub mod mem_allocator;
 pub mod oop_storage;
 
-mod gc_plan;

@@ -14,9 +14,7 @@
  * limitations under the License.
  */
 
-pub mod engine_globals;
 pub mod engine_runtime;
 pub mod vm_engine;
 
 mod bytecodes;
-mod zero;

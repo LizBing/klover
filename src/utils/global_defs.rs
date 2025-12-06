@@ -22,6 +22,7 @@ pub type Address = usize;
 pub struct HeapWordImpl;
 pub type HeapWord = *const HeapWordImpl;
 
+/*
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug)]
 pub struct HeapAddress(*const HeapWord);
@@ -75,6 +76,7 @@ impl fmt::Display for HeapAddress {
         write!(f, "{:p}", self.0)
     }
 }
+*/
 
 pub const LOG_BYTES_PER_WORD: i32 = 3;
 pub const LOG_BITS_PER_BYTE: i32 = 3;

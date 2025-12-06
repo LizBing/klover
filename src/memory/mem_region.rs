@@ -14,50 +14,52 @@
  * limitations under the License.
  */
 
-use std::ptr::{null, null_mut};
+use std::ptr::null;
 
-use crate::utils::global_defs::{HeapAddress, LOG_BYTES_PER_WORD};
+use crate::utils::global_defs::{HeapWord, LOG_BYTES_PER_WORD};
 
 #[derive(Clone, Debug)]
 pub struct MemRegion {
-    _start: HeapAddress,
+    _start: *const HeapWord,
     _word_size: usize
 }
 
 impl MemRegion {
     pub fn new() -> Self {
         Self {
-            _start: HeapAddress::new(null()),
+            _start: null(),
             _word_size: 0
         }
     }
 
-    pub fn with_size(start: HeapAddress, word_size: usize) -> Self {
+    pub fn with_size<T: Into<*const HeapWord>>(start: T, word_size: usize) -> Self {
         Self {
-            _start: start,
+            _start: start.into(),
             _word_size: word_size
         }
     }
 
-    pub fn with_end(start: HeapAddress, end: HeapAddress) -> Self {
+    pub fn with_end<T: Into<*const HeapWord> + Copy>(start: T, end: T) -> Self {
         Self {
-            _start: start,
-            _word_size: HeapAddress::delta_in_words(end, start)
+            _start: start.into(),
+            _word_size: unsafe {
+                end.into().offset_from_unsigned(start.into())
+            }
         }
     }
 }
 
 impl MemRegion {
-    pub fn start(&self) -> HeapAddress {
+    pub fn start(&self) -> *const HeapWord {
         self._start
     }
 
-    pub fn end(&self) -> HeapAddress {
-        self.start().offset_in_words(self._word_size as _)
+    pub fn end(&self) -> *const HeapWord {
+        unsafe { self._start.add(self._word_size) }
     }
 
-    pub fn last_word(&self) -> HeapAddress {
-        self.end().offset_in_words(-1)
+    pub fn last_word(&self) -> *const HeapWord {
+        unsafe { self.end().sub(1) }
     }
 
     pub fn size_in_words(&self) -> usize {
@@ -68,17 +70,16 @@ impl MemRegion {
         self._word_size << LOG_BYTES_PER_WORD
     }
 
-    pub fn contains(&self, addr: HeapAddress) -> bool {
-        HeapAddress::diff_in_bytes(self._start, addr) <= 0 &&
-        HeapAddress::diff_in_bytes(self.end(), addr) > 0
+    pub fn contains<T: Into<*const HeapWord> + Copy>(&self, addr: T) -> bool {
+        self._start <= addr.into() && addr.into() < self.end()
     }
 
-    pub fn set_begin(&mut self, n: HeapAddress) {
-        self._start = n
+    pub fn set_start<T: Into<*const HeapWord>>(&mut self, n: T) {
+        self._start = n.into()
     }
 
-    pub fn set_end(&mut self, n: HeapAddress) {
-        self._word_size = HeapAddress::delta_in_words(n, self._start)
+    pub fn set_end<T: Into<*const HeapWord>>(&mut self, n: T) {
+        self._word_size = unsafe { n.into().offset_from_unsigned(self._start) };
     }
 
     pub fn set_size(&mut self, word_size: usize) {
@@ -86,4 +87,8 @@ impl MemRegion {
     }
 }
 
-
+impl MemRegion {
+    pub fn touch(&self) {
+        unimplemented!()
+    }
+}

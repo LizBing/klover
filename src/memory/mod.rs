@@ -14,5 +14,5 @@
  * limitations under the License.
  */
 
-pub mod allocation;
-pub mod mem_region;
+mod mem_region;
+mod virt_space;

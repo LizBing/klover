@@ -14,34 +14,36 @@
  * limitations under the License.
  */
 
-use std::ptr::null_mut;
+use std::{ptr::null_mut, sync::atomic::AtomicPtr};
 
 use once_cell::sync::OnceCell;
 
-use crate::{gc::{barrier_set::AccessBarrier, oop_storage::OOPStorage}, oops::{oop_hierarchy::NarrowOOP}};
+use crate::{gc::{barrier_set::AccessBarrier, oop_storage::OOPStorage}, oops::oop_hierarchy::{NarrowOOP}};
 
 #[derive(Debug)]
 pub struct OOPHandle {
-    _obj: *mut NarrowOOP
+    _obj: AtomicPtr<NarrowOOP>
 }
 
 impl OOPHandle {
     pub fn new() -> Self {
         Self {
-            _obj: null_mut()
+            _obj: AtomicPtr::new(null_mut())
         }
     }
 
     pub fn with_storage(s: &OOPStorage) -> Self {
         Self {
-            _obj: s.allocate()
+            _obj: AtomicPtr::new(s.allocate())
         }
     }
 
+    // volatile
     pub fn set(&self, n: NarrowOOP) {
         unimplemented!()
     }
 
+    // volatile
     pub fn get(&self) -> NarrowOOP {
         unimplemented!()
     }

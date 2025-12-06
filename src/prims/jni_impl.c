@@ -19,8 +19,10 @@
  * under the License.
  */
 
-#include "prims/jni.h"
-#include "utils/global_defs.h"
+#include <stdatomic.h>
+#include <stdbool.h>
+
+#include "./jni.h"
 
 // stubs in JavaVM
 
@@ -74,34 +76,18 @@ jint JNI_GetDefaultJavaVMInitArgs(void* args) {
 }
 
 jint JNI_CreateJavaVM(JavaVM** pvm, void** penv, void* args) {
-  assert(NULL != args, "should not be null");
-
-  JavaVMInitArgs* init_args = args;
-  printf("%d args received.", init_args->nOptions);
-
   return JNI_ERR;
 }
 
 jint JNI_GetCreatedJavaVMs(JavaVM** vmBuf, jsize bufLen, jsize* nVMs) {
-  assert(NULL != vmBuf, "should not be null");
-
-  if (atomic_load(&JVM_CREATED)) {
-    **vmBuf = &JAVA_VM;
-    if (NULL != nVMs) {
-      *nVMs = 1;
-    }
-  } else if (NULL != nVMs) {
-    *nVMs = 0;
-  }
-
-  return JNI_OK;
+  return JNI_ERR;
 }
 
 jint JNI_OnLoad(JavaVM* vm, void* reserved) {
   return JNI_ERR;
 }
 
-void JNI_OnUnload(JavaVM* vm, void* reserved) { unimplemented(); }
+void JNI_OnUnload(JavaVM* vm, void* reserved);
 
 jint JNI_GetVersion(JNIEnv* _env) {
   return JNI_VERSION_21;
