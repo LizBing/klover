@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-use crate::{gc::barrier_set::AccessBarrier};
+use std::sync::atomic::AtomicU32;
 
-pub struct EpsilonAccessBarrier;
-
-impl AccessBarrier for EpsilonAccessBarrier {}
+static KEY_ALLOCATOR: AtomicU32 = AtomicU32::new(0);

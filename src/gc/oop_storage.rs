@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-use crate::oops::oop_hierarchy::OOP;
+use crate::oops::oop_hierarchy::{NarrowOOP, OOP};
 
 pub struct OOPStorage;
 
@@ -24,13 +24,7 @@ impl OOPStorage {
         Self {}
     }
 
-    pub fn allocate(&self) -> *mut OOP {
-        Box::leak(Box::new(OOP::null()))
-    }
-
-    pub fn alloc_array(&self, arr: &mut *mut OOP, size: usize) -> usize {
-        *arr = Vec::with_capacity(size).leak().as_mut_ptr();
-
-        size
+    pub fn allocate(&self) -> *mut NarrowOOP {
+        Box::leak(Box::new(NarrowOOP::encode(OOP::null())))
     }
 }

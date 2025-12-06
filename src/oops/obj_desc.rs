@@ -16,11 +16,11 @@
 
 use std::mem::offset_of;
 
-use crate::oops::mark_word::AtomicMarkWord;
+use crate::oops::mark_word::MarkWord;
 
 #[repr(C)]
 pub struct ObjDesc {
-    _mw: AtomicMarkWord
+    _mw: MarkWord
 }
 
 impl ObjDesc {
@@ -28,7 +28,7 @@ impl ObjDesc {
         offset_of!(Self, _mw)
     }
 
-    pub const fn data_start_offset() -> usize {
+    pub const fn data_offset() -> usize {
         size_of::<Self>()
     }
 }
@@ -40,7 +40,7 @@ pub struct ArrayObjDesc {
 }
 
 impl ArrayObjDesc {
-    pub const fn data_start_offset() -> usize {
+    pub const fn data_offset() -> usize {
         size_of::<Self>()
     }
 

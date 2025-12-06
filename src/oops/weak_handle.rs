@@ -14,14 +14,24 @@
  * limitations under the License.
  */
 
-pub mod access;
-pub mod klass;
-pub mod obj_desc;
-pub mod oop_handle;
-pub mod oop_hierarchy;
-pub mod weak_handle;
+use std::ptr::null_mut;
 
-mod array_klass;
-mod mark_word;
-mod normal_klass;
-mod prim_klass;
+use crate::{gc::oop_storage::OOPStorage, oops::oop_hierarchy::{NarrowOOP, OOP}};
+
+pub struct WeakHandle {
+    _obj: *mut NarrowOOP
+}
+
+impl WeakHandle {
+    pub fn new() -> Self {
+        Self {
+            _obj: null_mut()
+        }
+    }
+
+    pub fn with_storage(s: &OOPStorage) -> Self {
+        Self {
+            _obj: s.allocate()
+        }
+    }
+}

@@ -14,45 +14,35 @@
  * limitations under the License.
  */
 
+use std::ptr::null_mut;
+
 use once_cell::sync::OnceCell;
 
-use crate::{gc::{barrier_set::AccessBarrier, oop_storage::OOPStorage}, oops::{access::{AccessAPI, DECORATOR_NOT_IN_HEAP}, oop_hierarchy::OOP}};
-
-#[derive(Debug)]
-pub struct OOPHandleAccessAPI {
-    oop_load: fn(*const OOP) -> OOP,
-    oop_store: fn(*const OOP, n: OOP)
-}
-
-static ACC_API: OnceCell<OOPHandleAccessAPI> = OnceCell::new();
-
-// dispatch
-pub fn initialize<Barrier: AccessBarrier>() {
-    let api = OOPHandleAccessAPI {
-        oop_load: AccessAPI::<DECORATOR_NOT_IN_HEAP>::oop_load::<Barrier, _>,
-        oop_store: AccessAPI::<DECORATOR_NOT_IN_HEAP>::oop_store::<Barrier, _>
-    };
-
-    ACC_API.set(api).unwrap()
-}
+use crate::{gc::{barrier_set::AccessBarrier, oop_storage::OOPStorage}, oops::{oop_hierarchy::NarrowOOP}};
 
 #[derive(Debug)]
 pub struct OOPHandle {
-    _obj: *mut OOP
+    _obj: *mut NarrowOOP
 }
 
 impl OOPHandle {
-    pub fn new(storage: &OOPStorage) -> Self {
+    pub fn new() -> Self {
         Self {
-            _obj: storage.allocate()
+            _obj: null_mut()
         }
     }
 
-    pub fn set(&self, n: OOP) {
-        (ACC_API.get().unwrap().oop_store)(self._obj, n)
+    pub fn with_storage(s: &OOPStorage) -> Self {
+        Self {
+            _obj: s.allocate()
+        }
     }
 
-    pub fn get(&self) -> OOP {
-        (ACC_API.get().unwrap().oop_load)(self._obj)
+    pub fn set(&self, n: NarrowOOP) {
+        unimplemented!()
+    }
+
+    pub fn get(&self) -> NarrowOOP {
+        unimplemented!()
     }
 }

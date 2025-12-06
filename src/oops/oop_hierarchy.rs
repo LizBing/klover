@@ -16,20 +16,26 @@
 
 use std::{mem::offset_of, ptr::null};
 
-use crate::{gc::barrier_set::AccessBarrier, oops::{access::AccessAPI, mark_word::AtomicMarkWord, obj_desc::{ArrayObjDesc, ObjDesc}}};
+use crate::{gc::barrier_set::AccessBarrier, oops::{access::{Access, DecoratorSet}, mark_word::MarkWord, obj_desc::{ArrayObjDesc, ObjDesc}}};
 
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy)]
 pub struct OOP(*const ObjDesc);
 
 impl OOP {
+    const fn decorators(d: u32) -> DecoratorSet {
+        DecoratorSet::from_bits_truncate(d)
+    }
+
     pub fn is_null(self) -> bool {
         self.0 == null()
     }
 
-    pub fn mark_word<'a>(base: Self) -> &'a AtomicMarkWord {
-        unsafe { 
-            &*(base.0.byte_add(ObjDesc::mark_word_offset()) as *const _)
+    pub fn mark_word<'a, const D: u32>(self) -> MarkWord {
+        if Self::decorators(D).contains(DecoratorSet::IN_HEAP) {
+            AccessBarrier::<D>::load_in_heap_at(self, ObjDesc::mark_word_offset())
+        } else {
+            AccessBarrier::<D>::load_not_in_heap_at(self, ObjDesc::mark_word_offset())
         }
     }
 
@@ -39,17 +45,33 @@ impl OOP {
 }
 
 pub struct ArrayOOP;
-
 impl ArrayOOP {
-    pub fn length(base: OOP) -> usize {
-        unsafe {
-            *(base.0.byte_add(ArrayObjDesc::length_offset()) as *const u32) as usize
+    const fn decorators(d: u32) -> DecoratorSet {
+        DecoratorSet::from_bits_truncate(d)
+    }
+
+    pub fn length<const D: u32>(base: OOP) -> usize {
+        if Self::decorators(D).contains(DecoratorSet::IN_HEAP) {
+            AccessBarrier::<D>::load_in_heap_at::<i32>(base, ArrayObjDesc::length_offset()) as _
+        } else {
+            AccessBarrier::<D>::load_not_in_heap_at::<i32>(base, ArrayObjDesc::length_offset()) as _
         }
     }
 
-    pub fn set_length(base: OOP, length: i32) {
-        unsafe {
-            *(base.0.byte_add(ArrayObjDesc::length_offset()) as *mut _) = length
-        }
+    pub fn set_length<const D: u32>(base: OOP, length: i32) {
+    }
+}
+
+#[repr(transparent)]
+#[derive(Debug, Clone, Copy)]
+pub struct NarrowOOP(u32);
+
+impl NarrowOOP {
+    pub fn encode(n: OOP) -> Self {
+        unimplemented!()
+    }
+
+    pub fn decode(self) -> OOP {
+        unimplemented!()
     }
 }

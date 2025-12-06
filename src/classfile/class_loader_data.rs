@@ -14,4 +14,9 @@
  * limitations under the License.
  */
 
-pub mod epsilon_barrier_set;
+use crate::oops::weak_handle::WeakHandle;
+
+pub struct ClassLoaderData {
+    _mirror: WeakHandle,
+    
+}
