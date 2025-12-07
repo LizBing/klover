@@ -16,7 +16,7 @@
 
 use crate::code::method::Method;
 
-pub type StackSlot = usize;
+pub type StackSlot = u32;
 
 pub const SLOTS_PER_INT: usize = 1;
 pub const SLOTS_PER_REF: usize = 1;
@@ -25,6 +25,8 @@ pub const SLOTS_PER_REF: usize = 1;
 pub struct Frame<'a> {
     _last_frame: *const Self,
     _mthd: &'a Method<'a>,
+
+    _locals: *const StackSlot,
 }
 
 impl<'a> Frame<'a> {
@@ -34,5 +36,9 @@ impl<'a> Frame<'a> {
 
     pub fn method(&self) -> &Method<'a> {
         self._mthd
+    }
+
+    pub(super) fn local(&self, index: u8) -> *const StackSlot {
+        unsafe { self._locals.add(index as _) }
     }
 }

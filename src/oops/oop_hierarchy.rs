@@ -33,26 +33,15 @@ impl OOP {
         self.0 == null()
     }
 
-    // atomic
     pub fn mark_word(self) -> MarkWord {
         unimplemented!()
     }
 
-    // atomic
     pub fn set_mark_word(self, value: MarkWord) {
         unimplemented!()
     }
 
     pub fn cas_mark_word(self, exp: MarkWord, des: MarkWord) -> bool {
-        unimplemented!()
-    }
-
-    // raw access
-    pub fn get_field<const VOLATILE: bool, T: Copy>(self, offset: usize) -> T {
-        unimplemented!()
-    }
-
-    pub fn put_field<const VOLATILE: bool, T>(self, offset: usize, value: T) {
         unimplemented!()
     }
 }
@@ -68,12 +57,8 @@ impl ArrayOOP {
         unimplemented!()
     }
 
-    // raw access
-    pub fn get<const VOLATILE: bool, T: Copy>(base: OOP, index: i32) -> T {
-        unimplemented!()
-    }
-
-    pub fn put<const VOLATILE: bool, T>(base: OOP, index: i32, value: T) {
+    // in bytes
+    pub fn cal_offset<T>(index: i32) -> usize {
         unimplemented!()
     }
 }
@@ -83,6 +68,14 @@ impl ArrayOOP {
 pub struct NarrowOOP(u32);
 
 impl NarrowOOP {
+    pub fn null() -> Self {
+        Self(0)
+    }
+
+    pub fn is_null(self) -> bool {
+        self.0 == 0
+    }
+
     pub fn encode(n: OOP) -> Self {
         unimplemented!()
     }

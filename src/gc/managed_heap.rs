@@ -16,17 +16,40 @@
 
 use once_cell::sync::OnceCell;
 
-use crate::utils::global_defs::HeapAddress;
+use crate::{memory::{mem_region::MemRegion, virt_space::VirtSpace}, utils::global_defs::HeapWord};
 
 static MANAGED_HEAP: OnceCell<ManagedHeap> = OnceCell::new();
-pub struct ManagedHeap {}
+pub struct ManagedHeap {
+    _virt_space: VirtSpace,
+}
+
+unsafe impl Send for ManagedHeap {}
+unsafe impl Sync for ManagedHeap {}
+
+fn heap() -> &'static ManagedHeap {
+    unsafe { MANAGED_HEAP.get_unchecked() }
+}
+
+impl ManagedHeap {
+    pub fn initialize() {
+        unimplemented!()
+    }
+}
 
 impl ManagedHeap {
     pub fn description() -> &'static str {
         "Do-nothing GC"
     }
 
-    pub fn mem_allocation(word_size: usize) -> HeapAddress {
+    pub fn mr() -> &'static MemRegion {
+        heap()._virt_space.reserved()
+    }
+
+    pub fn mem_allocation(word_size: usize) -> *const HeapWord {
+        unimplemented!()
+    }
+
+    pub fn allocation_for_tlab(word_size: usize, act_size: &usize) -> *const HeapWord {
         unimplemented!()
     }
 }

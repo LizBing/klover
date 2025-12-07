@@ -14,3 +14,13 @@
  * limitations under the License.
  */
 
+use cafebabe::bytecode::Opcode;
+
+use crate::engine::engine_runtime::{Frame, StackSlot};
+
+pub struct ZeroRegisters<'a> {
+    pub sp: *const StackSlot,
+    pub bp: *const Frame<'a>,
+
+    pub pc: *const u8
+}
