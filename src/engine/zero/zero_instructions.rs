@@ -14,18 +14,16 @@
  * limitations under the License.
  */
 
-use std::{array, ops::{self, Add, BitAnd, BitOr, BitXor, Div, Mul, Neg, Rem, Shl, Shr, Sub}, result,};
+use std::{ffi::c_void, ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Neg, Rem, Shl, Shr, Sub}, ptr::null};
 
-use cafebabe::bytecode::Opcode;
-
-use crate::{engine::{bytecodes, engine_runtime::{DStackSlot, StackSlot, StackSlotType}, zero::{zero_constrains::FloatType, zero_runtime::ZeroRegisters}}, oops::{access::{Access, DECORATOR_IN_HEAP, DECORATOR_IN_NATIVE, DECORATOR_MO_VOLATILE, DECORATOR_NONE}, oop_hierarchy::{ArrayOOP, NarrowOOP, OOP}}};
+use crate::{engine::{bytecodes, engine_runtime::{DStackSlot, StackSlot, StackSlotType}, zero::{zero_constrains::FloatType, zero_runtime::ZeroRegisters}}, oops::{access::{DECORATOR_IN_HEAP, DECORATOR_MO_VOLATILE}, oop_hierarchy::{ArrayOOP, NarrowOOP, OOP}}, utils::global_defs::Address};
 
 pub struct ZeroInstructions;
 
 macro_rules! type_op {
     ($name:ident, $trait_: ty, $op:tt) => {
         paste::paste! {
-            pub fn [<type_ $name>]<T: Copy + $trait_>(regs: &mut ZeroRegisters) {
+            fn [<type_ $name>]<T: Copy + $trait_>(regs: &mut ZeroRegisters) {
                let value2 = Self::pop::<T>(regs);
                 let value1 = Self::pop::<T>(regs);
 
@@ -36,6 +34,15 @@ macro_rules! type_op {
         }
     };
 }
+
+pub type InsFnType = fn(regs: &mut ZeroRegisters<'_>);
+
+pub static INS_TABLE: [InsFnType; bytecodes::NUMBER_OF_JAVA_CODES] = [
+    ZeroInstructions::nop,
+    ZeroInstructions::int_type_const_n::<i32, -1>, // iconst_m1
+    ZeroInstructions::int_type_const_n::<i32, 0>, // iconst_0
+    ZeroInstructions::int_type_const_n::<i32, 2>,
+];
 
 // helpers
 impl ZeroInstructions {
@@ -124,7 +131,7 @@ impl ZeroInstructions {
 }
 
 impl ZeroInstructions {
-    pub fn aaload(regs: &mut ZeroRegisters) {
+    fn aaload(regs: &mut ZeroRegisters) {
         let index = Self::pop(regs);
         let arrayref = Self::pop_ref(regs);
 
@@ -140,7 +147,7 @@ impl ZeroInstructions {
         Self::push_ref(regs, value);
     }
 
-    pub fn aastore(regs: &mut ZeroRegisters) {
+    fn aastore(regs: &mut ZeroRegisters) {
         let value = Self::pop_ref(regs);
         let index = Self::pop(regs);
         let arrayref = Self::pop_ref(regs);
@@ -161,39 +168,39 @@ impl ZeroInstructions {
         ArrayOOP::put_oop::<{DECORATOR_IN_HEAP | DECORATOR_MO_VOLATILE}>(arrayref, index, value);
     }
 
-    pub fn aconst_null(regs: &mut ZeroRegisters) {
+    fn aconst_null(regs: &mut ZeroRegisters) {
         Self::push(regs, NarrowOOP::null());
     }
 
-    pub fn aload(regs: &mut ZeroRegisters) {
+    fn aload(regs: &mut ZeroRegisters) {
         let index = Self::read_u8(regs);
         let objectref = Self::local_load_oop(regs, index);
 
         Self::push_ref(regs, objectref);
     }
 
-    pub fn wide_aload(regs: &mut ZeroRegisters) {
+    fn wide_aload(regs: &mut ZeroRegisters) {
         let index = Self::read_u16(regs);
         let objectref = Self::local_load_oop(regs, index);
 
         Self::push_ref(regs, objectref);
     }
 
-    pub fn aload_n<const N: u8>(regs: &mut ZeroRegisters) {
+    fn aload_n<const N: u8>(regs: &mut ZeroRegisters) {
         let objectref = Self::local_load_oop(regs, N);
 
         Self::push_ref(regs, objectref);
     }
 
-    pub fn anewarray(regs: &mut ZeroRegisters) {
+    fn anewarray(regs: &mut ZeroRegisters) {
         unimplemented!()
     }
 
-    pub fn areturn(regs: &mut ZeroRegisters) {
+    fn areturn(regs: &mut ZeroRegisters) {
         unimplemented!()
     }
 
-    pub fn arraylength(regs: &mut ZeroRegisters) {
+    fn arraylength(regs: &mut ZeroRegisters) {
         let arrayref = Self::pop_ref(regs);
         if arrayref.is_null() {
             // todo: throw NullPointerException
@@ -203,29 +210,29 @@ impl ZeroInstructions {
         Self::push(regs, length);
     }
 
-    pub fn astore(regs: &mut ZeroRegisters) {
+    fn astore(regs: &mut ZeroRegisters) {
         let index = Self::read_u8(regs);
         let objectref = Self::pop_ref(regs);
         Self::local_store_oop(regs, index, objectref);
     }
 
-    pub fn wide_astore(regs: &mut ZeroRegisters) {
+    fn wide_astore(regs: &mut ZeroRegisters) {
         let index = Self::read_u16(regs);
         let objectref = Self::pop_ref(regs);
 
         Self::local_store_oop(regs, index, objectref);
     }
 
-    pub fn astore_n<const N: u8>(regs: &mut ZeroRegisters) {
+    fn astore_n<const N: u8>(regs: &mut ZeroRegisters) {
         let objectref = Self::pop_ref(regs);
         Self::local_store_oop(regs, N, objectref);
     }
 
-    pub fn athrow(regs: &mut ZeroRegisters) {
+    fn athrow(regs: &mut ZeroRegisters) {
         unimplemented!()
     }
 
-    pub fn type_aload<T: Copy + Into<U>, U>(regs: &mut ZeroRegisters) {
+    fn type_aload<T: Copy + Into<U>, U>(regs: &mut ZeroRegisters) {
         let index = Self::pop(regs);
         let arrayref = Self::pop_ref(regs);
 
@@ -241,7 +248,7 @@ impl ZeroInstructions {
         Self::push(regs, value);
     }
 
-    pub fn type_astore<T: Copy, U: Copy + Into<T>>(regs: &mut ZeroRegisters) {
+    fn type_astore<T: Copy, U: Copy + Into<T>>(regs: &mut ZeroRegisters) {
         let value = Self::pop::<U>(regs).into();
         let index = Self::pop(regs);
         let arrayref = Self::pop_ref(regs);
@@ -257,18 +264,18 @@ impl ZeroInstructions {
         ArrayOOP::put::<{DECORATOR_IN_HEAP | DECORATOR_MO_VOLATILE}, T>(arrayref, index, value);
     }
 
-    pub fn bipush(regs: &mut ZeroRegisters) {
+    fn bipush(regs: &mut ZeroRegisters) {
         let byte = Self::read_u8(regs);
         let value = byte.cast_signed() as i32;
         
         Self::push(regs, value);
     }
 
-    pub fn checkcast(regs: &mut ZeroRegisters) {
+    fn checkcast(regs: &mut ZeroRegisters) {
         unimplemented!()
     }
 
-    pub fn t1_to_t2<T1: Copy + Into<T2>, T2: Copy>(regs: &mut ZeroRegisters) {
+    fn t1_to_t2<T1: Copy + Into<T2>, T2: Copy>(regs: &mut ZeroRegisters) {
         let value = Self::pop::<T1>(regs);
         let result = value.into();
 
@@ -277,7 +284,7 @@ impl ZeroInstructions {
 
     type_op!(add, Add, +);
 
-    pub fn type_cmpg<T: FloatType>(regs: &mut ZeroRegisters) {
+    fn type_cmpg<T: FloatType>(regs: &mut ZeroRegisters) {
         let value2 = Self::pop::<T>(regs);
         let value1 = Self::pop::<T>(regs);
 
@@ -293,7 +300,7 @@ impl ZeroInstructions {
         Self::push(regs, result);
     }
 
-    pub fn type_cmpl<T: FloatType>(regs: &mut ZeroRegisters) {
+    fn type_cmpl<T: FloatType>(regs: &mut ZeroRegisters) {
         let value2 = Self::pop::<T>(regs);
         let value1 = Self::pop::<T>(regs);
 
@@ -309,19 +316,19 @@ impl ZeroInstructions {
         Self::push(regs, result);
     }
 
-    pub fn float_type_const_0<T: FloatType>(regs: &mut ZeroRegisters) {
+    fn float_type_const_0<T: FloatType>(regs: &mut ZeroRegisters) {
         Self::push(regs, T::ZERO);
     }
 
-    pub fn float_type_const_1<T: FloatType>(regs: &mut ZeroRegisters) {
+    fn float_type_const_1<T: FloatType>(regs: &mut ZeroRegisters) {
         Self::push(regs, T::ONE);
     }
 
-    pub fn float_type_const_2<T: FloatType>(regs: &mut ZeroRegisters) {
+    fn float_type_const_2<T: FloatType>(regs: &mut ZeroRegisters) {
         Self::push(regs, T::TWO);
     }
 
-    pub fn type_div<T: Copy + Div>(regs: &mut ZeroRegisters) {
+    fn type_div<T: Copy + Div>(regs: &mut ZeroRegisters) {
         let value2 = Self::pop::<T>(regs);
         let value1 = Self::pop::<T>(regs);
 
@@ -330,21 +337,21 @@ impl ZeroInstructions {
         Self::push(regs, result);
     }
 
-    pub fn type_load<T: Copy>(regs: &mut ZeroRegisters) {
+    fn type_load<T: Copy>(regs: &mut ZeroRegisters) {
         let index = Self::read_u8(regs);
         let value = Self::local_load::<T>(regs, index);
 
         Self::push(regs, value);
     }
 
-    pub fn wide_type_load<T: Copy>(regs: &mut ZeroRegisters) {
+    fn wide_type_load<T: Copy>(regs: &mut ZeroRegisters) {
         let index = Self::read_u16(regs);
         let value = Self::local_load::<T>(regs, index);
 
         Self::push(regs, value);
     }
 
-    pub fn type_load_n<const N: u8, T: Copy>(regs: &mut ZeroRegisters) {
+    fn type_load_n<const N: u8, T: Copy>(regs: &mut ZeroRegisters) {
         let value = Self::local_load::<T>(regs, N);
 
         Self::push(regs, value);
@@ -352,7 +359,7 @@ impl ZeroInstructions {
 
     type_op!(mul, Mul, *);
 
-    pub fn float_type_neg<T: FloatType>(regs: &mut ZeroRegisters) {
+    fn float_type_neg<T: FloatType>(regs: &mut ZeroRegisters) {
         let value = Self::pop::<T>(regs);
 
         let result = if value.is_nan() {
@@ -366,25 +373,25 @@ impl ZeroInstructions {
 
     type_op!(rem, Rem, %);
 
-    pub fn type_return(regs: &mut ZeroRegisters) {
+    fn type_return(regs: &mut ZeroRegisters) {
         unimplemented!()
     }
 
-    pub fn type_store<T: Copy>(regs: &mut ZeroRegisters) {
+    fn type_store<T: Copy>(regs: &mut ZeroRegisters) {
         let value = Self::pop::<T>(regs);
         let index = Self::read_u8(regs);
 
         Self::local_store(regs, index, value);
     }
     
-    pub fn wide_type_store<T: Copy>(regs: &mut ZeroRegisters) {
+    fn wide_type_store<T: Copy>(regs: &mut ZeroRegisters) {
         let value = Self::pop::<T>(regs);
         let index = Self::read_u16(regs);
 
         Self::local_store(regs, index, value);
     }
 
-    pub fn type_store_n<const N: u8, T: Copy>(regs: &mut ZeroRegisters) {
+    fn type_store_n<const N: u8, T: Copy>(regs: &mut ZeroRegisters) {
         let value = Self::pop::<T>(regs);
 
         Self::local_store(regs, N, value);
@@ -392,14 +399,14 @@ impl ZeroInstructions {
 
     type_op!(sub, Sub, -);
 
-    pub fn dupn<T: StackSlotType>(regs: &mut ZeroRegisters) {
+    fn dupn<T: StackSlotType>(regs: &mut ZeroRegisters) {
         let value = Self::pop::<T>(regs);
 
         Self::push(regs, value);
         Self::push(regs, value);
     }
 
-    pub fn dupn_x1<T: StackSlotType>(regs: &mut ZeroRegisters) {
+    fn dupn_x1<T: StackSlotType>(regs: &mut ZeroRegisters) {
         let value1 = Self::pop::<T>(regs);
         let value2 = Self::pop::<T>(regs);
 
@@ -408,7 +415,7 @@ impl ZeroInstructions {
         Self::push(regs, value1);
     }
 
-    pub fn dupn_x2<T: StackSlotType>(regs: &mut ZeroRegisters) {
+    fn dupn_x2<T: StackSlotType>(regs: &mut ZeroRegisters) {
         let value1 = Self::pop::<T>(regs);
         let value2 = Self::pop::<T>(regs);
         let value3 = Self::pop::<T>(regs);
@@ -419,32 +426,32 @@ impl ZeroInstructions {
         Self::push(regs, value1);
     }
 
-    pub fn getfield(regs: &mut ZeroRegisters) {
+    fn getfield(regs: &mut ZeroRegisters) {
         unimplemented!()
     }
 
-    pub fn getstatic(regs: &mut ZeroRegisters) {
+    fn getstatic(regs: &mut ZeroRegisters) {
         unimplemented!()
     }
 
-    pub fn goto(regs: &mut ZeroRegisters) {
+    fn goto(regs: &mut ZeroRegisters) {
         let branchoffset = Self::read_u16(regs).cast_signed() as isize;
         unsafe { regs.pc = regs.pc.byte_offset(branchoffset - 1) };
     }
 
-    pub fn goto_w(regs: &mut ZeroRegisters) {
+    fn goto_w(regs: &mut ZeroRegisters) {
         let branchoffset = Self::read_u32(regs).cast_signed() as isize;
         unsafe { regs.pc = regs.pc.byte_offset(branchoffset - 1) };
     }
 
     type_op!(and, BitAnd, &);
 
-    pub fn int_type_const_n<T: Copy + From<i8>, const N: i8>(regs: &mut ZeroRegisters) {
+    fn int_type_const_n<T: Copy + From<i8>, const N: i8>(regs: &mut ZeroRegisters) {
         Self::push(regs, T::from(N));
     }
 
     // For OOP, plz make T i32
-    pub fn if_type_cmpeq<T: Copy + PartialEq>(regs: &mut ZeroRegisters) {
+    fn if_type_cmpeq<T: Copy + PartialEq>(regs: &mut ZeroRegisters) {
         let value2 = Self::pop::<T>(regs);
         let value1 = Self::pop::<T>(regs);
 
@@ -456,7 +463,7 @@ impl ZeroInstructions {
     }
 
     // For OOP, plz make T i32
-    pub fn if_type_cmpne<T: Copy + PartialEq>(regs: &mut ZeroRegisters) {
+    fn if_type_cmpne<T: Copy + PartialEq>(regs: &mut ZeroRegisters) {
         let value2 = Self::pop::<T>(regs);
         let value1 = Self::pop::<T>(regs);
 
@@ -467,7 +474,7 @@ impl ZeroInstructions {
         }
     }
 
-    pub fn if_type_cmplt<T: Copy + PartialOrd>(regs: &mut ZeroRegisters) {
+    fn if_type_cmplt<T: Copy + PartialOrd>(regs: &mut ZeroRegisters) {
         let value2 = Self::pop::<T>(regs);
         let value1 = Self::pop::<T>(regs);
 
@@ -478,7 +485,7 @@ impl ZeroInstructions {
         }
     }
 
-    pub fn if_type_cmple<T: Copy + PartialOrd>(regs: &mut ZeroRegisters) {
+    fn if_type_cmple<T: Copy + PartialOrd>(regs: &mut ZeroRegisters) {
         let value2 = Self::pop::<T>(regs);
         let value1 = Self::pop::<T>(regs);
 
@@ -489,7 +496,7 @@ impl ZeroInstructions {
         }
     }
 
-    pub fn if_type_cmpgt<T: Copy + PartialOrd>(regs: &mut ZeroRegisters) {
+    fn if_type_cmpgt<T: Copy + PartialOrd>(regs: &mut ZeroRegisters) {
         let value2 = Self::pop::<T>(regs);
         let value1 = Self::pop::<T>(regs);
 
@@ -500,7 +507,7 @@ impl ZeroInstructions {
         }
     }
     
-    pub fn if_type_cmpge<T: Copy + PartialOrd>(regs: &mut ZeroRegisters) {
+    fn if_type_cmpge<T: Copy + PartialOrd>(regs: &mut ZeroRegisters) {
         let value2 = Self::pop::<T>(regs);
         let value1 = Self::pop::<T>(regs);
 
@@ -511,7 +518,7 @@ impl ZeroInstructions {
         }
     }
 
-    pub fn ifeq(regs: &mut ZeroRegisters) {
+    fn ifeq(regs: &mut ZeroRegisters) {
         let value = Self::pop::<i32>(regs);
 
         if value == 0 {
@@ -521,7 +528,7 @@ impl ZeroInstructions {
         }
     }
 
-    pub fn ifne(regs: &mut ZeroRegisters) {
+    fn ifne(regs: &mut ZeroRegisters) {
         let value = Self::pop::<i32>(regs);
 
         if value != 0 {
@@ -531,7 +538,7 @@ impl ZeroInstructions {
         }
     }
 
-    pub fn iflt(regs: &mut ZeroRegisters) {
+    fn iflt(regs: &mut ZeroRegisters) {
         let value = Self::pop::<i32>(regs);
 
         if value < 0 {
@@ -541,7 +548,7 @@ impl ZeroInstructions {
         }
     }
 
-    pub fn ifle(regs: &mut ZeroRegisters) {
+    fn ifle(regs: &mut ZeroRegisters) {
         let value = Self::pop::<i32>(regs);
 
         if value <= 0 {
@@ -551,7 +558,7 @@ impl ZeroInstructions {
         }
     }
 
-    pub fn ifgt(regs: &mut ZeroRegisters) {
+    fn ifgt(regs: &mut ZeroRegisters) {
         let value = Self::pop::<i32>(regs);
 
         if value > 0 {
@@ -561,7 +568,7 @@ impl ZeroInstructions {
         }
     }
 
-    pub fn ifge(regs: &mut ZeroRegisters) {
+    fn ifge(regs: &mut ZeroRegisters) {
         let value = Self::pop::<i32>(regs);
 
         if value >= 0 {
@@ -571,7 +578,7 @@ impl ZeroInstructions {
         }
     }
 
-    pub fn ifnonnull(regs: &mut ZeroRegisters) {
+    fn ifnonnull(regs: &mut ZeroRegisters) {
         let value = Self::pop_ref(regs);
 
         if !value.is_null() {
@@ -581,7 +588,7 @@ impl ZeroInstructions {
         }
     }
 
-    pub fn ifnull(regs: &mut ZeroRegisters) {
+    fn ifnull(regs: &mut ZeroRegisters) {
         let value = Self::pop_ref(regs);
 
         if value.is_null() {
@@ -591,7 +598,7 @@ impl ZeroInstructions {
         }
     }
 
-    pub fn iinc(regs: &mut ZeroRegisters) {
+    fn iinc(regs: &mut ZeroRegisters) {
         let index = Self::read_u8(regs);
         let const_ = Self::read_u8(regs).cast_signed() as i32;
 
@@ -602,7 +609,7 @@ impl ZeroInstructions {
         Self::local_store(regs, index, result);
     }
 
-    pub fn wide_iinc(regs: &mut ZeroRegisters) {
+    fn wide_iinc(regs: &mut ZeroRegisters) {
         let index = Self::read_u16(regs);
         let const_ = Self::read_u16(regs).cast_signed() as i32;
 
@@ -613,7 +620,7 @@ impl ZeroInstructions {
         Self::local_store(regs, index, result);
     }
 
-    pub fn int_type_neg<T: Copy + Neg>(regs: &mut ZeroRegisters) {
+    fn int_type_neg<T: Copy + Neg>(regs: &mut ZeroRegisters) {
         let value = Self::pop::<T>(regs);
         
         let result = -value;
@@ -621,33 +628,33 @@ impl ZeroInstructions {
         Self::push(regs, result);
     }
 
-    pub fn instanceof(regs: &mut ZeroRegisters) {
+    fn instanceof(regs: &mut ZeroRegisters) {
         unimplemented!()
     }
 
-    pub fn invokedynamic(regs: &mut ZeroRegisters) {
+    fn invokedynamic(regs: &mut ZeroRegisters) {
         unimplemented!()
     }
 
-    pub fn invokeinterface(regs: &mut ZeroRegisters) {
+    fn invokeinterface(regs: &mut ZeroRegisters) {
         unimplemented!()
     }
 
-    pub fn invokespecial(regs: &mut ZeroRegisters) {
+    fn invokespecial(regs: &mut ZeroRegisters) {
         unimplemented!()
     }
 
-    pub fn invokestatic(regs: &mut ZeroRegisters) {
+    fn invokestatic(regs: &mut ZeroRegisters) {
         unimplemented!()
     }
 
-    pub fn invokevirtual(regs: &mut ZeroRegisters) {
+    fn invokevirtual(regs: &mut ZeroRegisters) {
         unimplemented!()
     }
 
     type_op!(or, BitOr, |);
 
-    pub fn type_shl<T: Copy + Shl<i32>>(regs: &mut ZeroRegisters) {
+    fn type_shl<T: Copy + Shl<i32>>(regs: &mut ZeroRegisters) {
         let value2 = Self::pop::<i32>(regs);
         let value1 = Self::pop::<T>(regs);
 
@@ -656,7 +663,7 @@ impl ZeroInstructions {
         Self::push(regs, result);
     }
 
-    pub fn type_shr<T: Copy + Shr<i32>>(regs: &mut ZeroRegisters) {
+    fn type_shr<T: Copy + Shr<i32>>(regs: &mut ZeroRegisters) {
         let value2 = Self::pop::<i32>(regs);
         let value1 = Self::pop::<T>(regs);
 
@@ -667,15 +674,15 @@ impl ZeroInstructions {
 
     type_op!(xor, BitXor, ^);
 
-    pub fn jsr(regs: &mut ZeroRegisters) {
+    fn jsr(regs: &mut ZeroRegisters) {
         panic!("Deprecated");
     }
 
-    pub fn jsr_w(regs: &mut ZeroRegisters) {
+    fn jsr_w(regs: &mut ZeroRegisters) {
         panic!("Deprecated");
     }
 
-    pub fn lcmp(regs: &mut ZeroRegisters) {
+    fn lcmp(regs: &mut ZeroRegisters) {
         let value2 = Self::pop::<i64>(regs);
         let value1 = Self::pop::<i64>(regs);
 
@@ -692,81 +699,81 @@ impl ZeroInstructions {
         Self::push(regs, result);
     }
 
-    pub fn ldc(regs: &mut ZeroRegisters) {
+    fn ldc(regs: &mut ZeroRegisters) {
         unimplemented!()
     }
 
-    pub fn ldc_w(regs: &mut ZeroRegisters) {
+    fn ldc_w(regs: &mut ZeroRegisters) {
         unimplemented!()
     }
 
-    pub fn ldc2_w(regs: &mut ZeroRegisters) {
+    fn ldc2_w(regs: &mut ZeroRegisters) {
         unimplemented!()
     }
 
-    pub fn lookupswitch(regs: &mut ZeroRegisters) {
+    fn lookupswitch(regs: &mut ZeroRegisters) {
         unimplemented!()
     }
 
-    pub fn monitorenter(regs: &mut ZeroRegisters) {
+    fn monitorenter(regs: &mut ZeroRegisters) {
         unimplemented!()
     }
 
-    pub fn monitorexit(regs: &mut ZeroRegisters) {
+    fn monitorexit(regs: &mut ZeroRegisters) {
         unimplemented!()
     }
 
-    pub fn multianewarray(regs: &mut ZeroRegisters) {
+    fn multianewarray(regs: &mut ZeroRegisters) {
         unimplemented!()
     }
 
-    pub fn new(regs: &mut ZeroRegisters) {
+    fn new(regs: &mut ZeroRegisters) {
         unimplemented!()
     }
 
-    pub fn newarray(regs: &mut ZeroRegisters) {
+    fn newarray(regs: &mut ZeroRegisters) {
         unimplemented!()
     }
 
-    pub fn nop(regs: &mut ZeroRegisters) {
+    fn nop(_regs: &mut ZeroRegisters) {
         // do nothing.
     }
 
-    pub fn pop_(regs: &mut ZeroRegisters) {
+    fn pop_(regs: &mut ZeroRegisters) {
         Self::pop::<StackSlot>(regs);
     }
 
-    pub fn pop2(regs: &mut ZeroRegisters) {
+    fn pop2(regs: &mut ZeroRegisters) {
         Self::pop::<DStackSlot>(regs);
     }
 
-    pub fn putfield(regs: &mut ZeroRegisters) {
+    fn putfield(regs: &mut ZeroRegisters) {
         unimplemented!()
     }
 
-    pub fn putstatic(regs: &mut ZeroRegisters) {
+    fn putstatic(regs: &mut ZeroRegisters) {
         unimplemented!()
     }
 
-    pub fn ret(regs: &mut ZeroRegisters) {
+    fn ret(regs: &mut ZeroRegisters) {
         unimplemented!()
     }
 
-    pub fn wide_ret(regs: &mut ZeroRegisters) {
+    fn wide_ret(regs: &mut ZeroRegisters) {
         unimplemented!()
     }
 
-    pub fn return_(regs: &mut ZeroRegisters) {
+    fn return_(regs: &mut ZeroRegisters) {
         unimplemented!()
     }
 
-    pub fn sipush(regs: &mut ZeroRegisters) {
+    fn sipush(regs: &mut ZeroRegisters) {
         let value = Self::read_u16(regs).cast_signed() as i32;
 
         Self::push(regs, value);
     }
 
-    pub fn swap(regs: &mut ZeroRegisters) {
+    fn swap(regs: &mut ZeroRegisters) {
         let value1 = Self::pop::<StackSlot>(regs);
         let value2 = Self::pop::<StackSlot>(regs);
 
@@ -774,11 +781,11 @@ impl ZeroInstructions {
         Self::push(regs, value2);
     }
 
-    pub fn tableswitch(regs: &mut ZeroRegisters) {
+    fn tableswitch(regs: &mut ZeroRegisters) {
         unimplemented!()
     }
 
-    pub fn wide(regs: &mut ZeroRegisters) {
+    fn wide(regs: &mut ZeroRegisters) {
         let opcode = Self::read_u8(regs);
 
         match opcode {
