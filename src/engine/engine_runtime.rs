@@ -17,9 +17,12 @@
 use crate::code::method::Method;
 
 pub type StackSlot = u32;
+pub type DStackSlot = u64;
 
-pub const SLOTS_PER_INT: usize = 1;
-pub const SLOTS_PER_REF: usize = 1;
+pub trait StackSlotType: Copy {}
+
+impl StackSlotType for StackSlot {}
+impl StackSlotType for DStackSlot {}
 
 #[derive(Debug)]
 pub struct Frame<'a> {
@@ -38,7 +41,7 @@ impl<'a> Frame<'a> {
         self._mthd
     }
 
-    pub(super) fn local(&self, index: u8) -> *const StackSlot {
-        unsafe { self._locals.add(index as _) }
+    pub(super) fn local(&self, index: impl Into<usize>) -> *const StackSlot {
+        unsafe { self._locals.add(index.into()) }
     }
 }

@@ -17,13 +17,12 @@
 use std::sync::atomic::Ordering;
 
 use bitflags::bitflags;
-use paste::paste;
 
 use crate::oops::oop_hierarchy::{NarrowOOP, OOP};
 
 macro_rules! define_decorators {
     ($(($x:ident, $shift:expr))*) => {
-        paste! {
+        paste::paste! {
             $(
                 pub const [<DECORATOR_ $x>]: u32 = 1u32 << $shift;
             )*
@@ -50,6 +49,8 @@ define_decorators! {
     // For CAS, just pass VOLATILE.
 
     // (INTERNAL_COMPRESSED, 4)
+    (IN_HEAP, 4)
+    (IN_NATIVE, 5)
 }
 
 // offset: byte-unit

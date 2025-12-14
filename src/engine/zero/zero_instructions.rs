@@ -14,19 +14,36 @@
  * limitations under the License.
  */
 
+use std::{array, ops::{self, Add, BitAnd, BitOr, BitXor, Div, Mul, Neg, Rem, Shl, Shr, Sub}, result,};
+
 use cafebabe::bytecode::Opcode;
 
-use crate::{engine::{engine_runtime::StackSlot, zero::zero_runtime::ZeroRegisters}, oops::{access::{Access, DECORATOR_MO_VOLATILE, DECORATOR_NONE}, oop_hierarchy::{ArrayOOP, NarrowOOP, OOP}}};
+use crate::{engine::{bytecodes, engine_runtime::{DStackSlot, StackSlot, StackSlotType}, zero::{zero_constrains::FloatType, zero_runtime::ZeroRegisters}}, oops::{access::{Access, DECORATOR_IN_HEAP, DECORATOR_IN_NATIVE, DECORATOR_MO_VOLATILE, DECORATOR_NONE}, oop_hierarchy::{ArrayOOP, NarrowOOP, OOP}}};
 
-// D: DECORATOR_INTERNAL_COMPRESSED
 pub struct ZeroInstructions;
+
+macro_rules! type_op {
+    ($name:ident, $trait_: ty, $op:tt) => {
+        paste::paste! {
+            pub fn [<type_ $name>]<T: Copy + $trait_>(regs: &mut ZeroRegisters) {
+               let value2 = Self::pop::<T>(regs);
+                let value1 = Self::pop::<T>(regs);
+
+                let result = value1 $op value2;
+
+                Self::push(regs, result); 
+            }
+        }
+    };
+}
 
 // helpers
 impl ZeroInstructions {
     const fn slots_of<T>() -> usize {
         let size = size_of::<T>();
         if size <= size_of::<StackSlot>() { 1 }
-        else { size / size_of::<StackSlot>() }
+        else if size == size_of::<DStackSlot>() { 2 }
+        else { unreachable!() }
     }
 
     #[inline]
@@ -41,10 +58,7 @@ impl ZeroInstructions {
 
     #[inline]
     fn pop_ref(regs: &mut ZeroRegisters) -> OOP {
-        let res = Access::<{DECORATOR_NONE}>::oop_load(regs.sp);
-        regs.sp = unsafe { regs.sp.add(Self::slots_of::<NarrowOOP>()) };
-
-        res
+        NarrowOOP::decode(Self::pop(regs))
     }
 
     #[inline]
@@ -57,14 +71,31 @@ impl ZeroInstructions {
 
     #[inline]
     fn push_ref(regs: &mut ZeroRegisters, oop: OOP) {
-        regs.sp = unsafe { regs.sp.sub(Self::slots_of::<NarrowOOP>()) };
-        Access::<{DECORATOR_NONE}>::oop_store(regs.sp, oop);
+        Self::push(regs, NarrowOOP::encode(oop));
     }
 
     #[inline]
-    fn load_local_oop(regs: &mut ZeroRegisters, index: u8) -> OOP {
-        let addr = unsafe { (*regs.bp).local(index) };
-        Access::<{DECORATOR_NONE}>::oop_load(addr)
+    fn local_load_oop(regs: &mut ZeroRegisters, index: impl Into<usize>) -> OOP {
+        NarrowOOP::decode(Self::local_load(regs, index))
+    }
+
+    #[inline]
+    fn local_store_oop(regs: &mut ZeroRegisters, index: impl Into<usize>, value: OOP) {
+        Self::local_store(regs, index, NarrowOOP::encode(value));
+    }
+
+    #[inline]
+    fn local_load<T: Copy>(regs: &mut ZeroRegisters, index: impl Into<usize>) -> T {
+        unsafe {
+            *((*regs.bp).local(index) as *const _)
+        }
+    }
+
+    #[inline]
+    fn local_store<T>(regs: &mut ZeroRegisters, index: impl Into<usize>, value: T) {
+        unsafe {
+            *((*regs.bp).local(index) as *mut _) = value
+        }
     }
 
     #[inline]
@@ -77,14 +108,18 @@ impl ZeroInstructions {
 
     #[inline]
     fn read_u16(regs: &mut ZeroRegisters) -> u16 {
-        unsafe {
-            regs.pc = regs.pc.add(1);
-            let byte1 = *regs.pc as u16;
-            regs.pc = regs.pc.add(1);
-            let byte2 = *regs.pc as u16;
+        let byte1 = Self::read_u8(regs) as u16;
+        let byte2 = Self::read_u8(regs) as u16;
 
-            (byte1 << 8) | byte2
-        }
+        (byte1 << 8) | byte2
+    }
+
+    #[inline]
+    fn read_u32(regs: &mut ZeroRegisters) -> u32 {
+        let short1 = Self::read_u16(regs) as u32;
+        let short2 = Self::read_u16(regs) as u32;
+
+        (short1 << 16) | short2
     }
 }
 
@@ -97,11 +132,11 @@ impl ZeroInstructions {
             // todo: throw NullPointerException
         }
 
-        if index >= ArrayOOP::length(arrayref) {
+        if index >= ArrayOOP::length::<{DECORATOR_IN_HEAP}>(arrayref) {
             // todo: throw ArrayIndexOutOfBoundsException
         }
 
-        let value = Access::<{DECORATOR_MO_VOLATILE}>::oop_load_at(arrayref, ArrayOOP::cal_offset::<NarrowOOP>(index));
+        let value = ArrayOOP::get_oop::<{DECORATOR_IN_HEAP | DECORATOR_MO_VOLATILE}>(arrayref, index);
         Self::push_ref(regs, value);
     }
 
@@ -114,7 +149,7 @@ impl ZeroInstructions {
             // todo: throw NullPointerException
         }
 
-        if index >= ArrayOOP::length(arrayref) {
+        if index >= ArrayOOP::length::<{DECORATOR_IN_HEAP}>(arrayref) {
             // todo: throw ArrayIndexOutOfBoundsException
         }
 
@@ -123,7 +158,7 @@ impl ZeroInstructions {
             // If not compatible, throw ArrayStoreException
         }
 
-        Access::<{DECORATOR_MO_VOLATILE}>::oop_store_at(arrayref, ArrayOOP::cal_offset::<NarrowOOP>(index), value);
+        ArrayOOP::put_oop::<{DECORATOR_IN_HEAP | DECORATOR_MO_VOLATILE}>(arrayref, index, value);
     }
 
     pub fn aconst_null(regs: &mut ZeroRegisters) {
@@ -132,13 +167,20 @@ impl ZeroInstructions {
 
     pub fn aload(regs: &mut ZeroRegisters) {
         let index = Self::read_u8(regs);
-        let objectref = Self::load_local_oop(regs, index);
+        let objectref = Self::local_load_oop(regs, index);
+
+        Self::push_ref(regs, objectref);
+    }
+
+    pub fn wide_aload(regs: &mut ZeroRegisters) {
+        let index = Self::read_u16(regs);
+        let objectref = Self::local_load_oop(regs, index);
 
         Self::push_ref(regs, objectref);
     }
 
     pub fn aload_n<const N: u8>(regs: &mut ZeroRegisters) {
-        let objectref = Self::load_local_oop(regs, N);
+        let objectref = Self::local_load_oop(regs, N);
 
         Self::push_ref(regs, objectref);
     }
@@ -152,5 +194,611 @@ impl ZeroInstructions {
     }
 
     pub fn arraylength(regs: &mut ZeroRegisters) {
+        let arrayref = Self::pop_ref(regs);
+        if arrayref.is_null() {
+            // todo: throw NullPointerException
+        }
+
+        let length = ArrayOOP::length::<{DECORATOR_IN_HEAP}>(arrayref);
+        Self::push(regs, length);
+    }
+
+    pub fn astore(regs: &mut ZeroRegisters) {
+        let index = Self::read_u8(regs);
+        let objectref = Self::pop_ref(regs);
+        Self::local_store_oop(regs, index, objectref);
+    }
+
+    pub fn wide_astore(regs: &mut ZeroRegisters) {
+        let index = Self::read_u16(regs);
+        let objectref = Self::pop_ref(regs);
+
+        Self::local_store_oop(regs, index, objectref);
+    }
+
+    pub fn astore_n<const N: u8>(regs: &mut ZeroRegisters) {
+        let objectref = Self::pop_ref(regs);
+        Self::local_store_oop(regs, N, objectref);
+    }
+
+    pub fn athrow(regs: &mut ZeroRegisters) {
+        unimplemented!()
+    }
+
+    pub fn type_aload<T: Copy + Into<U>, U>(regs: &mut ZeroRegisters) {
+        let index = Self::pop(regs);
+        let arrayref = Self::pop_ref(regs);
+
+        if arrayref.is_null() {
+            // todo: throw NullPointerException
+        }
+
+        if index >= ArrayOOP::length::<{DECORATOR_IN_HEAP}>(arrayref) {
+            // todo: throw ArrayIndexOutOfBoundsException
+        }
+
+        let value = ArrayOOP::get::<{DECORATOR_IN_HEAP | DECORATOR_MO_VOLATILE}, T>(arrayref, index).into();
+        Self::push(regs, value);
+    }
+
+    pub fn type_astore<T: Copy, U: Copy + Into<T>>(regs: &mut ZeroRegisters) {
+        let value = Self::pop::<U>(regs).into();
+        let index = Self::pop(regs);
+        let arrayref = Self::pop_ref(regs);
+
+        if arrayref.is_null() {
+            // todo: throw NullPointerException
+        }
+
+        if index >= ArrayOOP::length::<{DECORATOR_IN_HEAP}>(arrayref) {
+            // todo: throw ArrayIndexOutOfBoundsException
+        }
+
+        ArrayOOP::put::<{DECORATOR_IN_HEAP | DECORATOR_MO_VOLATILE}, T>(arrayref, index, value);
+    }
+
+    pub fn bipush(regs: &mut ZeroRegisters) {
+        let byte = Self::read_u8(regs);
+        let value = byte.cast_signed() as i32;
+        
+        Self::push(regs, value);
+    }
+
+    pub fn checkcast(regs: &mut ZeroRegisters) {
+        unimplemented!()
+    }
+
+    pub fn t1_to_t2<T1: Copy + Into<T2>, T2: Copy>(regs: &mut ZeroRegisters) {
+        let value = Self::pop::<T1>(regs);
+        let result = value.into();
+
+        Self::push(regs, result);
+    }
+
+    type_op!(add, Add, +);
+
+    pub fn type_cmpg<T: FloatType>(regs: &mut ZeroRegisters) {
+        let value2 = Self::pop::<T>(regs);
+        let value1 = Self::pop::<T>(regs);
+
+        // in case NaN
+        let result = if value1 < value2 {
+            -1
+        } else if value1 == value2 {
+            0
+        } else {
+            1
+        };
+
+        Self::push(regs, result);
+    }
+
+    pub fn type_cmpl<T: FloatType>(regs: &mut ZeroRegisters) {
+        let value2 = Self::pop::<T>(regs);
+        let value1 = Self::pop::<T>(regs);
+
+        // in case NaN
+        let result = if value1 > value2 {
+            1
+        } else if value1 == value2 {
+            0
+        } else {
+            -1
+        };
+
+        Self::push(regs, result);
+    }
+
+    pub fn float_type_const_0<T: FloatType>(regs: &mut ZeroRegisters) {
+        Self::push(regs, T::ZERO);
+    }
+
+    pub fn float_type_const_1<T: FloatType>(regs: &mut ZeroRegisters) {
+        Self::push(regs, T::ONE);
+    }
+
+    pub fn float_type_const_2<T: FloatType>(regs: &mut ZeroRegisters) {
+        Self::push(regs, T::TWO);
+    }
+
+    pub fn type_div<T: Copy + Div>(regs: &mut ZeroRegisters) {
+        let value2 = Self::pop::<T>(regs);
+        let value1 = Self::pop::<T>(regs);
+
+        let result = value1 / value2;
+
+        Self::push(regs, result);
+    }
+
+    pub fn type_load<T: Copy>(regs: &mut ZeroRegisters) {
+        let index = Self::read_u8(regs);
+        let value = Self::local_load::<T>(regs, index);
+
+        Self::push(regs, value);
+    }
+
+    pub fn wide_type_load<T: Copy>(regs: &mut ZeroRegisters) {
+        let index = Self::read_u16(regs);
+        let value = Self::local_load::<T>(regs, index);
+
+        Self::push(regs, value);
+    }
+
+    pub fn type_load_n<const N: u8, T: Copy>(regs: &mut ZeroRegisters) {
+        let value = Self::local_load::<T>(regs, N);
+
+        Self::push(regs, value);
+    }
+
+    type_op!(mul, Mul, *);
+
+    pub fn float_type_neg<T: FloatType>(regs: &mut ZeroRegisters) {
+        let value = Self::pop::<T>(regs);
+
+        let result = if value.is_nan() {
+            T::NAN
+        } else {
+            -value
+        };
+
+        Self::push(regs, result);
+    }
+
+    type_op!(rem, Rem, %);
+
+    pub fn type_return(regs: &mut ZeroRegisters) {
+        unimplemented!()
+    }
+
+    pub fn type_store<T: Copy>(regs: &mut ZeroRegisters) {
+        let value = Self::pop::<T>(regs);
+        let index = Self::read_u8(regs);
+
+        Self::local_store(regs, index, value);
+    }
+    
+    pub fn wide_type_store<T: Copy>(regs: &mut ZeroRegisters) {
+        let value = Self::pop::<T>(regs);
+        let index = Self::read_u16(regs);
+
+        Self::local_store(regs, index, value);
+    }
+
+    pub fn type_store_n<const N: u8, T: Copy>(regs: &mut ZeroRegisters) {
+        let value = Self::pop::<T>(regs);
+
+        Self::local_store(regs, N, value);
+    }
+
+    type_op!(sub, Sub, -);
+
+    pub fn dupn<T: StackSlotType>(regs: &mut ZeroRegisters) {
+        let value = Self::pop::<T>(regs);
+
+        Self::push(regs, value);
+        Self::push(regs, value);
+    }
+
+    pub fn dupn_x1<T: StackSlotType>(regs: &mut ZeroRegisters) {
+        let value1 = Self::pop::<T>(regs);
+        let value2 = Self::pop::<T>(regs);
+
+        Self::push(regs, value1);
+        Self::push(regs, value2);
+        Self::push(regs, value1);
+    }
+
+    pub fn dupn_x2<T: StackSlotType>(regs: &mut ZeroRegisters) {
+        let value1 = Self::pop::<T>(regs);
+        let value2 = Self::pop::<T>(regs);
+        let value3 = Self::pop::<T>(regs);
+
+        Self::push(regs, value1);
+        Self::push(regs, value3);
+        Self::push(regs, value2);
+        Self::push(regs, value1);
+    }
+
+    pub fn getfield(regs: &mut ZeroRegisters) {
+        unimplemented!()
+    }
+
+    pub fn getstatic(regs: &mut ZeroRegisters) {
+        unimplemented!()
+    }
+
+    pub fn goto(regs: &mut ZeroRegisters) {
+        let branchoffset = Self::read_u16(regs).cast_signed() as isize;
+        unsafe { regs.pc = regs.pc.byte_offset(branchoffset - 1) };
+    }
+
+    pub fn goto_w(regs: &mut ZeroRegisters) {
+        let branchoffset = Self::read_u32(regs).cast_signed() as isize;
+        unsafe { regs.pc = regs.pc.byte_offset(branchoffset - 1) };
+    }
+
+    type_op!(and, BitAnd, &);
+
+    pub fn int_type_const_n<T: Copy + From<i8>, const N: i8>(regs: &mut ZeroRegisters) {
+        Self::push(regs, T::from(N));
+    }
+
+    // For OOP, plz make T i32
+    pub fn if_type_cmpeq<T: Copy + PartialEq>(regs: &mut ZeroRegisters) {
+        let value2 = Self::pop::<T>(regs);
+        let value1 = Self::pop::<T>(regs);
+
+        if value1 == value2 {
+            Self::goto(regs);
+        } else {
+            Self::read_u16(regs);
+        }
+    }
+
+    // For OOP, plz make T i32
+    pub fn if_type_cmpne<T: Copy + PartialEq>(regs: &mut ZeroRegisters) {
+        let value2 = Self::pop::<T>(regs);
+        let value1 = Self::pop::<T>(regs);
+
+        if value1 != value2 {
+            Self::goto(regs);
+        } else {
+            Self::read_u16(regs);
+        }
+    }
+
+    pub fn if_type_cmplt<T: Copy + PartialOrd>(regs: &mut ZeroRegisters) {
+        let value2 = Self::pop::<T>(regs);
+        let value1 = Self::pop::<T>(regs);
+
+        if value1 < value2 {
+            Self::goto(regs);
+        } else {
+            Self::read_u16(regs);
+        }
+    }
+
+    pub fn if_type_cmple<T: Copy + PartialOrd>(regs: &mut ZeroRegisters) {
+        let value2 = Self::pop::<T>(regs);
+        let value1 = Self::pop::<T>(regs);
+
+        if value1 <= value2 {
+            Self::goto(regs);
+        } else {
+            Self::read_u16(regs);
+        }
+    }
+
+    pub fn if_type_cmpgt<T: Copy + PartialOrd>(regs: &mut ZeroRegisters) {
+        let value2 = Self::pop::<T>(regs);
+        let value1 = Self::pop::<T>(regs);
+
+        if value1 > value2 {
+            Self::goto(regs);
+        } else {
+            Self::read_u16(regs);
+        }
+    }
+    
+    pub fn if_type_cmpge<T: Copy + PartialOrd>(regs: &mut ZeroRegisters) {
+        let value2 = Self::pop::<T>(regs);
+        let value1 = Self::pop::<T>(regs);
+
+        if value1 >= value2 {
+            Self::goto(regs);
+        } else {
+            Self::read_u16(regs);
+        }
+    }
+
+    pub fn ifeq(regs: &mut ZeroRegisters) {
+        let value = Self::pop::<i32>(regs);
+
+        if value == 0 {
+            Self::goto(regs);
+        } else {
+            Self::read_u16(regs);
+        }
+    }
+
+    pub fn ifne(regs: &mut ZeroRegisters) {
+        let value = Self::pop::<i32>(regs);
+
+        if value != 0 {
+            Self::goto(regs);
+        } else {
+            Self::read_u16(regs);
+        }
+    }
+
+    pub fn iflt(regs: &mut ZeroRegisters) {
+        let value = Self::pop::<i32>(regs);
+
+        if value < 0 {
+            Self::goto(regs);
+        } else {
+            Self::read_u16(regs);
+        }
+    }
+
+    pub fn ifle(regs: &mut ZeroRegisters) {
+        let value = Self::pop::<i32>(regs);
+
+        if value <= 0 {
+            Self::goto(regs);
+        } else {
+            Self::read_u16(regs);
+        }
+    }
+
+    pub fn ifgt(regs: &mut ZeroRegisters) {
+        let value = Self::pop::<i32>(regs);
+
+        if value > 0 {
+            Self::goto(regs);
+        } else {
+            Self::read_u16(regs);
+        }
+    }
+
+    pub fn ifge(regs: &mut ZeroRegisters) {
+        let value = Self::pop::<i32>(regs);
+
+        if value >= 0 {
+            Self::goto(regs);
+        } else {
+            Self::read_u16(regs);
+        }
+    }
+
+    pub fn ifnonnull(regs: &mut ZeroRegisters) {
+        let value = Self::pop_ref(regs);
+
+        if !value.is_null() {
+            Self::goto(regs);
+        } else {
+            Self::read_u16(regs);
+        }
+    }
+
+    pub fn ifnull(regs: &mut ZeroRegisters) {
+        let value = Self::pop_ref(regs);
+
+        if value.is_null() {
+            Self::goto(regs);
+        } else {
+            Self::read_u16(regs);
+        }
+    }
+
+    pub fn iinc(regs: &mut ZeroRegisters) {
+        let index = Self::read_u8(regs);
+        let const_ = Self::read_u8(regs).cast_signed() as i32;
+
+        let local = Self::local_load::<i32>(regs, index);
+
+        let result = local + const_;
+
+        Self::local_store(regs, index, result);
+    }
+
+    pub fn wide_iinc(regs: &mut ZeroRegisters) {
+        let index = Self::read_u16(regs);
+        let const_ = Self::read_u16(regs).cast_signed() as i32;
+
+        let local = Self::local_load::<i32>(regs, index);
+
+        let result = local + const_;
+
+        Self::local_store(regs, index, result);
+    }
+
+    pub fn int_type_neg<T: Copy + Neg>(regs: &mut ZeroRegisters) {
+        let value = Self::pop::<T>(regs);
+        
+        let result = -value;
+
+        Self::push(regs, result);
+    }
+
+    pub fn instanceof(regs: &mut ZeroRegisters) {
+        unimplemented!()
+    }
+
+    pub fn invokedynamic(regs: &mut ZeroRegisters) {
+        unimplemented!()
+    }
+
+    pub fn invokeinterface(regs: &mut ZeroRegisters) {
+        unimplemented!()
+    }
+
+    pub fn invokespecial(regs: &mut ZeroRegisters) {
+        unimplemented!()
+    }
+
+    pub fn invokestatic(regs: &mut ZeroRegisters) {
+        unimplemented!()
+    }
+
+    pub fn invokevirtual(regs: &mut ZeroRegisters) {
+        unimplemented!()
+    }
+
+    type_op!(or, BitOr, |);
+
+    pub fn type_shl<T: Copy + Shl<i32>>(regs: &mut ZeroRegisters) {
+        let value2 = Self::pop::<i32>(regs);
+        let value1 = Self::pop::<T>(regs);
+
+        let result = value1 << value2;
+
+        Self::push(regs, result);
+    }
+
+    pub fn type_shr<T: Copy + Shr<i32>>(regs: &mut ZeroRegisters) {
+        let value2 = Self::pop::<i32>(regs);
+        let value1 = Self::pop::<T>(regs);
+
+        let result = value1 >> value2;
+
+        Self::push(regs, result);
+    }
+
+    type_op!(xor, BitXor, ^);
+
+    pub fn jsr(regs: &mut ZeroRegisters) {
+        panic!("Deprecated");
+    }
+
+    pub fn jsr_w(regs: &mut ZeroRegisters) {
+        panic!("Deprecated");
+    }
+
+    pub fn lcmp(regs: &mut ZeroRegisters) {
+        let value2 = Self::pop::<i64>(regs);
+        let value1 = Self::pop::<i64>(regs);
+
+        let result = if value1 > value2 {
+            1i32
+        } else if value1 == value2 {
+            0i32
+        } else if value1 < value2 {
+            -1i32
+        } else {
+            unreachable!()
+        };
+
+        Self::push(regs, result);
+    }
+
+    pub fn ldc(regs: &mut ZeroRegisters) {
+        unimplemented!()
+    }
+
+    pub fn ldc_w(regs: &mut ZeroRegisters) {
+        unimplemented!()
+    }
+
+    pub fn ldc2_w(regs: &mut ZeroRegisters) {
+        unimplemented!()
+    }
+
+    pub fn lookupswitch(regs: &mut ZeroRegisters) {
+        unimplemented!()
+    }
+
+    pub fn monitorenter(regs: &mut ZeroRegisters) {
+        unimplemented!()
+    }
+
+    pub fn monitorexit(regs: &mut ZeroRegisters) {
+        unimplemented!()
+    }
+
+    pub fn multianewarray(regs: &mut ZeroRegisters) {
+        unimplemented!()
+    }
+
+    pub fn new(regs: &mut ZeroRegisters) {
+        unimplemented!()
+    }
+
+    pub fn newarray(regs: &mut ZeroRegisters) {
+        unimplemented!()
+    }
+
+    pub fn nop(regs: &mut ZeroRegisters) {
+        // do nothing.
+    }
+
+    pub fn pop_(regs: &mut ZeroRegisters) {
+        Self::pop::<StackSlot>(regs);
+    }
+
+    pub fn pop2(regs: &mut ZeroRegisters) {
+        Self::pop::<DStackSlot>(regs);
+    }
+
+    pub fn putfield(regs: &mut ZeroRegisters) {
+        unimplemented!()
+    }
+
+    pub fn putstatic(regs: &mut ZeroRegisters) {
+        unimplemented!()
+    }
+
+    pub fn ret(regs: &mut ZeroRegisters) {
+        unimplemented!()
+    }
+
+    pub fn wide_ret(regs: &mut ZeroRegisters) {
+        unimplemented!()
+    }
+
+    pub fn return_(regs: &mut ZeroRegisters) {
+        unimplemented!()
+    }
+
+    pub fn sipush(regs: &mut ZeroRegisters) {
+        let value = Self::read_u16(regs).cast_signed() as i32;
+
+        Self::push(regs, value);
+    }
+
+    pub fn swap(regs: &mut ZeroRegisters) {
+        let value1 = Self::pop::<StackSlot>(regs);
+        let value2 = Self::pop::<StackSlot>(regs);
+
+        Self::push(regs, value1);
+        Self::push(regs, value2);
+    }
+
+    pub fn tableswitch(regs: &mut ZeroRegisters) {
+        unimplemented!()
+    }
+
+    pub fn wide(regs: &mut ZeroRegisters) {
+        let opcode = Self::read_u8(regs);
+
+        match opcode {
+            bytecodes::_ILOAD => Self::wide_type_load::<i32>(regs),
+            bytecodes::_FLOAD => Self::wide_type_load::<f32>(regs),
+            bytecodes::_ALOAD => Self::wide_aload(regs),
+            bytecodes::_LLOAD => Self::wide_type_load::<i64>(regs),
+            bytecodes::_DLOAD => Self::wide_type_load::<f64>(regs),
+
+            bytecodes::_ISTORE => Self::wide_type_store::<i32>(regs),
+            bytecodes::_FSTORE => Self::wide_type_store::<f32>(regs),
+            bytecodes::_ASTORE => Self::wide_astore(regs),
+            bytecodes::_LSTORE => Self::wide_type_store::<i64>(regs),
+            bytecodes::_DSTORE => Self::wide_type_store::<f64>(regs),
+
+            bytecodes::_RET => Self::wide_ret(regs),
+
+            bytecodes::_IINC => Self::wide_iinc(regs),
+            
+            _ => panic!("bad op code")
+        }
     }
 }

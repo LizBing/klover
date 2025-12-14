@@ -26,39 +26,66 @@ impl OOP {
     pub fn null() -> OOP {
         Self(null())
     }
-}
-
-impl OOP {
+    
     pub fn is_null(self) -> bool {
         self.0 == null()
     }
+}
 
-    pub fn mark_word(self) -> MarkWord {
+impl OOP {
+    pub fn mark_word<const D: u32>(self) -> MarkWord {
         unimplemented!()
     }
 
-    pub fn set_mark_word(self, value: MarkWord) {
+    pub fn set_mark_word<const D: u32>(self, value: MarkWord) {
         unimplemented!()
     }
 
-    pub fn cas_mark_word(self, exp: MarkWord, des: MarkWord) -> bool {
+    pub fn cas_mark_word<const D: u32>(self, exp: MarkWord, des: MarkWord) -> bool {
+        unimplemented!()
+    }
+
+    pub fn get_field<const D: u32, T: Copy>(self, offset: usize) -> T {
+        unimplemented!()
+    }
+
+    pub fn put_field<const D: u32, T>(self, offset: usize, value: T) {
+        unimplemented!()
+    }
+
+    pub fn get_oop_field<const D: u32>(self, offset: usize) -> OOP {
+        unimplemented!()
+    }
+
+    pub fn put_oop_field<const D: u32>(self, offset: usize, value: OOP) {
         unimplemented!()
     }
 }
 
 pub struct ArrayOOP;
 impl ArrayOOP {
-    pub fn length(base: OOP) -> i32 {
+    pub fn length<const D: u32>(base: OOP) -> i32 {
         unimplemented!()
     }
 
     // once
-    pub fn set_length(base: OOP, length: i32) {
+    pub fn set_length<const D: u32>(base: OOP, length: i32) {
         unimplemented!()
     }
 
-    // in bytes
-    pub fn cal_offset<T>(index: i32) -> usize {
+    pub fn get<const D: u32, T: Copy>(base: OOP, index: i32) -> T {
+        unimplemented!()
+    }
+
+    pub fn put<const D: u32, T>(base: OOP, index: i32, value: T) {
+        unimplemented!()
+    }
+
+    pub fn get_oop<const D: u32>(base: OOP, index: i32) -> OOP {
+        unimplemented!()
+    }
+
+    pub fn put_oop<const D: u32>(base: OOP, index: i32, value: OOP) {
         unimplemented!()
     }
 }
