@@ -16,7 +16,7 @@
 
 use std::{ffi::c_void, ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Neg, Rem, Shl, Shr, Sub}, ptr::null};
 
-use crate::{engine::{bytecodes, engine_runtime::{DStackSlot, StackSlot, StackSlotType}, zero::{zero_constrains::FloatType, zero_runtime::ZeroRegisters}}, oops::{access::{DECORATOR_IN_HEAP, DECORATOR_MO_VOLATILE}, oop_hierarchy::{ArrayOOP, NarrowOOP, OOP}}, utils::global_defs::{Address, JByte, JChar, JDouble, JFloat, JInt, JLong, JShort}};
+use crate::{engine::{bytecodes, engine_runtime::{DStackSlot, StackSlot, StackSlotType}, zero::{zero_constrains::{FloatType}, zero_runtime::ZeroRegisters}}, oops::{access::{DECORATOR_IN_HEAP, DECORATOR_MO_VOLATILE}, oop_hierarchy::{ArrayOOP, NarrowOOP, OOP}}, utils::global_defs::{Address, JByte, JChar, JDouble, JFloat, JInt, JLong, JShort}};
 
 pub struct ZeroInstructions;
 
@@ -24,13 +24,45 @@ macro_rules! type_op {
     ($name:ident, $trait_: ty, $op:tt) => {
         paste::paste! {
             fn [<type_ $name>]<T: Copy + $trait_>(regs: &mut ZeroRegisters) {
-               let value2 = Self::pop::<T>(regs);
+                let value2 = Self::pop::<T>(regs);
                 let value1 = Self::pop::<T>(regs);
 
                 let result = value1 $op value2;
 
                 Self::push(regs, result); 
             }
+        }
+    };
+}
+
+macro_rules! type_astore_with_trunc {
+    ($name:ident, $t: ty) => {
+        fn $name(regs: &mut ZeroRegisters) {
+            let value = Self::pop::<JInt>(regs);
+            let index = Self::pop(regs);
+            let arrayref = Self::pop_ref(regs);
+
+            if arrayref.is_null() {
+                // todo: throw NullPointerException
+            }
+
+            if index >= ArrayOOP::length::<{DECORATOR_IN_HEAP}>(arrayref) {
+                // todo: throw ArrayIndexOutOfBoundsException
+            }
+
+            let result = value as $t;
+            ArrayOOP::put::<{DECORATOR_IN_HEAP | DECORATOR_MO_VOLATILE} ,_>(arrayref, index, result);
+        }
+    };
+}
+
+macro_rules! t1_to_t2 {
+    ($name:ident, $t1:ty, $t2:ty) => {
+        fn $name(regs: &mut ZeroRegisters) {
+            let value = Self::pop::<$t1>(regs);
+            let result = value as $t2;
+
+            Self::push(regs, result);
         }
     };
 }
@@ -98,14 +130,14 @@ pub static INS_TABLE: [InsFnType; bytecodes::NUMBER_OF_JAVA_CODES] = [
     ZeroInstructions::aload_n::<2>,
     ZeroInstructions::aload_n::<3>,
 
-    ZeroInstructions::type_aload::<JInt>,
-    ZeroInstructions::type_aload::<JLong>,
-    ZeroInstructions::type_aload::<JFloat>,
-    ZeroInstructions::type_aload::<JDouble>,
+    ZeroInstructions::type_aload::<JInt, JInt>,
+    ZeroInstructions::type_aload::<JLong, JLong>,
+    ZeroInstructions::type_aload::<JFloat, JFloat>,
+    ZeroInstructions::type_aload::<JDouble, JDouble>,
     ZeroInstructions::aaload,
-    ZeroInstructions::type_aload::<JByte>,
-    ZeroInstructions::type_aload::<JChar>,
-    ZeroInstructions::type_aload::<JShort>,
+    ZeroInstructions::type_aload::<JInt, JByte>,
+    ZeroInstructions::type_aload::<JInt, JChar>,
+    ZeroInstructions::type_aload::<JInt, JShort>,
 
     ZeroInstructions::type_store::<JInt>,
     ZeroInstructions::type_store::<JLong>,
@@ -143,19 +175,19 @@ pub static INS_TABLE: [InsFnType; bytecodes::NUMBER_OF_JAVA_CODES] = [
     ZeroInstructions::type_astore::<JFloat>,
     ZeroInstructions::type_astore::<JDouble>,
     ZeroInstructions::aastore,
-    ZeroInstructions::type_astore::<JByte>,
-    ZeroInstructions::type_astore::<JChar>,
-    ZeroInstructions::type_astore::<JShort>,
+    ZeroInstructions::bastore,
+    ZeroInstructions::castore,
+    ZeroInstructions::sastore,
 
     ZeroInstructions::pop,
     ZeroInstructions::pop2,
 
-    ZeroInstructions::dupn::<1>,
-    ZeroInstructions::dupn_x1::<1>,
-    ZeroInstructions::dupn_x2::<1>,
-    ZeroInstructions::dupn::<2>,
-    ZeroInstructions::dupn_x1::<2>,
-    ZeroInstructions::dupn_x2::<2>,
+    ZeroInstructions::dupn::<StackSlot>,
+    ZeroInstructions::dupn_x1::<StackSlot>,
+    ZeroInstructions::dupn_x2::<StackSlot>,
+    ZeroInstructions::dupn::<DStackSlot>,
+    ZeroInstructions::dupn_x1::<DStackSlot>,
+    ZeroInstructions::dupn_x2::<DStackSlot>,
 
     ZeroInstructions::swap,
 
@@ -209,25 +241,25 @@ pub static INS_TABLE: [InsFnType; bytecodes::NUMBER_OF_JAVA_CODES] = [
 
     ZeroInstructions::iinc,
 
-    ZeroInstructions::t1_to_t2::<JInt, JLong>,
-    ZeroInstructions::t1_to_t2::<JInt, JFloat>,
-    ZeroInstructions::t1_to_t2::<JInt, JDouble>,
+    ZeroInstructions::i2l,
+    ZeroInstructions::i2f,
+    ZeroInstructions::i2d,
 
-    ZeroInstructions::t1_to_t2::<JLong, JInt>,
-    ZeroInstructions::t1_to_t2::<JLong, JFloat>,
-    ZeroInstructions::t1_to_t2::<JLong, JDouble>,
+    ZeroInstructions::l2i,
+    ZeroInstructions::l2f,
+    ZeroInstructions::l2d,
 
-    ZeroInstructions::t1_to_t2::<JFloat, JInt>,
-    ZeroInstructions::t1_to_t2::<JFloat, JLong>,
-    ZeroInstructions::t1_to_t2::<JFloat, JDouble>,
+    ZeroInstructions::f2i,
+    ZeroInstructions::f2l,
+    ZeroInstructions::f2d,
 
-    ZeroInstructions::t1_to_t2::<JDouble, JInt>,
-    ZeroInstructions::t1_to_t2::<JDouble, JLong>,
-    ZeroInstructions::t1_to_t2::<JDouble, JFloat>,
+    ZeroInstructions::d2i,
+    ZeroInstructions::d2l,
+    ZeroInstructions::d2f,
 
-    ZeroInstructions::t1_to_t2::<JInt, JByte>,
-    ZeroInstructions::t1_to_t2::<JInt, JChar>,
-    ZeroInstructions::t1_to_t2::<JInt, JShort>,
+    ZeroInstructions::i2b,
+    ZeroInstructions::i2c,
+    ZeroInstructions::i2s,
 
     ZeroInstructions::lcmp,
     ZeroInstructions::type_cmpl::<JFloat>,
@@ -489,7 +521,8 @@ impl ZeroInstructions {
         unimplemented!()
     }
 
-    fn type_aload<T: Copy + Into<U>, U>(regs: &mut ZeroRegisters) {
+    // T is the dst type of the stack value, while U is the src type of array.
+    fn type_aload<T: Copy, U: Copy + Into<T>>(regs: &mut ZeroRegisters) {
         let index = Self::pop(regs);
         let arrayref = Self::pop_ref(regs);
 
@@ -501,12 +534,12 @@ impl ZeroInstructions {
             // todo: throw ArrayIndexOutOfBoundsException
         }
 
-        let value = ArrayOOP::get::<{DECORATOR_IN_HEAP | DECORATOR_MO_VOLATILE}, T>(arrayref, index).into();
+        let value = ArrayOOP::get::<{DECORATOR_IN_HEAP | DECORATOR_MO_VOLATILE}, U>(arrayref, index).into();
         Self::push(regs, value);
     }
 
-    fn type_astore<T: Copy, U: Copy + Into<T>>(regs: &mut ZeroRegisters) {
-        let value = Self::pop::<U>(regs).into();
+    fn type_astore<T: Copy>(regs: &mut ZeroRegisters) {
+        let value = Self::pop::<T>(regs);
         let index = Self::pop(regs);
         let arrayref = Self::pop_ref(regs);
 
@@ -518,8 +551,16 @@ impl ZeroInstructions {
             // todo: throw ArrayIndexOutOfBoundsException
         }
 
-        ArrayOOP::put::<{DECORATOR_IN_HEAP | DECORATOR_MO_VOLATILE}, T>(arrayref, index, value);
+        ArrayOOP::put::<{DECORATOR_IN_HEAP | DECORATOR_MO_VOLATILE}, _>(arrayref, index, value);
     }
+
+    fn bastore(regs: &mut ZeroRegisters) {
+        // todo: check if the type is bool. See 6.5.bastore
+        unimplemented!()
+    }
+    
+    type_astore_with_trunc!(castore, JChar);
+    type_astore_with_trunc!(sastore, JShort);
 
     fn bipush(regs: &mut ZeroRegisters) {
         let byte = Self::read_u8(regs);
@@ -532,12 +573,25 @@ impl ZeroInstructions {
         unimplemented!()
     }
 
-    fn t1_to_t2<T1: Copy + Into<T2>, T2: Copy>(regs: &mut ZeroRegisters) {
-        let value = Self::pop::<T1>(regs);
-        let result = value.into();
+    t1_to_t2!(i2l, JInt, JLong);
+    t1_to_t2!(i2f, JInt, JFloat);
+    t1_to_t2!(i2d, JInt, JDouble);
 
-        Self::push(regs, result);
-    }
+    t1_to_t2!(l2i, JLong, JInt);
+    t1_to_t2!(l2f, JLong, JFloat);
+    t1_to_t2!(l2d, JLong, JDouble);
+
+    t1_to_t2!(f2i, JFloat, JInt);
+    t1_to_t2!(f2l, JFloat, JLong);
+    t1_to_t2!(f2d, JFloat, JDouble);
+
+    t1_to_t2!(d2i, JDouble, JInt);
+    t1_to_t2!(d2l, JDouble, JLong);
+    t1_to_t2!(d2f, JDouble, JFloat);
+
+    t1_to_t2!(i2b, JInt, JByte);
+    t1_to_t2!(i2c, JInt, JChar);
+    t1_to_t2!(i2s, JInt, JShort);
 
     type_op!(add, Add, +);
 
@@ -630,7 +684,7 @@ impl ZeroInstructions {
 
     type_op!(rem, Rem, %);
 
-    fn type_return(regs: &mut ZeroRegisters) {
+    fn type_return<T: Copy>(regs: &mut ZeroRegisters) {
         unimplemented!()
     }
 

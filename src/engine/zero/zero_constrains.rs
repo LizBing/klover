@@ -16,6 +16,8 @@
 
 use std::ops::Neg;
 
+use crate::utils::global_defs::{JDouble, JFloat};
+
 pub trait FloatType: Copy + PartialOrd + Neg<Output = Self> {
     const NAN: Self;
 
@@ -26,7 +28,7 @@ pub trait FloatType: Copy + PartialOrd + Neg<Output = Self> {
     fn is_nan(self) -> bool;
 }
 
-impl FloatType for f32 {
+impl FloatType for JFloat {
     const NAN: Self = f32::NAN;
 
     const ZERO: Self = 0.0f32;
@@ -39,7 +41,7 @@ impl FloatType for f32 {
     }
 }
 
-impl FloatType for f64 {
+impl FloatType for JDouble {
     const NAN: Self = f64::NAN;
 
     const ZERO: Self = 0.0f64;
@@ -51,5 +53,3 @@ impl FloatType for f64 {
         self.is_nan()
     }
 }
-
-
