@@ -217,7 +217,8 @@ pub const _IFNULL              :u8 = 198; // 0xc6
 pub const _IFNONNULL           :u8 = 199; // 0xc7
 pub const _GOTO_W              :u8 = 200; // 0xc8
 pub const _JSR_W               :u8 = 201; // 0xc9
-pub const _BREAKPOINT          :u8 = 202; // 0xca
+// pub const _BREAKPOINT          :u8 = 202; // 0xca
 
-pub const NUMBER_OF_JAVA_CODES: usize = 203;
+// pub const NUMBER_OF_JAVA_CODES: usize = 203;
+pub const NUMBER_OF_JAVA_CODES: usize = 202;
 

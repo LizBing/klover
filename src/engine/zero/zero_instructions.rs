@@ -16,7 +16,7 @@
 
 use std::{ffi::c_void, ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Neg, Rem, Shl, Shr, Sub}, ptr::null};
 
-use crate::{engine::{bytecodes, engine_runtime::{DStackSlot, StackSlot, StackSlotType}, zero::{zero_constrains::FloatType, zero_runtime::ZeroRegisters}}, oops::{access::{DECORATOR_IN_HEAP, DECORATOR_MO_VOLATILE}, oop_hierarchy::{ArrayOOP, NarrowOOP, OOP}}, utils::global_defs::Address};
+use crate::{engine::{bytecodes, engine_runtime::{DStackSlot, StackSlot, StackSlotType}, zero::{zero_constrains::FloatType, zero_runtime::ZeroRegisters}}, oops::{access::{DECORATOR_IN_HEAP, DECORATOR_MO_VOLATILE}, oop_hierarchy::{ArrayOOP, NarrowOOP, OOP}}, utils::global_defs::{Address, JByte, JChar, JDouble, JFloat, JInt, JLong, JShort}};
 
 pub struct ZeroInstructions;
 
@@ -39,9 +39,266 @@ pub type InsFnType = fn(regs: &mut ZeroRegisters<'_>);
 
 pub static INS_TABLE: [InsFnType; bytecodes::NUMBER_OF_JAVA_CODES] = [
     ZeroInstructions::nop,
-    ZeroInstructions::int_type_const_n::<i32, -1>, // iconst_m1
-    ZeroInstructions::int_type_const_n::<i32, 0>, // iconst_0
-    ZeroInstructions::int_type_const_n::<i32, 2>,
+
+    ZeroInstructions::aconst_null,
+
+    ZeroInstructions::int_type_const_n::<JInt, -1>, // iconst_m1
+    ZeroInstructions::int_type_const_n::<JInt, 0>,  // iconst_0
+    ZeroInstructions::int_type_const_n::<JInt, 1>,
+    ZeroInstructions::int_type_const_n::<JInt, 2>,
+    ZeroInstructions::int_type_const_n::<JInt, 3>,
+    ZeroInstructions::int_type_const_n::<JInt, 4>,
+    ZeroInstructions::int_type_const_n::<JInt, 5>,
+
+    ZeroInstructions::int_type_const_n::<JLong, 0>,
+    ZeroInstructions::int_type_const_n::<JLong, 1>,
+
+    ZeroInstructions::float_type_const_0::<JFloat>,
+    ZeroInstructions::float_type_const_1::<JFloat>,
+    ZeroInstructions::float_type_const_2::<JFloat>,
+
+    ZeroInstructions::float_type_const_0::<JDouble>,
+    ZeroInstructions::float_type_const_1::<JDouble>,
+
+    ZeroInstructions::bipush,
+    ZeroInstructions::sipush,
+
+    ZeroInstructions::ldc,
+    ZeroInstructions::ldc_w,
+    ZeroInstructions::ldc2_w,
+
+    ZeroInstructions::type_load::<JInt>,
+    ZeroInstructions::type_load::<JLong>,
+    ZeroInstructions::type_load::<JFloat>,
+    ZeroInstructions::type_load::<JDouble>,
+    ZeroInstructions::aload,
+
+    ZeroInstructions::type_load_n::<JInt, 0>,
+    ZeroInstructions::type_load_n::<JInt, 1>,
+    ZeroInstructions::type_load_n::<JInt, 2>,
+    ZeroInstructions::type_load_n::<JInt, 3>,
+
+    ZeroInstructions::type_load_n::<JLong, 0>,
+    ZeroInstructions::type_load_n::<JLong, 1>,
+    ZeroInstructions::type_load_n::<JLong, 2>,
+    ZeroInstructions::type_load_n::<JLong, 3>,
+
+    ZeroInstructions::type_load_n::<JFloat, 0>,
+    ZeroInstructions::type_load_n::<JFloat, 1>,
+    ZeroInstructions::type_load_n::<JFloat, 2>,
+    ZeroInstructions::type_load_n::<JFloat, 3>,
+
+    ZeroInstructions::type_load_n::<JDouble, 0>,
+    ZeroInstructions::type_load_n::<JDouble, 1>,
+    ZeroInstructions::type_load_n::<JDouble, 2>,
+    ZeroInstructions::type_load_n::<JDouble, 3>,
+
+    ZeroInstructions::aload_n::<0>,
+    ZeroInstructions::aload_n::<1>,
+    ZeroInstructions::aload_n::<2>,
+    ZeroInstructions::aload_n::<3>,
+
+    ZeroInstructions::type_aload::<JInt>,
+    ZeroInstructions::type_aload::<JLong>,
+    ZeroInstructions::type_aload::<JFloat>,
+    ZeroInstructions::type_aload::<JDouble>,
+    ZeroInstructions::aaload,
+    ZeroInstructions::type_aload::<JByte>,
+    ZeroInstructions::type_aload::<JChar>,
+    ZeroInstructions::type_aload::<JShort>,
+
+    ZeroInstructions::type_store::<JInt>,
+    ZeroInstructions::type_store::<JLong>,
+    ZeroInstructions::type_store::<JFloat>,
+    ZeroInstructions::type_store::<JLong>,
+    ZeroInstructions::astore,
+
+    ZeroInstructions::type_store_n::<JInt, 0>,
+    ZeroInstructions::type_store_n::<JInt, 1>,
+    ZeroInstructions::type_store_n::<JInt, 2>,
+    ZeroInstructions::type_store_n::<JInt, 3>,
+
+    ZeroInstructions::type_store_n::<JLong, 0>,
+    ZeroInstructions::type_store_n::<JLong, 1>,
+    ZeroInstructions::type_store_n::<JLong, 2>,
+    ZeroInstructions::type_store_n::<JLong, 3>,
+
+    ZeroInstructions::type_store_n::<JFloat, 0>,
+    ZeroInstructions::type_store_n::<JFloat, 1>,
+    ZeroInstructions::type_store_n::<JFloat, 2>,
+    ZeroInstructions::type_store_n::<JFloat, 3>,
+
+    ZeroInstructions::type_store_n::<JDouble, 0>,
+    ZeroInstructions::type_store_n::<JDouble, 1>,
+    ZeroInstructions::type_store_n::<JDouble, 2>,
+    ZeroInstructions::type_store_n::<JDouble, 3>,
+
+    ZeroInstructions::astore_n::<0>,
+    ZeroInstructions::astore_n::<1>,
+    ZeroInstructions::astore_n::<2>,
+    ZeroInstructions::astore_n::<3>,
+
+    ZeroInstructions::type_astore::<JInt>,
+    ZeroInstructions::type_astore::<JLong>,
+    ZeroInstructions::type_astore::<JFloat>,
+    ZeroInstructions::type_astore::<JDouble>,
+    ZeroInstructions::aastore,
+    ZeroInstructions::type_astore::<JByte>,
+    ZeroInstructions::type_astore::<JChar>,
+    ZeroInstructions::type_astore::<JShort>,
+
+    ZeroInstructions::pop,
+    ZeroInstructions::pop2,
+
+    ZeroInstructions::dupn::<1>,
+    ZeroInstructions::dupn_x1::<1>,
+    ZeroInstructions::dupn_x2::<1>,
+    ZeroInstructions::dupn::<2>,
+    ZeroInstructions::dupn_x1::<2>,
+    ZeroInstructions::dupn_x2::<2>,
+
+    ZeroInstructions::swap,
+
+    ZeroInstructions::type_add::<JInt>,
+    ZeroInstructions::type_add::<JLong>,
+    ZeroInstructions::type_add::<JFloat>,
+    ZeroInstructions::type_add::<JDouble>,
+
+    ZeroInstructions::type_sub::<JInt>,
+    ZeroInstructions::type_sub::<JLong>,
+    ZeroInstructions::type_sub::<JFloat>,
+    ZeroInstructions::type_sub::<JDouble>,
+
+    ZeroInstructions::type_mul::<JInt>,
+    ZeroInstructions::type_mul::<JLong>,
+    ZeroInstructions::type_mul::<JFloat>,
+    ZeroInstructions::type_mul::<JDouble>,
+
+    ZeroInstructions::type_div::<JInt>,
+    ZeroInstructions::type_div::<JLong>,
+    ZeroInstructions::type_div::<JFloat>,
+    ZeroInstructions::type_div::<JDouble>,
+
+    ZeroInstructions::type_rem::<JInt>,
+    ZeroInstructions::type_rem::<JLong>,
+    ZeroInstructions::type_rem::<JFloat>,
+    ZeroInstructions::type_rem::<JDouble>,
+
+    ZeroInstructions::int_type_neg::<JInt>,
+    ZeroInstructions::int_type_neg::<JLong>,
+    ZeroInstructions::float_type_neg::<JFloat>,
+    ZeroInstructions::float_type_neg::<JDouble>,
+
+    ZeroInstructions::type_shl::<JInt>,
+    ZeroInstructions::type_shl::<JLong>,
+
+    ZeroInstructions::type_shr::<JInt>,
+    ZeroInstructions::type_shr::<JLong>,
+
+    ZeroInstructions::type_shr::<u32>,
+    ZeroInstructions::type_shr::<u64>,
+
+    ZeroInstructions::type_and::<JInt>,
+    ZeroInstructions::type_and::<JLong>,
+
+    ZeroInstructions::type_or::<JInt>,
+    ZeroInstructions::type_or::<JLong>,
+
+    ZeroInstructions::type_xor::<JInt>,
+    ZeroInstructions::type_xor::<JLong>,
+
+    ZeroInstructions::iinc,
+
+    ZeroInstructions::t1_to_t2::<JInt, JLong>,
+    ZeroInstructions::t1_to_t2::<JInt, JFloat>,
+    ZeroInstructions::t1_to_t2::<JInt, JDouble>,
+
+    ZeroInstructions::t1_to_t2::<JLong, JInt>,
+    ZeroInstructions::t1_to_t2::<JLong, JFloat>,
+    ZeroInstructions::t1_to_t2::<JLong, JDouble>,
+
+    ZeroInstructions::t1_to_t2::<JFloat, JInt>,
+    ZeroInstructions::t1_to_t2::<JFloat, JLong>,
+    ZeroInstructions::t1_to_t2::<JFloat, JDouble>,
+
+    ZeroInstructions::t1_to_t2::<JDouble, JInt>,
+    ZeroInstructions::t1_to_t2::<JDouble, JLong>,
+    ZeroInstructions::t1_to_t2::<JDouble, JFloat>,
+
+    ZeroInstructions::t1_to_t2::<JInt, JByte>,
+    ZeroInstructions::t1_to_t2::<JInt, JChar>,
+    ZeroInstructions::t1_to_t2::<JInt, JShort>,
+
+    ZeroInstructions::lcmp,
+    ZeroInstructions::type_cmpl::<JFloat>,
+    ZeroInstructions::type_cmpg::<JFloat>,
+    ZeroInstructions::type_cmpl::<JDouble>,
+    ZeroInstructions::type_cmpg::<JDouble>,
+
+    ZeroInstructions::ifeq,
+    ZeroInstructions::ifne,
+    ZeroInstructions::iflt,
+    ZeroInstructions::ifge,
+    ZeroInstructions::ifgt,
+    ZeroInstructions::ifle,
+
+    ZeroInstructions::if_type_cmpeq::<JInt>,
+    ZeroInstructions::if_type_cmpne::<JInt>,
+    ZeroInstructions::if_type_cmplt::<JInt>,
+    ZeroInstructions::if_type_cmpge::<JInt>,
+    ZeroInstructions::if_type_cmpgt::<JInt>,
+    ZeroInstructions::if_type_cmple::<JInt>,
+
+    ZeroInstructions::if_type_cmpeq::<JInt>,
+    ZeroInstructions::if_type_cmpne::<JInt>,
+
+    ZeroInstructions::goto,
+    ZeroInstructions::jsr,
+    ZeroInstructions::ret,
+    ZeroInstructions::tableswitch,
+    ZeroInstructions::lookupswitch,
+
+    ZeroInstructions::type_return::<JInt>,
+    ZeroInstructions::type_return::<JLong>,
+    ZeroInstructions::type_return::<JFloat>,
+    ZeroInstructions::type_return::<JDouble>,
+    ZeroInstructions::areturn,
+    ZeroInstructions::return_,
+
+    ZeroInstructions::getstatic,
+    ZeroInstructions::putstatic,
+    ZeroInstructions::getfield,
+    ZeroInstructions::putfield,
+
+    ZeroInstructions::invokevirtual,
+    ZeroInstructions::invokespecial,
+    ZeroInstructions::invokestatic,
+    ZeroInstructions::invokeinterface,
+    ZeroInstructions::invokedynamic,
+
+    ZeroInstructions::new,
+    ZeroInstructions::newarray,
+    ZeroInstructions::anewarray,
+    ZeroInstructions::arraylength,
+    ZeroInstructions::athrow,
+
+    ZeroInstructions::checkcast,
+    ZeroInstructions::instanceof,
+
+    ZeroInstructions::monitorenter,
+    ZeroInstructions::monitorexit,
+
+    ZeroInstructions::wide,
+    
+    ZeroInstructions::multianewarray,
+
+    ZeroInstructions::ifnull,
+    ZeroInstructions::ifnonnull,
+
+    ZeroInstructions::goto_w,
+    ZeroInstructions::jsr_w,
+
+    // ZeroInstructions::breakpoint,
 ];
 
 // helpers
@@ -351,7 +608,7 @@ impl ZeroInstructions {
         Self::push(regs, value);
     }
 
-    fn type_load_n<const N: u8, T: Copy>(regs: &mut ZeroRegisters) {
+    fn type_load_n<T: Copy, const N: usize>(regs: &mut ZeroRegisters) {
         let value = Self::local_load::<T>(regs, N);
 
         Self::push(regs, value);
@@ -391,7 +648,7 @@ impl ZeroInstructions {
         Self::local_store(regs, index, value);
     }
 
-    fn type_store_n<const N: u8, T: Copy>(regs: &mut ZeroRegisters) {
+    fn type_store_n<T: Copy, const N: usize>(regs: &mut ZeroRegisters) {
         let value = Self::pop::<T>(regs);
 
         Self::local_store(regs, N, value);
@@ -450,7 +707,7 @@ impl ZeroInstructions {
         Self::push(regs, T::from(N));
     }
 
-    // For OOP, plz make T i32
+    // For OOP, make T JInt
     fn if_type_cmpeq<T: Copy + PartialEq>(regs: &mut ZeroRegisters) {
         let value2 = Self::pop::<T>(regs);
         let value1 = Self::pop::<T>(regs);
@@ -462,7 +719,7 @@ impl ZeroInstructions {
         }
     }
 
-    // For OOP, plz make T i32
+    // For OOP, make T JInt
     fn if_type_cmpne<T: Copy + PartialEq>(regs: &mut ZeroRegisters) {
         let value2 = Self::pop::<T>(regs);
         let value1 = Self::pop::<T>(regs);
