@@ -14,13 +14,97 @@
  * limitations under the License.
  */
 
-use cafebabe::bytecode::Opcode;
+use std::ptr::null;
 
-use crate::engine::engine_runtime::{Frame, StackSlot};
+use crate::{code::method::Method, engine::engine_runtime::{Frame, StackSlot}};
 
-pub struct ZeroRegisters<'a> {
+#[derive(Debug)]
+pub struct ZeroFrameData {
+    _ret_addr: *const u8,
+    _last_boundary: *const StackSlot
+}
+
+impl ZeroFrameData {
+    fn new(ret_addr: *const u8, last_boundary: *const StackSlot) -> Self {
+        Self {
+            _ret_addr: ret_addr,
+            _last_boundary: last_boundary
+        }
+    }
+
+    fn restore(&self, regs: &mut ZeroRegisters) {
+        regs.pc = self._ret_addr;
+        regs.boundary = self._last_boundary;
+    }
+}
+
+pub(super) struct ZeroRegisters<'a> {
     pub sp: *const StackSlot,
     pub bp: *const Frame<'a>,
 
-    pub pc: *const u8
+    // We use the sb register for bumping allocation(eg locks, etc.).
+    pub sb: *const StackSlot,
+    // The boundary between sb and sp.
+    pub boundary: *const StackSlot,
+
+    pub pc: *const u8,
+}
+
+impl ZeroRegisters<'_> {
+    pub fn new(stack: *const StackSlot, slots: usize) -> Self {
+        unsafe {
+            let sp = stack.add(slots);
+
+            Self {
+                sp: sp,
+                bp: null(),
+                sb: stack,
+                boundary: null(),
+                pc: null()
+            }
+        }
+    }
+}
+
+impl<'a> ZeroRegisters<'a> {
+    // slot size
+    pub fn create_frame(&mut self, mthd: Option<&'a Method<'a>>, max_locals: u16, max_stack: u16) -> bool {
+        unsafe {
+            let new_bp = self.sp.byte_sub(size_of::<Frame>());
+            let new_sp = new_bp.sub(max_locals as _);
+            let new_boundary = new_sp.sub(max_stack as _);
+
+            if new_boundary < self.sb {
+                return false;
+            }
+
+            let data = ZeroFrameData::new(self.pc, self.boundary);
+            let new_frame = new_bp as *mut Frame;
+            (*new_frame).init(self.bp, Some(data), mthd, new_sp, max_locals);
+
+            self.sp = new_sp;
+            self.bp = new_frame;
+            self.boundary = new_boundary;
+        }
+
+        true
+    }
+
+    pub fn unwind(&mut self) -> bool {
+        if self.bp.is_null() {
+            return false;
+        }
+
+        unsafe {
+            let new_bp = (*self.bp).last_frame();
+            let new_sp = new_bp.add(1) as *const StackSlot;
+        
+            (*self.bp).interpreter_frame_data().unwrap().restore(self);
+
+            self.bp = new_bp;
+            self.sp = new_sp;
+        }
+    
+        true
+    }
 }

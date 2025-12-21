@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-use std::{ffi::c_void, ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Neg, Rem, Shl, Shr, Sub}, ptr::null};
+use std::ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Neg, Rem, Shl, Shr, Sub};
 
-use crate::{engine::{bytecodes, engine_runtime::{DStackSlot, StackSlot, StackSlotType}, zero::{zero_constrains::{FloatType}, zero_runtime::ZeroRegisters}}, oops::{access::{DECORATOR_IN_HEAP, DECORATOR_MO_VOLATILE}, oop_hierarchy::{ArrayOOP, NarrowOOP, OOP}}, utils::global_defs::{Address, JByte, JChar, JDouble, JFloat, JInt, JLong, JShort}};
+use crate::{engine::{bytecodes, engine_runtime::{DStackSlot, StackSlot, StackSlotType}, zero::{zero_constrains::{FloatType}, zero_runtime::ZeroRegisters}}, oops::{access::{DECORATOR_IN_HEAP, DECORATOR_MO_VOLATILE}, oop_hierarchy::{ArrayOOP, NarrowOOP, OOP}}, utils::global_defs::{JByte, JChar, JDouble, JFloat, JInt, JLong, JShort}};
 
 pub struct ZeroInstructions;
 
@@ -371,24 +371,24 @@ impl ZeroInstructions {
     }
 
     #[inline]
-    fn local_load_oop(regs: &mut ZeroRegisters, index: impl Into<usize>) -> OOP {
+    fn local_load_oop(regs: &mut ZeroRegisters, index: impl Into<usize> + Copy) -> OOP {
         NarrowOOP::decode(Self::local_load(regs, index))
     }
 
     #[inline]
-    fn local_store_oop(regs: &mut ZeroRegisters, index: impl Into<usize>, value: OOP) {
+    fn local_store_oop(regs: &mut ZeroRegisters, index: impl Into<usize> + Copy, value: OOP) {
         Self::local_store(regs, index, NarrowOOP::encode(value));
     }
 
     #[inline]
-    fn local_load<T: Copy>(regs: &mut ZeroRegisters, index: impl Into<usize>) -> T {
+    fn local_load<T: Copy>(regs: &mut ZeroRegisters, index: impl Into<usize> + Copy) -> T {
         unsafe {
             *((*regs.bp).local(index) as *const _)
         }
     }
 
     #[inline]
-    fn local_store<T>(regs: &mut ZeroRegisters, index: impl Into<usize>, value: T) {
+    fn local_store<T>(regs: &mut ZeroRegisters, index: impl Into<usize> + Copy, value: T) {
         unsafe {
             *((*regs.bp).local(index) as *mut _) = value
         }
@@ -986,11 +986,11 @@ impl ZeroInstructions {
     type_op!(xor, BitXor, ^);
 
     fn jsr(regs: &mut ZeroRegisters) {
-        panic!("Deprecated");
+        panic!("Deprecated.");
     }
 
     fn jsr_w(regs: &mut ZeroRegisters) {
-        panic!("Deprecated");
+        panic!("Deprecated.");
     }
 
     fn lcmp(regs: &mut ZeroRegisters) {
@@ -1067,11 +1067,11 @@ impl ZeroInstructions {
     }
 
     fn ret(regs: &mut ZeroRegisters) {
-        unimplemented!()
+        panic!("Deprecated.")
     }
 
     fn wide_ret(regs: &mut ZeroRegisters) {
-        unimplemented!()
+        panic!("Deprecated.")
     }
 
     fn return_(regs: &mut ZeroRegisters) {

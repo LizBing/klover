@@ -15,7 +15,6 @@
  */
 
 pub mod engine_runtime;
-pub mod vm_engine;
 pub mod zero;
 
 mod bytecodes;

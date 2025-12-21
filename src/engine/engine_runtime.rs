@@ -14,7 +14,9 @@
  * limitations under the License.
  */
 
-use crate::code::method::Method;
+use std::cmp::max;
+
+use crate::{code::method::Method, engine::zero::zero_runtime::ZeroFrameData};
 
 pub type StackSlot = u32;
 pub type DStackSlot = u64;
@@ -27,9 +29,35 @@ impl StackSlotType for DStackSlot {}
 #[derive(Debug)]
 pub struct Frame<'a> {
     _last_frame: *const Self,
-    _mthd: &'a Method<'a>,
 
+    _interpreter_frame_data: Option<ZeroFrameData>,
+
+    _mthd: Option<&'a Method<'a>>,
     _locals: *const StackSlot,
+    _max_locals: usize,
+}
+
+impl<'a> Frame<'a> {
+    pub fn init(
+        &'a mut self,
+
+        last_frame: *const Self,
+        interpreter_frame_data: Option<ZeroFrameData>,
+        
+        mthd: Option<&'a Method<'a>>,
+        locals: *const StackSlot,
+        max_locals: u16
+    ) {
+        *self = Self {
+            _last_frame: last_frame,
+
+            _interpreter_frame_data: interpreter_frame_data,
+
+            _mthd: mthd,
+            _locals: locals,
+            _max_locals: max_locals as _,
+        };
+    }
 }
 
 impl<'a> Frame<'a> {
@@ -37,11 +65,17 @@ impl<'a> Frame<'a> {
         self._last_frame
     }
 
-    pub fn method(&self) -> &Method<'a> {
+    pub fn interpreter_frame_data(&self) -> Option<&ZeroFrameData> {
+        self._interpreter_frame_data.as_ref()
+    }
+
+    pub fn method(&self) -> Option<&Method<'a>> {
         self._mthd
     }
 
-    pub(super) fn local(&self, index: impl Into<usize>) -> *const StackSlot {
+    pub fn local(&self, index: impl Into<usize> + Copy) -> *const StackSlot {
+        debug_assert!(index.into() < self._max_locals);
+
         unsafe { self._locals.add(index.into()) }
     }
 }

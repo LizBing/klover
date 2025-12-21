@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+// The Zero interpreter assume that all the bytecode streams are legal.
+
 mod zero_constrains;
-mod zero_runtime;
 mod zero_instructions;
+
+pub mod zero_runtime;
+pub mod zero_interpreter;
