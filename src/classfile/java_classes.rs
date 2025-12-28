@@ -14,10 +14,22 @@
  * limitations under the License.
  */
 
-use once_cell::sync::OnceCell;
+use std::{mem::offset_of, sync::{Arc, LazyLock, Weak}};
 
-use crate::oops::klass::Klass;
+use dashmap::OccupiedEntry;
 
-pub static JAVA_LANG_OBJECT: OnceCell<&'static Klass> = OnceCell::new();
-pub struct JavaLangObject;
-impl JavaLangObject {}
+use crate::{classfile::class_loader_data::ClassLoaderData, oops::{obj_desc::ObjDesc, oop_hierarchy::OOP}, utils::global_defs::JInt};
+
+// layout
+#[repr(C)]
+pub struct JavaLangClassLoader {
+    _desc: ObjDesc,
+    
+    _entry: *const OccupiedEntry<'static, u32, Arc<ClassLoaderData>>
+}
+
+impl JavaLangClassLoader {
+    pub const fn entry_offset() -> usize {
+        offset_of!(Self, _entry)
+    }
+}

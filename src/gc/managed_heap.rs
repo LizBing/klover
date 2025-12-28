@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-use once_cell::sync::OnceCell;
+use std::{cell::LazyCell, sync::LazyLock};
 
 use crate::{memory::{mem_region::MemRegion, virt_space::VirtSpace}, utils::global_defs::HeapWord};
 
-static MANAGED_HEAP: OnceCell<ManagedHeap> = OnceCell::new();
+static MANAGED_HEAP: LazyLock<ManagedHeap> = LazyLock::new(ManagedHeap::new);
 pub struct ManagedHeap {
     _virt_space: VirtSpace,
 }
@@ -26,12 +26,8 @@ pub struct ManagedHeap {
 unsafe impl Send for ManagedHeap {}
 unsafe impl Sync for ManagedHeap {}
 
-fn heap() -> &'static ManagedHeap {
-    unsafe { MANAGED_HEAP.get_unchecked() }
-}
-
 impl ManagedHeap {
-    pub fn initialize() {
+    pub fn new() -> Self {
         unimplemented!()
     }
 }
@@ -41,8 +37,8 @@ impl ManagedHeap {
         "Do-nothing GC"
     }
 
-    pub fn mr() -> &'static MemRegion {
-        heap()._virt_space.reserved()
+    pub fn mem_region() -> &'static MemRegion {
+        MANAGED_HEAP._virt_space.reserved()
     }
 
     pub fn mem_allocation(word_size: usize) -> *const HeapWord {

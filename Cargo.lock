@@ -107,7 +107,6 @@ dependencies = [
  "dashmap",
  "enum-map",
  "modular-bitfield",
- "once_cell",
  "paste",
  "region",
 ]

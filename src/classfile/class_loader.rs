@@ -14,10 +14,18 @@
  * limitations under the License.
  */
 
-use crate::oops::oop_hierarchy::OOP;
+use std::sync::Arc;
+
+use crate::{classfile::class_loader_data::ClassLoaderData, oops::{klass::Klass, oop_hierarchy::OOP}};
 
 pub struct ClassLoader;
 
 impl ClassLoader {
-    pub fn define_class(loader: OOP, stream: Vec<u8>) {}
+    pub fn define_normal_class(loader: Option<&Arc<ClassLoaderData>>, stream: Vec<u8>) -> Result<&'static Klass<'static>, String> {
+        unimplemented!()
+    }
+
+    pub fn find_class(loader: Option<&Arc<ClassLoaderData>>, name: String) -> Result<&'static Klass<'static>, String> {
+        unimplemented!()
+    }
 }

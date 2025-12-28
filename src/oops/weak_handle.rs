@@ -18,20 +18,25 @@ use std::ptr::null_mut;
 
 use crate::{gc::oop_storage::OOPStorage, oops::oop_hierarchy::{NarrowOOP, OOP}};
 
-pub struct WeakHandle {
-    _obj: *mut NarrowOOP
-}
+#[derive(Debug)]
+pub struct WeakHandle {}
 
 impl WeakHandle {
     pub fn new() -> Self {
-        Self {
-            _obj: null_mut()
-        }
+        unimplemented!()
     }
 
     pub fn with_storage(s: &OOPStorage) -> Self {
-        Self {
-            _obj: s.allocate()
-        }
+        unimplemented!()
+    }
+
+    pub fn with_oop(oop: OOP, s: &OOPStorage) -> Self {
+        unimplemented!()
+    }
+}
+
+impl WeakHandle {
+    pub fn load(&self) -> Option<OOP> {
+        unimplemented!()
     }
 }

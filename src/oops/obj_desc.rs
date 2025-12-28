@@ -16,11 +16,12 @@
 
 use std::mem::offset_of;
 
-use crate::oops::mark_word::MarkWord;
+use crate::{memory::klass_space::NarrowKlassPtr, oops::mark_word::MarkWord};
 
 #[repr(C)]
 pub struct ObjDesc {
-    _mw: MarkWord
+    _mw: MarkWord,
+    _klass_ptr: NarrowKlassPtr
 }
 
 impl ObjDesc {

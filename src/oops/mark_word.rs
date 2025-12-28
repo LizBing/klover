@@ -18,13 +18,12 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use modular_bitfield::{bitfield, prelude::{B2, B4, B26, B32}};
 
-#[bitfield(bits = 64)]
+#[bitfield(bits = 32)]
 #[derive(Clone, Copy)]
 pub struct MarkWord {
     lock: B2,
     age: B4,
     hash: B26,
-    klass_comp_ptr: B32
 }
 
 pub const NO_LOCK_VALUE: u8 = 0b00;
@@ -33,11 +32,10 @@ pub const HW_LOCK_VALUE: u8 = 0b10;
 pub const GC_LOCK_VALUE: u8 = 0b11;
 
 impl MarkWord {
-    pub fn prototype(klass_comp_ptr: u32) -> MarkWord {
+    pub fn prototype() -> MarkWord {
         Self::new()
             .with_lock(NO_LOCK_VALUE)
             .with_age(0)
             .with_hash(0)
-            .with_klass_comp_ptr(klass_comp_ptr)
     }
 }

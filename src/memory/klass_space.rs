@@ -14,29 +14,4 @@
  * limitations under the License.
  */
 
-use std::{ptr::null_mut, sync::atomic::AtomicPtr};
-
-use crate::{gc::{barrier_set::AccessBarrier, oop_storage::OOPStorage}, oops::oop_hierarchy::{NarrowOOP}};
-
-#[derive(Debug)]
-pub struct OOPHandle {}
-
-impl OOPHandle {
-    pub fn new() -> Self {
-        unimplemented!()
-    }
-
-    pub fn with_storage(s: &OOPStorage) -> Self {
-        unimplemented!()
-    }
-
-    // volatile
-    pub fn set(&self, n: NarrowOOP) {
-        unimplemented!()
-    }
-
-    // volatile
-    pub fn get(&self) -> NarrowOOP {
-        unimplemented!()
-    }
-}
+pub type NarrowKlassPtr = u32;

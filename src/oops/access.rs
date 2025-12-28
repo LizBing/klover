@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-use std::sync::atomic::Ordering;
-
 use bitflags::bitflags;
 
 use crate::oops::oop_hierarchy::{NarrowOOP, OOP};
@@ -85,6 +83,28 @@ impl<const D: u32> Access<D> {
 
     #[inline]
     pub fn oop_store_at(base: OOP, offset: usize, oop: OOP) {
+        unimplemented!()
+    }
+
+    // Ordering for CAS: AcqRel for success, Relaxed for failure.
+
+    #[inline]
+    pub fn cas_32_at<T>(base: OOP, offset: usize, exp: T, des: T) -> Result<T, T> {
+        unimplemented!()
+    }
+    
+    #[inline]
+    pub fn cas_32_weak_at<T>(base: OOP, offset: usize, exp: T, des: T) -> Result<T, T> {
+        unimplemented!()
+    }
+
+    #[inline]
+    pub fn cas_64_at<T>(base: OOP, offset: usize, exp: T, des: T) -> Result<T, T> {
+        unimplemented!()
+    }
+    
+    #[inline]
+    pub fn cas_64_weak_at<T>(base: OOP, offset: usize, exp: T, des: T) -> Result<T, T> {
         unimplemented!()
     }
 }

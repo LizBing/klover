@@ -14,9 +14,20 @@
  * limitations under the License.
  */
 
-use crate::oops::weak_handle::WeakHandle;
+use std::{cell::LazyCell, sync::LazyLock};
 
+use dashmap::DashMap;
+
+use crate::{gc::oop_storage::OOPStorage, oops::{klass::Klass, oop_hierarchy::OOP, weak_handle::WeakHandle}, runtime::tls::ThrdLocalStorage};
+
+#[derive(Debug)]
 pub struct ClassLoaderData {
     _mirror: WeakHandle,
-    
+    _klass_map: DashMap<String, &'static Klass<'static>>
+}
+
+impl ClassLoaderData {
+    pub fn new(loader: OOP) -> Self {
+        unimplemented!()
+    }
 }

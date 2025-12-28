@@ -94,10 +94,22 @@ macro_rules! PTR_FORMAT {
     };
 }
 
-pub type JByte = i8;
-pub type JChar = u16;
-pub type JShort = i16;
-pub type JInt = i32;
-pub type JLong = i64;
-pub type JFloat = f32;
-pub type JDouble = f64;
+pub trait JavaPrimType: Copy {}
+macro_rules! define_java_prim_types {
+    ($(($name:ident, $type:ty),)*) => {
+        $(
+            pub type $name = $type;
+            impl JavaPrimType for $name {}
+        )*
+    };
+}
+
+define_java_prim_types! {
+    (JByte, i8),
+    (JChar, u16),
+    (JShort, i16),
+    (JInt, i32),
+    (JLong, i64),
+    (JFloat, f32),
+    (JDouble, f64),
+}

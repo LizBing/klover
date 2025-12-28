@@ -49,9 +49,3 @@ impl<'a> Klass<'a> {
         }
     }
 }
-
-impl Klass<'_> {
-    pub fn word_size_of_instance(&self) -> usize {
-        unimplemented!()
-    }
-}

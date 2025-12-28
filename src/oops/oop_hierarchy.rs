@@ -33,6 +33,12 @@ impl OOP {
 }
 
 impl OOP {
+    pub fn raw(self) -> *const ObjDesc {
+        self.0
+    }
+}
+
+impl OOP {
     pub fn mark_word<const D: u32>(self) -> MarkWord {
         unimplemented!()
     }

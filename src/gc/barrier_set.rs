@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-use crate::oops::oop_hierarchy::{NarrowOOP, OOP};
-
 pub struct AccessBarrier;
 
 impl AccessBarrier {}

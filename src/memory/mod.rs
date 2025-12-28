@@ -14,5 +14,6 @@
  * limitations under the License.
  */
 
+pub mod klass_space;
 pub mod mem_region;
 pub mod virt_space;

@@ -14,6 +14,18 @@
  * limitations under the License.
  */
 
-use std::sync::atomic::AtomicU32;
+use std::{mem::offset_of, ptr::null, sync::{Arc, LazyLock, Weak, atomic::{AtomicU32, Ordering}}};
 
-static KEY_ALLOCATOR: AtomicU32 = AtomicU32::new(0);
+use dashmap::{DashMap, Entry, OccupiedEntry, VacantEntry};
+
+use crate::{classfile::{class_loader_data::ClassLoaderData, java_classes::JavaLangClassLoader}, gc::oop_storage::OOPStorage, oops::{access::{Access, DECORATOR_MO_VOLATILE}, oop_hierarchy::OOP, weak_handle::WeakHandle}};
+
+static KEY_ALLOCATOR: AtomicU32 = AtomicU32::new(1);
+static CLASS_LOADER_MAP: LazyLock<DashMap<u32, Arc<ClassLoaderData>>> = LazyLock::new(DashMap::new);
+
+struct ClassLoaderMap;
+impl ClassLoaderMap {
+    pub fn get_cld<const D: u32>(loader: OOP) -> Arc<ClassLoaderData> {
+        unimplemented!()
+    }
+}

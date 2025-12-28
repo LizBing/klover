@@ -17,5 +17,5 @@
 pub mod class_loader;
 pub mod java_classes;
 
-mod class_loader_data;
-mod class_loader_map;
+pub mod class_loader_data;
+pub mod class_loader_map;
