@@ -14,17 +14,39 @@
  * limitations under the License.
  */
 
-use std::ffi::c_void;
+use std::{ptr::NonNull};
 
-unsafe extern "C" {
-    unsafe fn KlassSpace_initialize(log_slot_byte_size: usize);
+use crate::{memory::{bumper::Bumper, virt_space::VirtSpace}, oops::klass::Klass, utils::global_defs::{HeapWord, M}};
 
-    unsafe fn KlassSpace_allocate() -> *mut c_void;
+pub type NarrowKlassPtr = u32;
 
-    unsafe fn KlassSpace_base() -> *mut c_void;
+const FIXED_SIZE: usize = 64 * M / size_of::<HeapWord>();
+
+
+pub struct KlassSpace {
+    _bumper: Bumper,
+    _vm: VirtSpace,
 }
 
-struct KlassSpace;
 impl KlassSpace {
-    pub fn initialize() { unimplemented!() }
+    pub fn new() -> Self {
+        let mut vm = VirtSpace::new(FIXED_SIZE, VirtSpace::page_size(), false);
+        assert!(vm.expand_by(FIXED_SIZE));
+
+        Self {
+            _bumper: Bumper::new(vm.committed()),
+            _vm: vm
+        }
+    }
+}
+
+impl KlassSpace {
+    pub fn par_alloc(&self, data: Klass) -> NonNull<Klass> {
+        let mem = self._bumper.par_alloc();
+        assert!(!mem.is_null(), "out of memory(metaspace).");
+
+        unsafe {
+            NonNull::new_unchecked((*mem).write(data))
+        }
+    }
 }

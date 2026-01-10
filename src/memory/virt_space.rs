@@ -15,7 +15,7 @@
  */
 
 
-use std::cell::Cell;
+use std::{cell::Cell, fmt::Debug};
 
 use region::{Allocation, Protection};
 
@@ -30,8 +30,20 @@ pub struct VirtSpace {
     _reserved: MemRegion,
     _alignment: usize,
 
-    _commit_top: Cell<*const HeapWord>,
+    _commit_top: *const HeapWord,
     _executable: bool
+}
+
+impl Debug for VirtSpace {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("VirtSpace")
+            .field("_reserved", self.reserved())
+            .field("_alignment", &self._alignment)
+            .field("_executable", &self._executable)
+            .field("(output of Self::committed())", &self.committed());
+
+        Ok(())
+    }
 }
 
 impl VirtSpace {
@@ -46,7 +58,7 @@ impl VirtSpace {
     }
 
     pub fn committed(&self) -> MemRegion {
-        MemRegion::with_end(self.reserved().start(), self._commit_top.get())
+        MemRegion::with_end(self.reserved().start(), self._commit_top)
     }
 }
 
@@ -75,7 +87,7 @@ impl VirtSpace {
             _reserved: mr.clone(),
             _alignment: alignment,
 
-            _commit_top: Cell::new(mr.start()),
+            _commit_top: mr.start(),
 
             _executable: executable
         }
@@ -93,7 +105,7 @@ impl VirtSpace {
             _reserved: MemRegion::with_size(addr, word_size),
             _alignment: alignment,
 
-            _commit_top: Cell::new(addr.into()),
+            _commit_top: addr.into(),
 
             _executable: executable
         }
@@ -102,33 +114,33 @@ impl VirtSpace {
 
 impl VirtSpace {
     // Pretouch memory by invoking MemRegion::touch()
-    pub fn expand_by(&self, mut word_size: usize) -> bool {
+    pub fn expand_by(&mut self, mut word_size: usize) -> bool {
         word_size = align_up!(word_size, self._alignment);
 
         unsafe {
-            let new_top = self._commit_top.get().add(word_size);
+            let new_top = self._commit_top.add(word_size);
             if !self.reserved().contains(new_top) {
                 return false;
             }
 
-            region::protect(self._commit_top.get(), word_size * size_of::<HeapWord>(), self.prot_helper()).unwrap();
-            self._commit_top.set(new_top);
+            region::protect(self._commit_top, word_size * size_of::<HeapWord>(), self.prot_helper()).unwrap();
+            self._commit_top = new_top;
         }
 
         true
     }
 
-    pub fn shrink_by(&self, mut word_size: usize) -> bool {
+    pub fn shrink_by(&mut self, mut word_size: usize) -> bool {
         word_size = align_up!(word_size, self._alignment);
 
         unsafe {
-            let new_top = self._commit_top.get().sub(word_size);
+            let new_top = self._commit_top.sub(word_size);
             if !self.reserved().contains(new_top) {
                 return false;
             }
         
             region::protect(new_top, word_size * size_of::<HeapWord>(), Protection::NONE).unwrap();
-            self._commit_top.set(new_top);
+            self._commit_top = new_top;
         }
 
         true

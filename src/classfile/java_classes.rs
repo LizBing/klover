@@ -25,11 +25,11 @@ use crate::{classfile::class_loader_data::ClassLoaderData, oops::{obj_desc::ObjD
 pub struct JavaLangClassLoader {
     _desc: ObjDesc,
     
-    _entry: *const OccupiedEntry<'static, u32, Arc<ClassLoaderData>>
+    _cld: *const ClassLoaderData
 }
 
 impl JavaLangClassLoader {
-    pub const fn entry_offset() -> usize {
-        offset_of!(Self, _entry)
+    pub const fn cld_offset() -> usize {
+        offset_of!(Self, _cld)
     }
 }

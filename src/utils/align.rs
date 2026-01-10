@@ -48,3 +48,10 @@ macro_rules! align_down {
         ($n & !(($a) - 1))
     };
 }
+
+#[macro_export]
+macro_rules! heap_word_align_up {
+    ($n:expr) => {
+        crate::align_up!($n, size_of::<crate::utils::global_defs::HeapWord>())
+    };
+}

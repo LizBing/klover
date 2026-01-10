@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-use std::borrow::Cow;
+use std::ptr::NonNull;
 
 use cafebabe::{attributes::CodeData, MethodInfo};
 
@@ -22,7 +22,7 @@ use crate::oops::klass::Klass;
 
 #[derive(Debug)]
 pub struct Method<'a> {
-    _klass: &'a Klass<'a>,
+    _klass: NonNull<Klass>,
     _info: &'a MethodInfo<'a>,
     _code_data: Option<&'a CodeData<'a>>,
 }
@@ -32,10 +32,7 @@ impl<'a> Method<'a> {
         self._code_data
     }
 
-    pub fn klass(&self) -> &Klass<'a> {
+    pub fn klass(&self) -> NonNull<Klass> {
         self._klass
-    }
-
-    fn foo(&self) {
     }
 }

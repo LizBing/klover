@@ -21,7 +21,7 @@ pub mod oop_handle;
 pub mod oop_hierarchy;
 pub mod weak_handle;
 
-mod array_klass;
-mod mark_word;
-mod normal_klass;
-mod prim_klass;
+pub mod array_klass;
+pub mod mark_word;
+pub mod normal_klass;
+pub mod prim_klass;

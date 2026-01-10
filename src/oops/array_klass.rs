@@ -14,20 +14,22 @@
  * limitations under the License.
  */
 
+use std::ptr::NonNull;
+
 use crate::oops::klass::Klass;
 
 #[derive(Debug)]
-pub struct ArrayKlass<'a> {
-    _elem_type: &'a Klass<'a>,
-    _dimemsions: usize
+pub struct ArrayKlass {
+    _elem_type: NonNull<Klass>,
+    _dimemsions: usize,
 }
 
-impl<'a> ArrayKlass<'a> {
+impl ArrayKlass {
     pub fn dimemsions(&self) -> usize {
         self._dimemsions
     }
 
-    pub fn elem_type(&self) -> &Klass<'a> {
+    pub fn elem_type(&self) -> NonNull<Klass> {
         self._elem_type
     }
 }

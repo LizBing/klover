@@ -19,33 +19,10 @@ use cafebabe::ClassFile;
 use crate::oops::{array_klass::ArrayKlass, normal_klass::NormalKlass, prim_klass::PrimKlass};
 
 #[derive(Debug)]
-pub enum Klass<'a> {
-    Normal(NormalKlass<'a>),
+pub enum Klass {
+    Normal(NormalKlass),
     Primitive(PrimKlass),
-    ArrayKlass(ArrayKlass<'a>),
+    ArrayKlass(ArrayKlass),
 }
 
-unsafe impl Sync for Klass<'_> {}
-
-impl<'a> Klass<'a> {
-    pub fn as_normal(&self) -> &NormalKlass<'a> {
-        match self {
-            Self::Normal(x) => x,
-            _ => unreachable!()
-        }
-    }
-
-    pub fn as_prim(&self) -> &PrimKlass {
-        match self {
-            Self::Primitive(x) => x,
-            _ => unreachable!()
-        }
-    }
-
-    pub fn as_array_klass(&self) -> &ArrayKlass<'a> {
-        match self {
-            Self::ArrayKlass(x) => x,
-            _ => unreachable!()
-        }
-    }
-}
+unsafe impl Sync for Klass {}

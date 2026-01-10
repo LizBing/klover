@@ -14,20 +14,30 @@
  * limitations under the License.
  */
 
-use std::{cell::LazyCell, sync::LazyLock};
+use std::ptr::NonNull;
 
 use dashmap::DashMap;
 
-use crate::{gc::oop_storage::OOPStorage, oops::{klass::Klass, oop_hierarchy::OOP, weak_handle::WeakHandle}, runtime::tls::ThrdLocalStorage};
+use crate::{oops::{klass::Klass, oop_hierarchy::OOP, weak_handle::WeakHandle}};
 
 #[derive(Debug)]
 pub struct ClassLoaderData {
     _mirror: WeakHandle,
-    _klass_map: DashMap<String, &'static Klass<'static>>
+    _klass_map: DashMap<String, NonNull<Klass>>
 }
+
+unsafe impl Send for ClassLoaderData {}
+unsafe impl Sync for ClassLoaderData {}
 
 impl ClassLoaderData {
     pub fn new(loader: OOP) -> Self {
         unimplemented!()
+    }
+
+    pub fn new_bootstrap() -> Self {
+        Self {
+            _mirror: WeakHandle::new(),
+            _klass_map: DashMap::new()
+        }
     }
 }

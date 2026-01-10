@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Lei Zaakjyu
+ * Copyright 2026 Lei Zaakjyu
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,4 +14,25 @@
  * limitations under the License.
  */
 
-pub type NarrowKlassPtr = u32;
+use std::sync::OnceLock;
+
+static UNIVERSE: OnceLock<Universe> = OnceLock::new();
+
+#[derive(Debug)]
+pub struct Universe {}
+
+impl Universe {
+    pub fn initialize() {
+        UNIVERSE.set(Self::new()).unwrap();
+    }
+
+    fn new() -> Self {
+        Self {}
+    }
+}
+
+impl Universe {
+    fn universe() -> &'static Universe {
+        UNIVERSE.get().expect("Should call Universe::initialize() in advance.")
+    }
+}

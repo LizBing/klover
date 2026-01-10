@@ -14,28 +14,61 @@
  * limitations under the License.
  */
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use modular_bitfield::{Specifier, bitfield, prelude::{B4, B26, B32, B62}};
 
-use modular_bitfield::{bitfield, prelude::{B2, B4, B26, B32}};
+#[cfg(target_endian = "big")]
+compile_error!("Klover VM currently only supports little endian.");
 
-#[bitfield(bits = 32)]
-#[derive(Clone, Copy)]
-pub struct MarkWord {
-    lock: B2,
-    age: B4,
-    hash: B26,
+#[derive(Specifier, Clone, Copy)]
+#[bits = 2]
+pub enum LockType {
+    NoLock,
+    LWLocked,
+    HWLocked,
+    GCLocked
 }
 
-pub const NO_LOCK_VALUE: u8 = 0b00;
-pub const LW_LOCK_VALUE: u8 = 0b01;
-pub const HW_LOCK_VALUE: u8 = 0b10;
-pub const GC_LOCK_VALUE: u8 = 0b11;
+#[derive(Clone, Copy)]
+#[bitfield(bits = 64)]
+pub struct LockTypeIndicator {
+    pub lock_type: LockType,
+    #[skip] __: B62
+}
+
+#[bitfield(bits = 64)]
+#[derive(Specifier, Clone, Copy)]
+pub struct NoLockMarkWord {
+    lock_type: LockType,
+
+    pub age: B4,
+    pub hash: B26,
+    pub comp_klass_ptr: B32,
+}
+
+#[bitfield(bits = 64)]
+#[derive(Specifier, Clone, Copy)]
+pub struct LockedMarkWord {
+    lock_type: LockType,
+
+    pub lock: B62
+}
+
+pub union MarkWord {
+    pub indicator: LockTypeIndicator,
+    pub no_lock: NoLockMarkWord,
+    pub locked: LockedMarkWord,
+
+    pub raw: u64,
+}
 
 impl MarkWord {
     pub fn prototype() -> MarkWord {
-        Self::new()
-            .with_lock(NO_LOCK_VALUE)
-            .with_age(0)
-            .with_hash(0)
+        MarkWord {
+            no_lock: NoLockMarkWord::new()
+                .with_lock_type(LockType::NoLock)
+                .with_age(0)
+                .with_hash(0)
+                .with_comp_klass_ptr(0)
+        }
     }
 }
