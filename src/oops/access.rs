@@ -16,7 +16,7 @@
 
 use bitflags::bitflags;
 
-use crate::oops::oop_hierarchy::{NarrowOOP, OOP};
+use crate::oops::oop_hierarchy::OOP;
 
 macro_rules! define_decorators {
     ($(($x:ident, $shift:expr))*) => {

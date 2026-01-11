@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Lei Zaakjyu
+ * Copyright 2026 Lei Zaakjyu
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,8 +14,14 @@
  * limitations under the License.
  */
 
-pub mod barrier_set;
-pub mod managed_heap;
-pub mod mem_allocator;
-pub mod oop_storage;
-pub mod oop_storage_set;
+use crate::oops::oop_hierarchy::OOP;
+
+pub struct BaseThread {
+    _pending_exception: OOP,
+}
+
+
+
+pub trait Thread {
+    fn base(&self) -> &BaseThread;
+}

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-use std::{ptr::NonNull};
+use std::{ptr::NonNull, sync::OnceLock};
 
 use crate::{memory::{bumper::Bumper, virt_space::VirtSpace}, oops::klass::Klass, utils::global_defs::{HeapWord, M}};
 
@@ -22,14 +22,19 @@ pub type NarrowKlassPtr = u32;
 
 const FIXED_SIZE: usize = 64 * M / size_of::<HeapWord>();
 
+static KLASS_SPACE: OnceLock<KlassSpace> = OnceLock::new();
 
+#[derive(Debug)]
 pub struct KlassSpace {
     _bumper: Bumper,
     _vm: VirtSpace,
 }
 
+unsafe impl Send for KlassSpace {}
+unsafe impl Sync for KlassSpace {}
+
 impl KlassSpace {
-    pub fn new() -> Self {
+    fn new() -> Self {
         let mut vm = VirtSpace::new(FIXED_SIZE, VirtSpace::page_size(), false);
         assert!(vm.expand_by(FIXED_SIZE));
 
@@ -37,6 +42,16 @@ impl KlassSpace {
             _bumper: Bumper::new(vm.committed()),
             _vm: vm
         }
+    }
+
+    pub fn initialize() {
+        KLASS_SPACE.set(Self::new()).unwrap();
+    }
+}
+
+impl KlassSpace {
+    pub fn space() -> &'static Self {
+        KLASS_SPACE.get().expect("Should be initialized in advance.")
     }
 }
 

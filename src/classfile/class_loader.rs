@@ -16,13 +16,22 @@
 
 use std::{ptr::NonNull, sync::Arc};
 
-use crate::{classfile::class_loader_data::ClassLoaderData, oops::{klass::Klass, normal_klass::NormalKlass}};
+use crate::{classfile::class_loader_data::ClassLoaderData, metaspace::klass_space::KlassSpace, oops::{klass::Klass, normal_klass::NormalKlass}};
 
 pub struct ClassLoader;
 
 impl ClassLoader {
     pub fn define_normal_class(loader: Option<Arc<ClassLoaderData>>, stream: Vec<u8>) -> Result<NonNull<Klass>, String> {
-        let klass = Klass::Normal(NormalKlass::new(stream));
+        let klass = Klass::Normal(NormalKlass::new(stream)?);
+        let res = KlassSpace::space().par_alloc(klass);
+
+        // todo: register to CLD.
+
+        Ok(res)
+    }
+
+    pub fn load_normal_class(loader: Option<Arc<ClassLoaderData>>, name: String) -> Result<NonNull<Klass>, String> {
+        unimplemented!()
     }
 
     pub fn find_class(loader: Option<Arc<ClassLoaderData>>, name: String) -> Result<NonNull<Klass>, String> {

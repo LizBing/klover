@@ -14,12 +14,14 @@
  * limitations under the License.
  */
 
+use std::ptr::NonNull;
+
 use crate::oops::{klass::Klass, oop_hierarchy::OOP};
 
 pub trait MemAllocator {
     fn word_size(&self) -> usize;
 
-    fn initialize(&self);
+    fn _initialize(&self);
 
     fn allocate(&self) -> OOP {
         unimplemented!()
@@ -31,7 +33,7 @@ pub struct ObjAllocator {
 }
 
 impl ObjAllocator {
-    pub fn new(klass: &Klass, word_size: usize) -> Self {
+    pub fn new(klass: NonNull<Klass>, word_size: usize) -> Self {
         unimplemented!()
     }
 }
@@ -41,7 +43,7 @@ impl MemAllocator for ObjAllocator {
         self._word_size
     }
 
-    fn initialize(&self) {
+    fn _initialize(&self) {
         unimplemented!()
     }
 }
@@ -53,7 +55,7 @@ pub struct ObjArrayAllocator {
 }
 
 impl ObjArrayAllocator {
-    pub fn new(klass: &Klass, word_size: usize, length: i32, do_zero: bool) -> Self {
+    pub fn new(klass: NonNull<Klass>, word_size: usize, length: i32, do_zero: bool) -> Self {
         unimplemented!()
     }
 }
@@ -63,7 +65,7 @@ impl MemAllocator for ObjArrayAllocator {
         self._word_size
     }
 
-    fn initialize(&self) {
+    fn _initialize(&self) {
         unimplemented!()
     }
 }

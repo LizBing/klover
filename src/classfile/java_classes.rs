@@ -14,22 +14,67 @@
  * limitations under the License.
  */
 
-use std::{mem::offset_of, sync::{Arc, LazyLock, Weak}};
+use std::{cell::OnceCell, mem::offset_of, ptr::NonNull, sync::{Arc, LazyLock, OnceLock, Weak, atomic::AtomicPtr}};
 
-use dashmap::OccupiedEntry;
+use crate::{classfile::{class_loader::ClassLoader, class_loader_data::ClassLoaderData}, oops::{klass::Klass, obj_desc::ObjDesc, oop_hierarchy::OOP}, utils::global_defs::JInt};
+use super::vm_symbols::VMSymbols;
 
-use crate::{classfile::class_loader_data::ClassLoaderData, oops::{obj_desc::ObjDesc, oop_hierarchy::OOP}, utils::global_defs::JInt};
+pub trait JavaClass {
+    fn name() -> String;
 
-// layout
-#[repr(C)]
-pub struct JavaLangClassLoader {
-    _desc: ObjDesc,
-    
-    _cld: *const ClassLoaderData
+    fn klass() -> NonNull<Klass> {
+        static CACHE: OnceLock<AtomicPtr<Klass>> = OnceLock::new();
+
+        let klass = CACHE.get_or_init(|| -> _ {
+            let klass = ClassLoader::load_normal_class(None, Self::name()).unwrap();
+            AtomicPtr::new(klass.as_ptr())
+        });
+
+        unsafe {
+            NonNull::new_unchecked(*klass.as_ptr())
+        }
+    }
 }
 
-impl JavaLangClassLoader {
-    pub const fn cld_offset() -> usize {
-        offset_of!(Self, _cld)
+macro_rules! define_java_class {
+    (
+        [$type_name:ty, $symbol_name:ident] {
+            $($field_name:ident : $field_type:ty,)*
+        }
+    ) => {
+        paste::paste! {
+            #[repr(C)]
+            pub struct $type_name {
+                _desc: ObjDesc,
+
+                $(
+                    $field_name: $field_type,
+                )*
+            }
+
+            impl JavaClass for $type_name {
+                fn name() -> String {
+                    String::from(VMSymbols:: $symbol_name ())
+                }
+            }
+
+            impl $type_name {
+                $(
+                    pub const fn [<$field_name _offset>]() -> usize {
+                        offset_of!(Self, $field_name)
+                    }
+                )*
+            }
+        }
     }
+}
+
+define_java_class! {
+    [JavaLangClassLoader, java_lang_ClassLoader] {
+        cld: *const ClassLoaderData,
+    }
+}
+
+define_java_class! {
+    [JavaLangThrowable, java_lang_Throwable] {}
 }

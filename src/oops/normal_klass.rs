@@ -24,7 +24,7 @@ use crate::{classfile::{class_loader::ClassLoader, class_loader_data::ClassLoade
 pub struct NormalKlass {}
 
 impl NormalKlass {
-    pub fn new(stream: Vec<u8>) -> Self {
+    pub fn new(stream: Vec<u8>) -> Result<Self, String> {
         unimplemented!()
     }
 }

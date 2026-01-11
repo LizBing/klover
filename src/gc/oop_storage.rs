@@ -16,6 +16,7 @@
 
 use crate::oops::oop_hierarchy::{NarrowOOP, OOP};
 
+#[derive(Debug)]
 pub struct OOPStorage;
 
 // temporary implementation

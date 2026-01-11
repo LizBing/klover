@@ -19,3 +19,5 @@ pub mod java_classes;
 
 pub mod class_loader_data;
 pub mod class_loader_graph;
+
+pub mod vm_symbols;

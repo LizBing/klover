@@ -16,7 +16,7 @@
 
 use std::ptr::NonNull;
 
-use dashmap::DashMap;
+use dashmap::{DashMap, Entry};
 
 use crate::{oops::{klass::Klass, oop_hierarchy::OOP, weak_handle::WeakHandle}};
 
@@ -38,6 +38,21 @@ impl ClassLoaderData {
         Self {
             _mirror: WeakHandle::new(),
             _klass_map: DashMap::new()
+        }
+    }
+}
+
+impl ClassLoaderData {
+    // returns false if duplicated
+    pub fn register(&self, name: String, klass: NonNull<Klass>) -> bool {
+        match self._klass_map.entry(name) {
+            Entry::Occupied(_) => false,
+
+            Entry::Vacant(x) => {
+                x.insert(klass);
+
+                true
+            }
         }
     }
 }
