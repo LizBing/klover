@@ -21,15 +21,13 @@ use cafebabe::{attributes::CodeData, MethodInfo};
 use crate::oops::klass::Klass;
 
 #[derive(Debug)]
-pub struct Method<'a> {
-    _klass: NonNull<Klass>,
-    _info: &'a MethodInfo<'a>,
-    _code_data: Option<&'a CodeData<'a>>,
+pub struct Method {
+    _klass: NonNull<Klass>
 }
 
-impl<'a> Method<'a> {
+impl Method {
     pub fn code_data(&self) -> Option<&CodeData<'_>> {
-        self._code_data
+        unimplemented!()
     }
 
     pub fn klass(&self) -> NonNull<Klass> {

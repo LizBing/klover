@@ -23,7 +23,6 @@ use crate::{align_up, utils::global_defs::HeapWord};
 
 use super::mem_region::MemRegion;
 
-// Thread-unsafe
 pub struct VirtSpace {
     _guard: Allocation,
 
@@ -47,7 +46,7 @@ impl Debug for VirtSpace {
 }
 
 impl VirtSpace {
-    pub fn page_size() -> usize {
+    pub fn page_byte_size() -> usize {
         region::page::size()
     }
 }
@@ -74,7 +73,7 @@ impl VirtSpace {
 
 impl VirtSpace {
     pub fn new(mut word_size: usize, mut alignment: usize, executable: bool) -> Self {
-        alignment = align_up!(alignment, Self::page_size());
+        alignment = align_up!(alignment, Self::page_byte_size());
         word_size = align_up!(word_size, alignment);
 
         let guard = region::alloc(word_size * size_of::<HeapWord>(), Protection::NONE).unwrap();
@@ -94,7 +93,7 @@ impl VirtSpace {
     }
 
     pub fn with_addr<T: Into<*const HeapWord> + Copy>(addr: T, mut word_size: usize, mut alignment: usize, executable: bool) -> Self {
-        alignment = align_up!(alignment, Self::page_size());
+        alignment = align_up!(alignment, Self::page_byte_size());
         word_size = align_up!(word_size, alignment);
 
         let guard = region::alloc_at(addr.into(), word_size * size_of::<HeapWord>(), Protection::NONE).unwrap();

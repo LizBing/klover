@@ -27,24 +27,24 @@ impl StackSlotType for StackSlot {}
 impl StackSlotType for DStackSlot {}
 
 #[derive(Debug)]
-pub struct Frame<'a> {
+pub struct Frame {
     _last_frame: *const Self,
 
     _interpreter_frame_data: Option<ZeroFrameData>,
 
-    _mthd: Option<&'a Method<'a>>,
+    _mthd: *const Method,
     _locals: *const StackSlot,
     _max_locals: usize,
 }
 
-impl<'a> Frame<'a> {
+impl Frame {
     pub fn init(
-        &'a mut self,
+        &mut self,
 
         last_frame: *const Self,
         interpreter_frame_data: Option<ZeroFrameData>,
         
-        mthd: Option<&'a Method<'a>>,
+        mthd: *const Method,
         locals: *const StackSlot,
         max_locals: u16
     ) {
@@ -60,7 +60,7 @@ impl<'a> Frame<'a> {
     }
 }
 
-impl<'a> Frame<'a> {
+impl Frame {
     pub fn last_frame(&self) -> *const Self {
         self._last_frame
     }
@@ -69,8 +69,14 @@ impl<'a> Frame<'a> {
         self._interpreter_frame_data.as_ref()
     }
 
-    pub fn method(&self) -> Option<&Method<'a>> {
-        self._mthd
+    pub fn method(&self) -> Option<&Method> {
+        unsafe {
+            if self._mthd.is_null() {
+                None
+            } else {
+                Some(&*self._mthd)
+            }
+        }
     }
 
     pub fn local(&self, index: impl Into<usize> + Copy) -> *const StackSlot {

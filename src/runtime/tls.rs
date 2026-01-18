@@ -14,34 +14,39 @@
  * limitations under the License.
  */
 
-use std::ptr::null;
+use std::{cell::{OnceCell, Ref, RefCell}, ptr::{null, null_mut}, sync::atomic::AtomicPtr};
 
-use crate::{gc::oop_storage::OOPStorage, utils::lock_free_stack::{LockFreeStack, NextPtr}};
+use crate::{gc::oop_storage::OOPStorage, runtime::vm_thread::VMThread, utils::lock_free_stack::{LockFreeStack, NextPtr}};
 
 static STORAGES: LockFreeStack<ThrdLocalStorage> = LockFreeStack::new();
 
 thread_local! {
-    static TLS: ThrdLocalStorage = ThrdLocalStorage::new();
+    static TLS: OnceCell<ThrdLocalStorage> = OnceCell::new();
 }
 
+#[derive(Debug)]
 pub struct ThrdLocalStorage {
-    _next_ptr: *const Self,
+    _next_ptr: *mut Self,
 
-    _oop_storage: OOPStorage
+    _thread: Box<dyn VMThread>
 }
 
-unsafe impl NextPtr for ThrdLocalStorage {
-    fn next_ptr(&self) -> *mut *const Self {
-        &self._next_ptr as *const _ as *mut _
+unsafe impl NextPtr<ThrdLocalStorage> for ThrdLocalStorage {
+    fn _next_ptr(&self) -> *mut *mut Self {
+        &self._next_ptr as *const _ as _
     }
 }
 
 impl ThrdLocalStorage {
-    fn new() -> Self {
-        let res = Self {
-            _next_ptr: null(),
+    pub fn initialize<T: 'static + VMThread>(thrd: T) {
+        TLS.with(|n| n.set(Self::new(thrd)).unwrap() )
+    }
 
-            _oop_storage: OOPStorage::new(),
+    fn new<T: 'static + VMThread>(thrd: T) -> Self {
+        let res = Self {
+            _next_ptr: null_mut(),
+
+            _thread: Box::new(thrd)
         };
 
         STORAGES.push(&res);
@@ -52,16 +57,14 @@ impl ThrdLocalStorage {
 
 // Accessors
 impl ThrdLocalStorage {
-    fn tls() -> &'static ThrdLocalStorage {
-        TLS.with(|n| -> &'static ThrdLocalStorage {
-            unsafe {
-                &*(n as *const _)
-            }
+    fn tls() -> &'static Self {
+        TLS.with(|n| unsafe {
+            &*(n.get().unwrap() as *const _)
         })
     }
 
-    pub fn oop_storage() -> &'static OOPStorage {
-        &Self::tls()._oop_storage
+    pub fn current_thread() -> &'static Box<dyn VMThread> {
+        &Self::tls()._thread
     }
 }
 

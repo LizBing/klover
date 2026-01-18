@@ -76,4 +76,8 @@ impl OOPStorageSet {
     pub fn create_strong(name: &'static str) -> &'static OOPStorage {
         unimplemented!()
     }
+
+    pub fn create_weak(name: &'static str) -> &'static OOPStorage {
+        unimplemented!()
+    }
 }

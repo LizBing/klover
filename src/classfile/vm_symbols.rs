@@ -17,13 +17,6 @@
 // @cl: cl!(ident, expr)
 // e.g. $cl!(java_lang_Object, "java/lang/Object")
 macro_rules! define_vm_symbols {
-    // ([$cl:ident]) => {
-    //     $cl!(java_lang_System, "java/lang/System")
-    //     $cl!(java_lang_Object, "java/lang/Object")
-    //     $cl!(java_lang_Class, "java/lang/Class")
-    //     $cl!(java_lang_ClassLoader, "java/lang/ClassLoader")
-    //     $cl!(java_lang_Throwable, "java/lang/Throwable")
-    // };
     (
         $(($symbol_name:ident, $str_form:expr))*
     ) => {
@@ -35,6 +28,15 @@ macro_rules! define_vm_symbols {
 
 pub struct VMSymbols;
 define_vm_symbols! {
+    (prim_bool, "bool")
+    (prim_byte, "byte")
+    (prim_char, "char")
+    (prim_short, "short")
+    (prim_int, "int")
+    (prim_long, "long")
+    (prim_float, "float")
+    (prim_double, "double")
+
     (java_lang_System, "java/lang/System")
     (java_lang_Object, "java/lang/Object")
     (java_lang_Class, "java/lang/Class")

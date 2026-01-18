@@ -27,33 +27,7 @@ static CLD_MAP: LazyLock<DashMap<u32, Arc<ClassLoaderData>>> = LazyLock::new(Das
 struct ClassLoaderGraph;
 impl<'a> ClassLoaderGraph {
     pub fn get_cld<const D: u32>(loader: OOP) -> Arc<ClassLoaderData> {
-        let cld = Access::<D>::load_at::<*const ClassLoaderData>(loader, JavaLangClassLoader::cld_offset());
-
-        let raw = if cld.is_null() {
-            let new_cld = Arc::new(ClassLoaderData::new(loader));
-            let new_raw = Arc::into_raw(new_cld);
-            
-            match Access::<D>::cas_64_at(loader, JavaLangClassLoader::cld_offset(), null(), new_raw) {
-                Ok(_) => unsafe {
-                    let key = KEY_ALLOCATOR.fetch_add(1, Ordering::Relaxed);
-                    let value = Arc::<ClassLoaderData>::from_raw(new_raw);
-                    CLD_MAP.insert(key, value);
-
-                    new_raw
-                }
-
-                Err(x) => unsafe {
-                    // Release.
-                    Arc::decrement_strong_count(new_raw);
-
-                    x
-                }
-            }
-        } else {
-            cld
-        };
-
-        unsafe { Arc::from_raw(raw) }
+        unimplemented!()
     }
 
     pub fn get_bootstrap_cld() -> &'static ClassLoaderData {

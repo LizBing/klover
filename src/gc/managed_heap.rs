@@ -14,38 +14,62 @@
  * limitations under the License.
  */
 
-use std::{cell::LazyCell, sync::LazyLock};
+use std::{cell::LazyCell, sync::{LazyLock, OnceLock}};
 
-use crate::{memory::{mem_region::MemRegion, virt_space::VirtSpace}, utils::global_defs::HeapWord};
+use crate::{memory::{bumper::Bumper, mem_region::MemRegion, virt_space::VirtSpace}, utils::global_defs::HeapWord};
 
-static MANAGED_HEAP: LazyLock<ManagedHeap> = LazyLock::new(ManagedHeap::new);
+static MANAGED_HEAP: OnceLock<ManagedHeap> = OnceLock::new();
+
+#[derive(Debug)]
 pub struct ManagedHeap {
     _virt_space: VirtSpace,
+    _bumper: Bumper
 }
 
 unsafe impl Send for ManagedHeap {}
 unsafe impl Sync for ManagedHeap {}
 
 impl ManagedHeap {
-    pub fn new() -> Self {
-        unimplemented!()
+    pub fn initialize(word_size: usize) {
+        MANAGED_HEAP.set(Self::new(word_size)).unwrap()
+    }
+
+    fn new(word_size: usize) -> Self {
+        let mut vm = VirtSpace::new(word_size, VirtSpace::page_byte_size(), false);
+        vm.expand_by(word_size);
+        
+        let committed = vm.committed();
+
+        Self {
+            _virt_space: vm,
+            _bumper: Bumper::new(committed)
+        }
     }
 }
 
 impl ManagedHeap {
+    pub fn heap() -> &'static ManagedHeap {
+        MANAGED_HEAP.get().unwrap()
+    }
+
     pub fn description() -> &'static str {
         "Do-nothing GC"
     }
 
-    pub fn mem_region() -> &'static MemRegion {
-        MANAGED_HEAP._virt_space.reserved()
+    pub fn mem_region(&self) -> &MemRegion {
+        self._virt_space.reserved()
     }
 
-    pub fn mem_allocation(word_size: usize) -> *const HeapWord {
-        unimplemented!()
-    }
+    pub fn mem_allocation(&self, word_size: usize, do_zero: bool) -> *const HeapWord {
+        let res = self._bumper.par_alloc_with_size(word_size);
+        assert!(!res.is_null(), "out of memory(managed heap).");
 
-    pub fn allocation_for_tlab(word_size: usize, act_size: &usize) -> *const HeapWord {
-        unimplemented!()
+        if do_zero {
+            unsafe {
+                MemRegion::with_size(res as *const _, word_size).memset(0);
+            }
+        }
+
+        res
     }
 }

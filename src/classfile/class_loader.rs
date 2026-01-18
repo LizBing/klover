@@ -30,7 +30,7 @@ impl ClassLoader {
         Ok(res)
     }
 
-    pub fn load_normal_class(loader: Option<Arc<ClassLoaderData>>, name: String) -> Result<NonNull<Klass>, String> {
+    pub fn load_class(loader: Option<Arc<ClassLoaderData>>, name: String) -> Result<NonNull<Klass>, String> {
         unimplemented!()
     }
 

@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+use std::ptr::NonNull;
+
 use crate::oops::oop_hierarchy::{NarrowOOP, OOP};
 
 #[derive(Debug)]
@@ -25,7 +27,7 @@ impl OOPStorage {
         Self {}
     }
 
-    pub fn allocate(&self) -> *mut NarrowOOP {
-        Box::leak(Box::new(NarrowOOP::encode(OOP::null())))
+    pub fn allocate(&self) -> NonNull<NarrowOOP> {
+        unsafe { NonNull::new_unchecked(Box::leak(Box::new(NarrowOOP::encode(OOP::null())))) }
     }
 }

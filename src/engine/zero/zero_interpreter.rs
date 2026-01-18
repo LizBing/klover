@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-use cafebabe::attributes::CodeData;
-
 use crate::{code::method::Method, engine::{engine_runtime::StackSlot, zero::{zero_instructions::INS_TABLE, zero_runtime::ZeroRegisters}}, utils::global_defs::Address};
 
 pub struct ZeroInterpreter {
@@ -36,11 +34,11 @@ impl Drop for ZeroInterpreter {
 }
 
 impl ZeroInterpreter {
-    pub fn process<'a>(&'a self, mthd: &'a Method<'a>) {
+    pub fn process<'a>(&'a self, mthd: &Method) {
         let mut regs = ZeroRegisters::new(self._stack, self._slots);
         let code_data = mthd.code_data().unwrap();
 
-        regs.create_frame(Some(mthd), code_data.max_locals, code_data.max_stack);
+        regs.create_frame(mthd, code_data.max_locals, code_data.max_stack);
         regs.pc = code_data.code.as_ptr();
 
         loop {

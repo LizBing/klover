@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-use std::{ptr::NonNull, sync::OnceLock};
+use std::{ops::Add, ptr::NonNull, sync::OnceLock};
 
-use crate::{memory::{bumper::Bumper, virt_space::VirtSpace}, oops::klass::Klass, utils::global_defs::{HeapWord, M}};
+use crate::{memory::{bumper::Bumper, compressed_space::CompressedSpace, virt_space::VirtSpace}, oops::klass::Klass, utils::global_defs::{Address, HeapWord, M}};
 
 pub type NarrowKlassPtr = u32;
 
@@ -27,7 +27,7 @@ static KLASS_SPACE: OnceLock<KlassSpace> = OnceLock::new();
 #[derive(Debug)]
 pub struct KlassSpace {
     _bumper: Bumper,
-    _vm: VirtSpace,
+    _cs: CompressedSpace,
 }
 
 unsafe impl Send for KlassSpace {}
@@ -35,12 +35,12 @@ unsafe impl Sync for KlassSpace {}
 
 impl KlassSpace {
     fn new() -> Self {
-        let mut vm = VirtSpace::new(FIXED_SIZE, VirtSpace::page_size(), false);
-        assert!(vm.expand_by(FIXED_SIZE));
+        let mut vs = VirtSpace::new(FIXED_SIZE, VirtSpace::page_byte_size(), false);
+        assert!(vs.expand_by(FIXED_SIZE));
 
         Self {
-            _bumper: Bumper::new(vm.committed()),
-            _vm: vm
+            _bumper: Bumper::new(vs.committed()),
+            _cs: CompressedSpace::new(vs)
         }
     }
 
@@ -52,6 +52,10 @@ impl KlassSpace {
 impl KlassSpace {
     pub fn space() -> &'static Self {
         KLASS_SPACE.get().expect("Should be initialized in advance.")
+    }
+
+    pub fn cs(&self) -> &CompressedSpace {
+        &self._cs
     }
 }
 

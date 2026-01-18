@@ -46,9 +46,10 @@ define_decorators! {
     // We use AcqRel for CAS success, Relaxed for CAS failure.
     // For CAS, just pass VOLATILE.
 
-    // (INTERNAL_COMPRESSED, 4)
-    (IN_HEAP, 4)
-    (IN_NATIVE, 5)
+    (INTERNAL_NONCOMPRESSED, 4)
+
+    (IN_HEAP, 5)
+    (IN_NATIVE, 6)
 }
 
 // offset: byte-unit

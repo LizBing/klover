@@ -15,5 +15,6 @@
  */
 
 pub mod bumper;
+pub mod compressed_space;
 pub mod mem_region;
 pub mod virt_space;

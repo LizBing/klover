@@ -17,10 +17,27 @@
 use core::fmt;
 use std::ptr::null;
 
+use crate::heap_word_align_up;
+
 pub type Address = usize;
+
+pub struct WordImpl;
+pub type Word = *const WordImpl;
 
 pub struct HeapWordImpl;
 pub type HeapWord = *const HeapWordImpl;
+
+pub const fn word_size_of<T: Sized>() -> usize {
+    into_word_size(size_of::<T>())
+}
+
+pub const fn into_word_size(byte_size: usize) -> usize {
+    heap_word_align_up!(byte_size) >> LOG_BYTES_PER_WORD
+}
+
+pub const fn into_byte_size(word_size: usize) -> usize {
+    word_size << LOG_BYTES_PER_WORD
+}
 
 /*
 #[repr(transparent)]

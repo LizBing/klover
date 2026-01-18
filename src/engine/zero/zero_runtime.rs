@@ -38,9 +38,9 @@ impl ZeroFrameData {
     }
 }
 
-pub(super) struct ZeroRegisters<'a> {
+pub(super) struct ZeroRegisters {
     pub sp: *const StackSlot,
-    pub bp: *const Frame<'a>,
+    pub bp: *const Frame,
 
     // We use the sb register for bumping allocation(eg locks, etc.).
     pub sb: *const StackSlot,
@@ -50,7 +50,7 @@ pub(super) struct ZeroRegisters<'a> {
     pub pc: *const u8,
 }
 
-impl ZeroRegisters<'_> {
+impl ZeroRegisters {
     pub fn new(stack: *const StackSlot, slots: usize) -> Self {
         unsafe {
             let sp = stack.add(slots);
@@ -66,9 +66,9 @@ impl ZeroRegisters<'_> {
     }
 }
 
-impl<'a> ZeroRegisters<'a> {
+impl ZeroRegisters {
     // slot size
-    pub fn create_frame(&mut self, mthd: Option<&'a Method<'a>>, max_locals: u16, max_stack: u16) -> bool {
+    pub fn create_frame(&mut self, mthd: *const Method, max_locals: u16, max_stack: u16) -> bool {
         unsafe {
             let new_bp = self.sp.byte_sub(size_of::<Frame>());
             let new_sp = new_bp.sub(max_locals as _);

@@ -16,15 +16,15 @@
 
 use std::{ptr::null_mut, sync::atomic::{AtomicPtr, Ordering}};
 
-pub unsafe trait NextPtr {
-    fn next_ptr(&self) -> *mut *const Self;
+pub unsafe trait NextPtr<T> {
+    fn _next_ptr(&self) -> *mut *mut T;
 }
 
-pub struct LockFreeStack<T: NextPtr> {
+pub struct LockFreeStack<T: NextPtr<T>> {
     _top: AtomicPtr<T>
 }
 
-impl<T: NextPtr> LockFreeStack<T> {
+impl<T: NextPtr<T>> LockFreeStack<T> {
     pub const fn new() -> Self {
         Self {
             _top: AtomicPtr::new(null_mut())
@@ -32,12 +32,14 @@ impl<T: NextPtr> LockFreeStack<T> {
     }
 }
 
-impl<T: NextPtr> LockFreeStack<T> {
+impl<T: NextPtr<T>> LockFreeStack<T> {
     pub fn push(&self, n: &T) {
         let mut exp = self._top.load(Ordering::SeqCst);
+
         loop {
-            unsafe { *n.next_ptr() = exp; }
-            match self._top.compare_exchange_weak(exp, n as *const _ as *mut _, Ordering::SeqCst, Ordering::Relaxed) {
+            unsafe { *(*n)._next_ptr() = exp };
+
+            match self._top.compare_exchange_weak(exp, n as *const _ as _, Ordering::SeqCst, Ordering::Relaxed) {
                 Ok(_) => break,
                 Err(x) => exp = x
             }
@@ -46,11 +48,12 @@ impl<T: NextPtr> LockFreeStack<T> {
 
     pub fn pop(&self) -> Option<&T> {
         let mut exp = self._top.load(Ordering::SeqCst);
+
         loop {
             if exp == null_mut() { return None; }
-            let new_top = unsafe { *(*exp).next_ptr() };
+            let new_top = unsafe { *(*exp)._next_ptr() };
 
-            match self._top.compare_exchange_weak(exp, new_top as *mut _, Ordering::SeqCst, Ordering::Relaxed) {
+            match self._top.compare_exchange_weak(exp, new_top, Ordering::SeqCst, Ordering::Relaxed) {
                 Ok(_) => break,
                 Err(x) => exp = x
             }

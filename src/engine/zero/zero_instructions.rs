@@ -21,7 +21,7 @@ use crate::{engine::{bytecodes, engine_runtime::{DStackSlot, StackSlot, StackSlo
 pub struct ZeroInstructions;
 
 macro_rules! type_op {
-    ($name:ident, $trait_: ty, $op:tt) => {
+    ($name:ident, $trait_:ty, $op:tt) => {
         paste::paste! {
             fn [<type_ $name>]<T: Copy + $trait_>(regs: &mut ZeroRegisters) {
                 let value2 = Self::pop::<T>(regs);
@@ -31,27 +31,6 @@ macro_rules! type_op {
 
                 Self::push(regs, result); 
             }
-        }
-    };
-}
-
-macro_rules! type_astore_with_trunc {
-    ($name:ident, $t: ty) => {
-        fn $name(regs: &mut ZeroRegisters) {
-            let value = Self::pop::<JInt>(regs);
-            let index = Self::pop(regs);
-            let arrayref = Self::pop_ref(regs);
-
-            if arrayref.is_null() {
-                // todo: throw NullPointerException
-            }
-
-            if index >= ArrayOOP::length::<{DECORATOR_IN_HEAP}>(arrayref) {
-                // todo: throw ArrayIndexOutOfBoundsException
-            }
-
-            let result = value as $t;
-            ArrayOOP::put::<{DECORATOR_IN_HEAP | DECORATOR_MO_VOLATILE} ,_>(arrayref, index, result);
         }
     };
 }
@@ -67,7 +46,9 @@ macro_rules! t1_to_t2 {
     };
 }
 
-pub type InsFnType = fn(regs: &mut ZeroRegisters<'_>);
+const INTERPRETER_DECORATORS: u32 = DECORATOR_IN_HEAP | DECORATOR_MO_VOLATILE;
+
+pub type InsFnType = fn(regs: &mut ZeroRegisters);
 
 pub static INS_TABLE: [InsFnType; bytecodes::NUMBER_OF_JAVA_CODES] = [
     ZeroInstructions::nop,
@@ -130,14 +111,14 @@ pub static INS_TABLE: [InsFnType; bytecodes::NUMBER_OF_JAVA_CODES] = [
     ZeroInstructions::aload_n::<2>,
     ZeroInstructions::aload_n::<3>,
 
-    ZeroInstructions::type_aload::<JInt, JInt>,
-    ZeroInstructions::type_aload::<JLong, JLong>,
-    ZeroInstructions::type_aload::<JFloat, JFloat>,
-    ZeroInstructions::type_aload::<JDouble, JDouble>,
-    ZeroInstructions::aaload,
-    ZeroInstructions::type_aload::<JInt, JByte>,
-    ZeroInstructions::type_aload::<JInt, JChar>,
-    ZeroInstructions::type_aload::<JInt, JShort>,
+    ZeroInstructions::type_aload::<INTERPRETER_DECORATORS, JInt, JInt>,
+    ZeroInstructions::type_aload::<INTERPRETER_DECORATORS, JLong, JLong>,
+    ZeroInstructions::type_aload::<INTERPRETER_DECORATORS, JFloat, JFloat>,
+    ZeroInstructions::type_aload::<INTERPRETER_DECORATORS, JDouble, JDouble>,
+    ZeroInstructions::aaload::<INTERPRETER_DECORATORS>,
+    ZeroInstructions::type_aload::<INTERPRETER_DECORATORS, JInt, JByte>,
+    ZeroInstructions::type_aload::<INTERPRETER_DECORATORS, JInt, JChar>,
+    ZeroInstructions::type_aload::<INTERPRETER_DECORATORS, JInt, JShort>,
 
     ZeroInstructions::type_store::<JInt>,
     ZeroInstructions::type_store::<JLong>,
@@ -170,14 +151,14 @@ pub static INS_TABLE: [InsFnType; bytecodes::NUMBER_OF_JAVA_CODES] = [
     ZeroInstructions::astore_n::<2>,
     ZeroInstructions::astore_n::<3>,
 
-    ZeroInstructions::type_astore::<JInt>,
-    ZeroInstructions::type_astore::<JLong>,
-    ZeroInstructions::type_astore::<JFloat>,
-    ZeroInstructions::type_astore::<JDouble>,
-    ZeroInstructions::aastore,
-    ZeroInstructions::bastore,
-    ZeroInstructions::castore,
-    ZeroInstructions::sastore,
+    ZeroInstructions::type_astore::<INTERPRETER_DECORATORS, JInt>,
+    ZeroInstructions::type_astore::<INTERPRETER_DECORATORS, JLong>,
+    ZeroInstructions::type_astore::<INTERPRETER_DECORATORS, JFloat>,
+    ZeroInstructions::type_astore::<INTERPRETER_DECORATORS, JDouble>,
+    ZeroInstructions::aastore::<INTERPRETER_DECORATORS>,
+    ZeroInstructions::bastore::<INTERPRETER_DECORATORS>,
+    ZeroInstructions::castore::<INTERPRETER_DECORATORS>,
+    ZeroInstructions::sastore::<INTERPRETER_DECORATORS>,
 
     ZeroInstructions::pop,
     ZeroInstructions::pop2,
@@ -311,7 +292,7 @@ pub static INS_TABLE: [InsFnType; bytecodes::NUMBER_OF_JAVA_CODES] = [
     ZeroInstructions::new,
     ZeroInstructions::newarray,
     ZeroInstructions::anewarray,
-    ZeroInstructions::arraylength,
+    ZeroInstructions::arraylength::<INTERPRETER_DECORATORS>,
     ZeroInstructions::athrow,
 
     ZeroInstructions::checkcast,
@@ -420,7 +401,7 @@ impl ZeroInstructions {
 }
 
 impl ZeroInstructions {
-    fn aaload(regs: &mut ZeroRegisters) {
+    fn aaload<const D: u32>(regs: &mut ZeroRegisters) {
         let index = Self::pop(regs);
         let arrayref = Self::pop_ref(regs);
 
@@ -428,15 +409,15 @@ impl ZeroInstructions {
             // todo: throw NullPointerException
         }
 
-        if index >= ArrayOOP::length::<{DECORATOR_IN_HEAP}>(arrayref) {
+        if index >= ArrayOOP::length::<D>(arrayref) {
             // todo: throw ArrayIndexOutOfBoundsException
         }
 
-        let value = ArrayOOP::get_oop::<{DECORATOR_IN_HEAP | DECORATOR_MO_VOLATILE}>(arrayref, index);
+        let value = ArrayOOP::get_oop::<D>(arrayref, index);
         Self::push_ref(regs, value);
     }
 
-    fn aastore(regs: &mut ZeroRegisters) {
+    fn aastore<const D: u32>(regs: &mut ZeroRegisters) {
         let value = Self::pop_ref(regs);
         let index = Self::pop(regs);
         let arrayref = Self::pop_ref(regs);
@@ -445,7 +426,7 @@ impl ZeroInstructions {
             // todo: throw NullPointerException
         }
 
-        if index >= ArrayOOP::length::<{DECORATOR_IN_HEAP}>(arrayref) {
+        if index >= ArrayOOP::length::<D>(arrayref) {
             // todo: throw ArrayIndexOutOfBoundsException
         }
 
@@ -454,7 +435,7 @@ impl ZeroInstructions {
             // If not compatible, throw ArrayStoreException
         }
 
-        ArrayOOP::put_oop::<{DECORATOR_IN_HEAP | DECORATOR_MO_VOLATILE}>(arrayref, index, value);
+        ArrayOOP::put_oop::<D>(arrayref, index, value);
     }
 
     fn aconst_null(regs: &mut ZeroRegisters) {
@@ -489,13 +470,13 @@ impl ZeroInstructions {
         unimplemented!()
     }
 
-    fn arraylength(regs: &mut ZeroRegisters) {
+    fn arraylength<const D: u32>(regs: &mut ZeroRegisters) {
         let arrayref = Self::pop_ref(regs);
         if arrayref.is_null() {
             // todo: throw NullPointerException
         }
 
-        let length = ArrayOOP::length::<{DECORATOR_IN_HEAP}>(arrayref);
+        let length = ArrayOOP::length::<D>(arrayref);
         Self::push(regs, length);
     }
 
@@ -522,7 +503,7 @@ impl ZeroInstructions {
     }
 
     // T is the dst type of the stack value, while U is the src type of array.
-    fn type_aload<T: Copy, U: Copy + Into<T>>(regs: &mut ZeroRegisters) {
+    fn type_aload<const D: u32, T: Copy, U: Copy + Into<T>>(regs: &mut ZeroRegisters) {
         let index = Self::pop(regs);
         let arrayref = Self::pop_ref(regs);
 
@@ -530,15 +511,15 @@ impl ZeroInstructions {
             // todo: throw NullPointerException
         }
 
-        if index >= ArrayOOP::length::<{DECORATOR_IN_HEAP}>(arrayref) {
+        if index >= ArrayOOP::length::<D>(arrayref) {
             // todo: throw ArrayIndexOutOfBoundsException
         }
 
-        let value = ArrayOOP::get::<{DECORATOR_IN_HEAP | DECORATOR_MO_VOLATILE}, U>(arrayref, index).into();
+        let value = ArrayOOP::get::<D, U>(arrayref, index).into();
         Self::push(regs, value);
     }
 
-    fn type_astore<T: Copy>(regs: &mut ZeroRegisters) {
+    fn type_astore<const D: u32, T: Copy>(regs: &mut ZeroRegisters) {
         let value = Self::pop::<T>(regs);
         let index = Self::pop(regs);
         let arrayref = Self::pop_ref(regs);
@@ -547,20 +528,25 @@ impl ZeroInstructions {
             // todo: throw NullPointerException
         }
 
-        if index >= ArrayOOP::length::<{DECORATOR_IN_HEAP}>(arrayref) {
+        if index >= ArrayOOP::length::<D>(arrayref) {
             // todo: throw ArrayIndexOutOfBoundsException
         }
 
-        ArrayOOP::put::<{DECORATOR_IN_HEAP | DECORATOR_MO_VOLATILE}, _>(arrayref, index, value);
+        ArrayOOP::put::<D, _>(arrayref, index, value);
     }
 
-    fn bastore(regs: &mut ZeroRegisters) {
+    fn bastore<const D: u32>(regs: &mut ZeroRegisters) {
         // todo: check if the type is bool. See 6.5.bastore
         unimplemented!()
     }
     
-    type_astore_with_trunc!(castore, JChar);
-    type_astore_with_trunc!(sastore, JShort);
+    fn castore<const D: u32>(regs: &mut ZeroRegisters) {
+        unimplemented!()
+    }
+
+    fn sastore<const D: u32>(regs: &mut ZeroRegisters) {
+        unimplemented!()
+    }
 
     fn bipush(regs: &mut ZeroRegisters) {
         let byte = Self::read_u8(regs);

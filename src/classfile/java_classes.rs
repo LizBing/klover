@@ -20,13 +20,13 @@ use crate::{classfile::{class_loader::ClassLoader, class_loader_data::ClassLoade
 use super::vm_symbols::VMSymbols;
 
 pub trait JavaClass {
-    fn name() -> String;
+    fn name() -> &'static str;
 
     fn klass() -> NonNull<Klass> {
         static CACHE: OnceLock<AtomicPtr<Klass>> = OnceLock::new();
 
         let klass = CACHE.get_or_init(|| -> _ {
-            let klass = ClassLoader::load_normal_class(None, Self::name()).unwrap();
+            let klass = ClassLoader::load_class(None, String::from(Self::name())).unwrap();
             AtomicPtr::new(klass.as_ptr())
         });
 
@@ -53,8 +53,8 @@ macro_rules! define_java_class {
             }
 
             impl JavaClass for $type_name {
-                fn name() -> String {
-                    String::from(VMSymbols:: $symbol_name ())
+                fn name() -> &'static str {
+                    VMSymbols:: $symbol_name ()
                 }
             }
 
@@ -69,10 +69,34 @@ macro_rules! define_java_class {
     }
 }
 
-define_java_class! {
-    [JavaLangClassLoader, java_lang_ClassLoader] {
-        cld: *const ClassLoaderData,
+macro_rules! define_java_prim_class {
+    (
+        $type_name:ty, $symbol_name:ident
+    ) => {
+        paste::paste! {
+            #[repr(C)]
+            pub struct $type_name;
+
+            impl JavaClass for $type_name {
+                fn name() -> &'static str {
+                    VMSymbols:: $symbol_name ()
+                }
+            }
+        }
     }
+}
+
+define_java_prim_class!(PrimBool, prim_bool);
+define_java_prim_class!(PrimByte, prim_byte);
+define_java_prim_class!(PrimChar, prim_char);
+define_java_prim_class!(PrimShort, prim_short);
+define_java_prim_class!(PrimInt, prim_int);
+define_java_prim_class!(PrimLong, prim_long);
+define_java_prim_class!(PrimFloat, prim_float);
+define_java_prim_class!(PrimDouble, prim_double);
+
+define_java_class! {
+    [JavaLangClassLoader, java_lang_ClassLoader] {}
 }
 
 define_java_class! {

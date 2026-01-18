@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-use crate::oops::oop_hierarchy::OOP;
+use std::fmt::Debug;
+
+use crate::{oops::oop_hierarchy::OOP, runtime::tls::ThrdLocalStorage};
 
 pub struct BaseThread {
     _pending_exception: OOP,
 }
 
-
-
-pub trait Thread {
+pub trait VMThread: Debug {
     fn base(&self) -> &BaseThread;
 }

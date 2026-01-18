@@ -16,7 +16,7 @@
 
 use std::{mem::MaybeUninit, ptr::{null, null_mut}, sync::atomic::{AtomicPtr, Ordering}};
 
-use crate::{heap_word_align_up, memory::mem_region::MemRegion, utils::global_defs::HeapWord};
+use crate::{heap_word_align_up, memory::mem_region::MemRegion, utils::global_defs::{HeapWord, LOG_BYTES_PER_WORD, word_size_of}};
 
 #[derive(Debug)]
 pub struct Bumper {
@@ -34,11 +34,10 @@ impl Bumper {
 }
 
 impl Bumper {
-    pub fn alloc<T: Sized>(&mut self) -> *mut MaybeUninit<T> {
+    pub fn alloc_with_size(&mut self, word_size: usize) -> *mut HeapWord {
         let top = self._top.get_mut();
-        let byte_size = heap_word_align_up!(size_of::<T>());
 
-        let new_top = unsafe { top.byte_add(byte_size) };
+        let new_top = unsafe { top.add(word_size) };
         if new_top >= self._mr.end() as _ {
             return null_mut();
         }
@@ -46,16 +45,18 @@ impl Bumper {
         let res = *top;
         *top = new_top as _;
         
-        res as _
+        res
+    }
+    
+    pub fn alloc<T: Sized>(&mut self) -> *mut MaybeUninit<T> {
+        self.alloc_with_size(word_size_of::<T>()) as _
     }
 
-    pub fn par_alloc<T: Sized>(&self) -> *mut MaybeUninit<T> {
-        let byte_size = heap_word_align_up!(size_of::<T>());
-
+    pub fn par_alloc_with_size(&self, word_size: usize) -> *mut HeapWord {
         let mut top = self._top.load(Ordering::Relaxed);
         let res;
         loop {
-            let new_top = unsafe { top.byte_add(byte_size) };
+            let new_top = unsafe { top.add(word_size) };
             if new_top >= self._mr.end() as _ {
                 return null_mut();
             }
@@ -72,6 +73,10 @@ impl Bumper {
             }
         }
 
-        res as _
+        res
+    }
+
+    pub fn par_alloc<T: Sized>(&self) -> *mut MaybeUninit<T> {
+        self.par_alloc_with_size(word_size_of::<T>()) as _
     }
 }
