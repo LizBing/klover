@@ -16,7 +16,7 @@
 
 use cafebabe::ClassFile;
 
-use crate::oops::{array_klass::ArrayKlass, normal_klass::NormalKlass, prim_klass::PrimKlass};
+use crate::{oops::{array_klass::ArrayKlass, normal_klass::NormalKlass, prim_klass::PrimKlass}, utils::lock_free_stack::NextPtr};
 
 #[derive(Debug)]
 pub enum Klass {
@@ -25,4 +25,23 @@ pub enum Klass {
     ArrayKlass(ArrayKlass),
 }
 
-unsafe impl Sync for Klass {}
+pub trait KlassBase {
+    fn name(&self) -> &str;
+    fn _next_ptr(&self) -> *mut *const Klass;
+}
+
+impl Klass {
+    pub fn base(&self) -> &dyn KlassBase {
+        match self {
+            Klass::Normal(x) => x,
+            Klass::Primitive(x) => x,
+            Klass::ArrayKlass(x) => x
+        }
+    }
+}
+
+unsafe impl NextPtr<Klass> for Klass {
+    fn _next_ptr(&self) -> *mut *const Klass {
+        self.base()._next_ptr()
+    }
+}

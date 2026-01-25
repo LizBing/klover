@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-use std::{cell::{OnceCell, Ref, RefCell}, ptr::{null, null_mut}, sync::atomic::AtomicPtr};
+use std::{cell::{OnceCell, Ref, RefCell}, ptr::null};
 
 use crate::{gc::oop_storage::OOPStorage, runtime::vm_thread::VMThread, utils::lock_free_stack::{LockFreeStack, NextPtr}};
 
@@ -26,13 +26,13 @@ thread_local! {
 
 #[derive(Debug)]
 pub struct ThrdLocalStorage {
-    _next_ptr: *mut Self,
+    _next_ptr: *const Self,
 
     _thread: Box<dyn VMThread>
 }
 
 unsafe impl NextPtr<ThrdLocalStorage> for ThrdLocalStorage {
-    fn _next_ptr(&self) -> *mut *mut Self {
+    fn _next_ptr(&self) -> *mut *const Self {
         &self._next_ptr as *const _ as _
     }
 }
@@ -44,7 +44,7 @@ impl ThrdLocalStorage {
 
     fn new<T: 'static + VMThread>(thrd: T) -> Self {
         let res = Self {
-            _next_ptr: null_mut(),
+            _next_ptr: null(),
 
             _thread: Box::new(thrd)
         };
@@ -67,4 +67,3 @@ impl ThrdLocalStorage {
         &Self::tls()._thread
     }
 }
-

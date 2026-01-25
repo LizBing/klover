@@ -14,14 +14,24 @@
  * limitations under the License.
  */
 
-use std::{ptr::null_mut, sync::atomic::{AtomicPtr, Ordering}};
+use std::{fmt::Debug, ptr::null_mut, sync::atomic::{AtomicPtr, Ordering}};
 
 pub unsafe trait NextPtr<T> {
-    fn _next_ptr(&self) -> *mut *mut T;
+    fn _next_ptr(&self) -> *mut *const T;
 }
 
 pub struct LockFreeStack<T: NextPtr<T>> {
     _top: AtomicPtr<T>
+}
+
+impl<T: Debug + NextPtr<T>> Debug for LockFreeStack<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        unsafe {
+            self.iterate(|x| x.fmt(f).unwrap());
+
+            Ok(())
+        }
+    }
 }
 
 impl<T: NextPtr<T>> LockFreeStack<T> {
@@ -53,7 +63,7 @@ impl<T: NextPtr<T>> LockFreeStack<T> {
             if exp == null_mut() { return None; }
             let new_top = unsafe { *(*exp)._next_ptr() };
 
-            match self._top.compare_exchange_weak(exp, new_top, Ordering::SeqCst, Ordering::Relaxed) {
+            match self._top.compare_exchange_weak(exp, new_top as _, Ordering::SeqCst, Ordering::Relaxed) {
                 Ok(_) => break,
                 Err(x) => exp = x
             }
@@ -62,5 +72,21 @@ impl<T: NextPtr<T>> LockFreeStack<T> {
         unsafe {
             Some(&*exp)
         }
+    }
+
+    pub unsafe fn iterate<F: FnMut(&T)>(&self, mut cl: F) -> usize {
+        let mut counter = 0;
+
+        let mut iter = self._top.load(Ordering::Relaxed) as *const T;
+        loop {
+            if iter.is_null() { break; }
+
+            cl(&*iter);
+
+            iter = *(*iter)._next_ptr();
+            counter += 1;
+        }
+
+        counter
     }
 }

@@ -14,4 +14,8 @@
  * limitations under the License.
  */
 
-pub mod vm_flag;
+use crate::{classfile::class_loader_data::ClassLoaderData, utils::lock_free_stack::LockFreeStack};
+
+pub struct ClassLoaderDataGraph {
+    _clds: LockFreeStack<ClassLoaderData>
+}

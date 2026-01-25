@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-// @cl: cl!(ident, expr)
-// e.g. $cl!(java_lang_Object, "java/lang/Object")
 macro_rules! define_vm_symbols {
     (
         $(($symbol_name:ident, $str_form:expr))*

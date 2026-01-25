@@ -8,16 +8,10 @@ name = "klover_core"
 crate-type = ["staticlib"]
 
 [dependencies]
-# klover-flag-sys-proc-macro = { path = "./src/flag_sys/proc_macro" }
 
 bitflags = "2.9.3"
 cafebabe = "0.9.0"
 dashmap = "6.1.0"
-enum-map = "2.7.3"
 modular-bitfield = "0.13.1"
 paste = "1.0.15"
-# phf = { version = "0.12", features = ["macros"] }
 region = "3.0.2"
-
-[build-dependencies]
-cc = "1.0"

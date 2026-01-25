@@ -14,45 +14,33 @@
  * limitations under the License.
  */
 
-use std::ptr::NonNull;
+use std::ptr::{NonNull, null};
 
-use dashmap::{DashMap, Entry};
-
-use crate::{oops::{klass::Klass, oop_hierarchy::OOP, weak_handle::WeakHandle}};
+use crate::{oops::{klass::Klass, oop_hierarchy::OOP, weak_handle::WeakHandle}, utils::lock_free_stack::{LockFreeStack, NextPtr}};
 
 #[derive(Debug)]
 pub struct ClassLoaderData {
+    _next_cld: *const Self,
+
     _mirror: WeakHandle,
-    _klass_map: DashMap<String, NonNull<Klass>>
+    _klasses: LockFreeStack<Klass>
 }
 
-unsafe impl Send for ClassLoaderData {}
-unsafe impl Sync for ClassLoaderData {}
+unsafe impl NextPtr<ClassLoaderData> for ClassLoaderData {
+    fn _next_ptr(&self) -> *mut *const ClassLoaderData {
+        &self._next_cld as *const _ as _
+    }
+}
 
 impl ClassLoaderData {
     pub fn new(loader: OOP) -> Self {
         unimplemented!()
-    }
-
-    pub fn new_bootstrap() -> Self {
-        Self {
-            _mirror: WeakHandle::new(),
-            _klass_map: DashMap::new()
-        }
     }
 }
 
 impl ClassLoaderData {
     // returns false if duplicated
     pub fn register(&self, name: String, klass: NonNull<Klass>) -> bool {
-        match self._klass_map.entry(name) {
-            Entry::Occupied(_) => false,
-
-            Entry::Vacant(x) => {
-                x.insert(klass);
-
-                true
-            }
-        }
+        unimplemented!()
     }
 }

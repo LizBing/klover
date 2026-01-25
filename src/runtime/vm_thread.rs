@@ -18,10 +18,10 @@ use std::fmt::Debug;
 
 use crate::{oops::oop_hierarchy::OOP, runtime::tls::ThrdLocalStorage};
 
-pub struct BaseThread {
+pub struct ThreadBase {
     _pending_exception: OOP,
 }
 
 pub trait VMThread: Debug {
-    fn base(&self) -> &BaseThread;
+    fn base(&self) -> &ThreadBase;
 }

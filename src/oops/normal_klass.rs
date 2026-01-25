@@ -18,10 +18,24 @@ use std::sync::Arc;
 
 use cafebabe::{parse_class, ClassFile};
 
-use crate::{classfile::{class_loader::ClassLoader, class_loader_data::ClassLoaderData}, oops::{klass::Klass, oop_handle::OOPHandle, oop_hierarchy::OOP, weak_handle::WeakHandle}};
+use crate::{classfile::{class_loader::ClassLoader, class_loader_data::ClassLoaderData}, oops::{klass::{Klass, KlassBase}, oop_handle::OOPHandle, oop_hierarchy::OOP, weak_handle::WeakHandle}};
 
 #[derive(Debug)]
-pub struct NormalKlass {}
+pub struct NormalKlass {
+    _next_klass: *const Klass,
+
+    _name: String
+}
+
+impl KlassBase for NormalKlass {
+    fn name(&self) -> &str {
+        self._name.as_str()
+    }
+
+    fn _next_ptr(&self) -> *mut *const Klass {
+        &self._next_klass as *const _ as _
+    }
+}
 
 impl NormalKlass {
     pub fn new(stream: Vec<u8>) -> Result<Self, String> {
