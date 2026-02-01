@@ -14,29 +14,39 @@
  * limitations under the License.
  */
 
-use std::{ptr::null_mut, sync::atomic::AtomicPtr};
+use std::ptr::NonNull;
 
-use crate::{gc::{barrier_set::AccessBarrier, oop_storage::OOPStorage}, oops::oop_hierarchy::{NarrowOOP}};
+use crate::{gc::oop_storage::OOPStorage, oops::{access::{Access, DECORATOR_IN_NATIVE, DECORATOR_INTERNAL_NONCOMPRESSED, DECORATOR_MO_VOLATILE}, oop_hierarchy::OOP}};
 
 #[derive(Debug)]
-pub struct OOPHandle {}
+pub struct OOPHandle {
+    _raw: NonNull<OOP>,
+    _s: &'static OOPStorage
+}
 
 impl OOPHandle {
-    pub fn new() -> Self {
-        unimplemented!()
+    pub fn new(s: &'static OOPStorage) -> Self {
+        Self {
+            _raw: s.allocate(),
+            _s: s
+        }
+    }
+}
+
+impl Drop for OOPHandle {
+    fn drop(&mut self) {
+        self._s.free(self._raw);
+    }
+}
+
+impl OOPHandle {
+    pub fn load(&self) -> OOP {
+        Access::<{DECORATOR_INTERNAL_NONCOMPRESSED | DECORATOR_IN_NATIVE | DECORATOR_MO_VOLATILE}>
+            ::oop_load(self._raw.as_ptr())
     }
 
-    pub fn with_storage(s: &OOPStorage) -> Self {
-        unimplemented!()
-    }
-
-    // volatile
-    pub fn set(&self, n: NarrowOOP) {
-        unimplemented!()
-    }
-
-    // volatile
-    pub fn get(&self) -> NarrowOOP {
-        unimplemented!()
+    pub fn store<const D: u32>(&self, n: OOP) {
+        Access::<{DECORATOR_INTERNAL_NONCOMPRESSED | DECORATOR_IN_NATIVE | DECORATOR_MO_VOLATILE}>
+            ::oop_store(self._raw.as_ptr(), n);
     }
 }

@@ -16,7 +16,7 @@
 
 use std::ptr::NonNull;
 
-use cafebabe::{attributes::CodeData, MethodInfo};
+use cafebabe::{attributes::CodeData};
 
 use crate::oops::klass::Klass;
 

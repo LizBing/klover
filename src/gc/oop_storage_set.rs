@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-use std::{array::from_fn, cell::Cell, ptr::null, sync::{OnceLock, atomic::AtomicUsize}};
+use std::{array::from_fn, sync::OnceLock};
 
 use crate::gc::oop_storage::OOPStorage;
 
@@ -29,9 +29,11 @@ const STRONG_END: usize = STRONG_START + STRONG_COUNT;
 const WEAK_START: usize = STRONG_END;
 const WEAK_END: usize = WEAK_START + WEAK_COUNT;
 
+const CLD_WEAK_STORAGE_INDEX: usize = WEAK_START + 0;
+
 #[derive(Debug)]
 pub struct OOPStorageSet {
-    _array: [Option<OOPStorage>; ALL_COUNT]
+    _array: [OOPStorage; ALL_COUNT]
 }
 
 unsafe impl Send for OOPStorageSet {}
@@ -41,7 +43,9 @@ static SET: OnceLock<OOPStorageSet> = OnceLock::new();
 impl OOPStorageSet {
     fn new() -> Self {
         Self {
-            _array: [const { None }; ALL_COUNT]
+            _array: from_fn(|_| -> _ {
+                OOPStorage::new()
+            })
         }
     }
 
@@ -56,7 +60,7 @@ impl OOPStorageSet {
     }
 
     pub fn storage(index: usize) -> &'static OOPStorage {
-        Self::set()._array[index].as_ref().expect("not created yet")
+        &Self::set()._array[index]
     }
 
     pub fn strong_storage(index: usize) -> &'static OOPStorage {
@@ -72,12 +76,10 @@ impl OOPStorageSet {
 
         Self::storage(index_)
     }
+}
 
-    pub fn create_strong(name: &'static str) -> &'static OOPStorage {
-        unimplemented!()
-    }
-
-    pub fn create_weak(name: &'static str) -> &'static OOPStorage {
-        unimplemented!()
+impl OOPStorageSet {
+    pub fn cld_weak_storage() -> &'static OOPStorage {
+        Self::weak_storage(CLD_WEAK_STORAGE_INDEX)
     }
 }

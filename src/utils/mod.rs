@@ -16,4 +16,4 @@
 
 pub mod align;
 pub mod global_defs;
-pub mod lock_free_stack;
+pub mod linked_list;

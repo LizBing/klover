@@ -14,5 +14,4 @@
  * limitations under the License.
  */
 
-pub mod cp_cache;
 pub mod method;

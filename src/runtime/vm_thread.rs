@@ -13,15 +13,3 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-use std::fmt::Debug;
-
-use crate::{oops::oop_hierarchy::OOP, runtime::tls::ThrdLocalStorage};
-
-pub struct ThreadBase {
-    _pending_exception: OOP,
-}
-
-pub trait VMThread: Debug {
-    fn base(&self) -> &ThreadBase;
-}

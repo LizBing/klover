@@ -14,8 +14,33 @@
  * limitations under the License.
  */
 
-use crate::{classfile::class_loader_data::ClassLoaderData, utils::lock_free_stack::LockFreeStack};
+use std::sync::{OnceLock, mpsc::Sender};
 
+use crossbeam::queue::SegQueue;
+
+use crate::classfile::class_loader_data::{CLDMsg, ClassLoaderData};
+
+static GRAPH: OnceLock<ClassLoaderDataGraph> = OnceLock::new();
+
+#[derive(Debug)]
 pub struct ClassLoaderDataGraph {
-    _clds: LockFreeStack<ClassLoaderData>
+    _queue: SegQueue<Sender<CLDMsg>>
+}
+
+impl ClassLoaderDataGraph {
+    fn new() -> Self {
+        Self {
+            _queue: SegQueue::new()
+        }
+    }
+
+    pub fn initialize() {
+        GRAPH.set(Self::new()).unwrap()
+    }
+}
+
+impl ClassLoaderDataGraph {
+    pub fn register(cld_sender: Sender<CLDMsg>) {
+        GRAPH.get().unwrap()._queue.push(cld_sender);
+    }
 }

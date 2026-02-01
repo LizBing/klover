@@ -16,32 +16,23 @@
 
 use cafebabe::ClassFile;
 
-use crate::{oops::{array_klass::ArrayKlass, normal_klass::NormalKlass, prim_klass::PrimKlass}, utils::lock_free_stack::NextPtr};
+use crate::{oops::{array_klass::ArrayKlass, normal_klass::NormalKlass, prim_klass::PrimKlass}, utils::linked_list::LinkedListNode};
 
 #[derive(Debug)]
-pub enum Klass {
+enum KlassData {
     Normal(NormalKlass),
-    Primitive(PrimKlass),
-    ArrayKlass(ArrayKlass),
+    Prim(PrimKlass),
+    ArrayKlass(ArrayKlass)
 }
 
-pub trait KlassBase {
-    fn name(&self) -> &str;
-    fn _next_ptr(&self) -> *mut *const Klass;
+#[derive(Debug)]
+pub struct Klass {
+    pub cld_node: LinkedListNode,
+    _klass_data: KlassData,
 }
 
 impl Klass {
-    pub fn base(&self) -> &dyn KlassBase {
-        match self {
-            Klass::Normal(x) => x,
-            Klass::Primitive(x) => x,
-            Klass::ArrayKlass(x) => x
-        }
-    }
-}
-
-unsafe impl NextPtr<Klass> for Klass {
-    fn _next_ptr(&self) -> *mut *const Klass {
-        self.base()._next_ptr()
+    pub fn name(&self) -> &str {
+        unimplemented!()
     }
 }

@@ -16,26 +16,14 @@
 
 use std::ptr::NonNull;
 
-use crate::oops::klass::{Klass, KlassBase};
+use crate::oops::klass::{Klass};
 
 #[derive(Debug)]
 pub struct ArrayKlass {
-    _next_klass: *const Klass,
-
     _name: String,
 
     _elem_type: NonNull<Klass>,
     _dimemsions: usize,
-}
-
-impl KlassBase for ArrayKlass {
-    fn name(&self) -> &str {
-        &self._name
-    }
-
-    fn _next_ptr(&self) -> *mut *const Klass {
-        &self._next_klass as *const _ as _
-    }
 }
 
 impl ArrayKlass {

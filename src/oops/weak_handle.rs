@@ -14,29 +14,39 @@
  * limitations under the License.
  */
 
-use std::ptr::null_mut;
+use std::ptr::{NonNull, null_mut};
 
-use crate::{gc::oop_storage::OOPStorage, oops::oop_hierarchy::{NarrowOOP, OOP}};
+use crate::{gc::oop_storage::OOPStorage, oops::{access::{Access, DECORATOR_IN_NATIVE, DECORATOR_INTERNAL_NONCOMPRESSED, DECORATOR_MO_VOLATILE}, oop_hierarchy::{NarrowOOP, OOP}}};
 
 #[derive(Debug)]
-pub struct WeakHandle {}
+pub struct WeakHandle {
+    _raw: NonNull<OOP>,
+    _s: &'static OOPStorage
+}
 
 impl WeakHandle {
-    pub fn new() -> Self {
-        unimplemented!()
+    pub fn new(s: &'static OOPStorage) -> Self {
+        Self {
+            _raw: s.allocate(),
+            _s: s
+        }
     }
+}
 
-    pub fn with_storage(s: &OOPStorage) -> Self {
-        unimplemented!()
-    }
-
-    pub fn with_oop(oop: OOP, s: &OOPStorage) -> Self {
-        unimplemented!()
+impl Drop for WeakHandle {
+    fn drop(&mut self) {
+        self._s.free(self._raw);
     }
 }
 
 impl WeakHandle {
-    pub fn load(&self) -> Option<OOP> {
-        unimplemented!()
+    pub fn load(&self) -> OOP {
+        Access::<{DECORATOR_INTERNAL_NONCOMPRESSED | DECORATOR_IN_NATIVE | DECORATOR_MO_VOLATILE}>
+            ::oop_load(self._raw.as_ptr())
+    }
+
+    pub fn store<const D: u32>(&self, n: OOP) {
+        Access::<{DECORATOR_INTERNAL_NONCOMPRESSED | DECORATOR_IN_NATIVE | DECORATOR_MO_VOLATILE}>
+            ::oop_store(self._raw.as_ptr(), n);
     }
 }

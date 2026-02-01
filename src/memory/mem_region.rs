@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-use std::{mem, ptr::{null, null_mut, write_bytes}};
+use std::{ptr::{null, null_mut}};
 
 use crate::{memory::virt_space::VirtSpace, utils::global_defs::{HeapWord, LOG_BYTES_PER_WORD}};
 

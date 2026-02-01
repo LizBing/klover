@@ -14,33 +14,71 @@
  * limitations under the License.
  */
 
-use std::ptr::{NonNull, null};
+use std::{ptr::{NonNull, null}, sync::mpsc::{self, Sender}, thread};
 
-use crate::{oops::{klass::Klass, oop_hierarchy::OOP, weak_handle::WeakHandle}, utils::lock_free_stack::{LockFreeStack, NextPtr}};
+use crate::{create_ll, gc::oop_storage_set::OOPStorageSet, oops::{klass::Klass, oop_hierarchy::OOP, weak_handle::WeakHandle}, utils::linked_list::LinkedList};
 
 #[derive(Debug)]
 pub struct ClassLoaderData {
-    _next_cld: *const Self,
-
     _mirror: WeakHandle,
-    _klasses: LockFreeStack<Klass>
-}
-
-unsafe impl NextPtr<ClassLoaderData> for ClassLoaderData {
-    fn _next_ptr(&self) -> *mut *const ClassLoaderData {
-        &self._next_cld as *const _ as _
-    }
+    _klasses: LinkedList<Klass>,
 }
 
 impl ClassLoaderData {
-    pub fn new(loader: OOP) -> Self {
-        unimplemented!()
+    fn new(loader: OOP) -> Self {
+        Self {
+            _mirror: WeakHandle::new(OOPStorageSet::cld_weak_storage()),
+            _klasses: create_ll!(Klass, cld_node)
+        }
     }
 }
 
 impl ClassLoaderData {
     // returns false if duplicated
-    pub fn register(&self, name: String, klass: NonNull<Klass>) -> bool {
-        unimplemented!()
+    fn register(&mut self, klass: NonNull<Klass>) -> bool {
+        unsafe {
+            if self._klasses.iterate_reversed(|n| -> _ {
+                if n.name() == klass.as_ref().name() {
+                    Some(())
+                } else { None }
+            }).is_some() {
+                return false;
+            }
+
+            self._klasses.push_back(klass.as_ref());
+
+            true
+        }
+    }
+}
+
+pub enum CLDMsg {
+    RegisterKlass { klass: NonNull<Klass>, reply: Sender<()> },
+    Shutdown
+}
+
+unsafe impl Send for CLDMsg {}
+unsafe impl Sync for CLDMsg {}
+
+impl ClassLoaderData {
+    pub fn spawn_actor(loader: OOP) -> Sender<CLDMsg> {
+        let (tx, rx) = mpsc::channel();
+
+        thread::spawn(move || {
+            let mut cld = Self::new(loader);
+
+            loop {
+                match rx.recv() {
+                    Ok(CLDMsg::RegisterKlass { klass, reply }) => {
+                        cld.register(klass);
+                        reply.send(());
+                    }
+
+                    Ok(CLDMsg::Shutdown) | Err(_) => break
+                }
+            }
+        });
+
+        tx
     }
 }

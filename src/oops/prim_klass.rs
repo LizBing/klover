@@ -14,21 +14,7 @@
  * limitations under the License.
  */
 
-use crate::oops::klass::{Klass, KlassBase};
-
 #[derive(Debug)]
 pub struct PrimKlass {
-    _next_klass: *const Klass,
-
     _name: &'static str,
-}
-
-impl KlassBase for PrimKlass {
-    fn name(&self) -> &str {
-        self._name
-    }
-
-    fn _next_ptr(&self) -> *mut *const Klass {
-        &self._next_klass as *const _ as _
-    }
 }
