@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-use std::{ops::Add, ptr::NonNull, sync::OnceLock};
+use std::{mem::MaybeUninit, ops::Add, ptr::NonNull, sync::OnceLock};
 
 use crate::{memory::{bumper::Bumper, compressed_space::CompressedSpace, virt_space::VirtSpace}, oops::klass::Klass, utils::global_defs::{Address, HeapWord, M}};
 
@@ -60,12 +60,10 @@ impl KlassSpace {
 }
 
 impl KlassSpace {
-    pub fn par_alloc(&self, data: Klass) -> NonNull<Klass> {
+    pub fn par_alloc(&self) -> *mut MaybeUninit<Klass> {
         let mem = self._bumper.par_alloc();
         assert!(!mem.is_null(), "out of memory(metaspace).");
 
-        unsafe {
-            NonNull::new_unchecked((*mem).write(data))
-        }
+        mem
     }
 }

@@ -14,26 +14,30 @@
  * limitations under the License.
  */
 
-use std::{ptr::NonNull, sync::Arc};
+use std::ptr::NonNull;
 use tokio::sync::mpsc;
 
 use crate::{classfile::{class_loader_data::ClassLoaderData, cld_graph::ClassLoaderDataGraph}, oops::{klass::Klass, oop_hierarchy::OOP}};
 
 pub enum CLDMsg {
-    RegisterCLD { loader: OOP, reply_tx: mpsc::Sender<Arc<ClassLoaderData>> },
+    RegisterCLD { loader: OOP, reply_tx: mpsc::Sender<NonNull<ClassLoaderData>> },
 
     RegisterKlass { loader: NonNull<ClassLoaderData>, klass: NonNull<Klass>, reply_tx: mpsc::Sender<bool> },
+
+    GetCLD { loader: OOP, reply_tx: mpsc::Sender<NonNull<ClassLoaderData>> },
 
     Shutdown
 }
 
+unsafe impl Send for CLDMsg {}
+
 pub struct CLDActor {
-    rx: mpsc::Receiver<CLDMsg>,
+    rx: mpsc::UnboundedReceiver<CLDMsg>,
     graph: ClassLoaderDataGraph
 }
 
 impl CLDActor {
-    pub fn new(rx: mpsc::Receiver<CLDMsg>) -> CLDActor {
+    pub fn new(rx: mpsc::UnboundedReceiver<CLDMsg>) -> CLDActor {
         Self {
             rx: rx,
             graph: ClassLoaderDataGraph::new()
@@ -46,7 +50,7 @@ impl CLDActor {
         loop {
             match self.rx.recv().await.unwrap() {
                 CLDMsg::RegisterCLD { loader, reply_tx } => {
-                    let cld = self.graph.register_cld(loader);
+                    let cld = self.graph.register_cld(loader).await;
                     reply_tx.send(cld).await.unwrap();
                 }
 
@@ -54,6 +58,8 @@ impl CLDActor {
                     let res = unsafe { loader.as_mut().register_klass(klass) };
                     reply_tx.send(res).await.unwrap();
                 }
+
+                CLDMsg::GetCLD { loader, reply_tx } => {}
 
                 CLDMsg::Shutdown => break
             }

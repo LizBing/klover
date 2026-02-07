@@ -24,12 +24,16 @@ pub struct OOPStorage;
 // temporary implementation
 impl OOPStorage {
     pub fn new() -> Self {
-        Self {}
+        Self
     }
 
     pub fn allocate(&self) -> NonNull<OOP> {
         unsafe { NonNull::new_unchecked(Box::leak(Box::new(OOP::null()))) }
     }
 
-    pub fn free(&self, n: NonNull<OOP>) {}
+    pub fn free(&self, mut n: NonNull<OOP>) {
+        unsafe {
+            Box::from_raw(n.as_mut());
+        }
+    }
 }

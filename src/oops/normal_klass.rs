@@ -14,13 +14,29 @@
  * limitations under the License.
  */
 
+use std::sync::Arc;
+
+use crate::classfile::class_loader_data::ClassLoaderData;
+
 #[derive(Debug)]
 pub struct NormalKlass {
-    _name: String
+    name: String,
+    loader: Arc<ClassLoaderData>
 }
 
 impl NormalKlass {
-    pub fn new(stream: Vec<u8>) -> Result<Self, String> {
-        unimplemented!()
+    pub fn new(stream: Vec<u8>, loader: Arc<ClassLoaderData>) -> Result<Self, String> {
+        let parsed = match cafebabe::parse_class(stream.as_slice()) {
+            Ok(x) => x,
+
+            Err(_) => return Err(String::from("bad class file stream"))
+        };
+
+        let klass = Self {
+            name: parsed.this_class.to_string(),
+            loader: loader
+        };
+
+        Ok(klass)
     }
 }

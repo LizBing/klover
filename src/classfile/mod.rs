@@ -17,7 +17,7 @@
 pub mod class_loader;
 pub mod java_classes;
 
-mod class_loader_data;
+pub mod class_loader_data;
 pub mod cld_actor;
 mod cld_graph;
 

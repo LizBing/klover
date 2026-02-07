@@ -21,15 +21,15 @@ use crate::{classfile::class_loader_data::ClassLoaderData, metaspace::klass_spac
 pub struct ClassLoader;
 
 impl ClassLoader {
-    pub fn define_normal_class(loader: Option<Arc<ClassLoaderData>>, stream: Vec<u8>) -> Result<NonNull<Klass>, String> {
+    pub fn define_normal_class(loader: NonNull<ClassLoaderData>, stream: Vec<u8>) -> Result<NonNull<Klass>, String> {
         unimplemented!()
     }
 
-    pub fn load_class(loader: Option<Arc<ClassLoaderData>>, name: String) -> Result<NonNull<Klass>, String> {
+    pub fn load_class(loader: NonNull<ClassLoaderData>, name: String) -> Result<NonNull<Klass>, String> {
         unimplemented!()
     }
 
-    pub fn find_class(loader: Option<Arc<ClassLoaderData>>, name: String) -> Result<NonNull<Klass>, String> {
+    pub fn find_class(loader: NonNull<ClassLoaderData>, name: String) -> Result<NonNull<Klass>, String> {
         unimplemented!()
     }
 }

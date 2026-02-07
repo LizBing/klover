@@ -16,22 +16,34 @@
 
 use std::ptr::NonNull;
 
-use crate::{gc::oop_storage_set::OOPStorageSet, init_ll, oops::{klass::Klass, oop_hierarchy::OOP, weak_handle::WeakHandle}, utils::linked_list::{LinkedList, LinkedListNode}};
+use crate::{gc::oop_storage_actor::CLD_STORAGE_INDEX, init_ll, oops::{klass::Klass, oop_handle::OOPHandle, oop_hierarchy::OOP}, utils::linked_list::{LinkedList, LinkedListNode}};
 
 #[derive(Debug)]
 pub struct ClassLoaderData {
     pub cld_graph_node: LinkedListNode<Self>,
+    pub mirror: OOPHandle,
 
-    mirror: WeakHandle,
     klasses: LinkedList<Klass>,
 }
 
 impl ClassLoaderData {
-    pub fn init(&mut self, loader: OOP) {
+    pub async fn init(&mut self, loader: OOP) {
         *self = Self {
             cld_graph_node: LinkedListNode::new(),
 
-            mirror: WeakHandle::new(OOPStorageSet::cld_weak_storage()),
+            mirror: OOPHandle::with_storage(CLD_STORAGE_INDEX).await,
+            klasses: LinkedList::new()
+        };
+        init_ll!(&mut self.klasses, Klass, cld_node);
+
+        self.mirror.store(loader);
+    }
+
+    pub fn init_bootstrap(&mut self) {
+        *self = Self {
+            cld_graph_node: LinkedListNode::new(),
+
+            mirror: OOPHandle::new(),
             klasses: LinkedList::new()
         };
 

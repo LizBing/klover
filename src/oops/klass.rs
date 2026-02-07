@@ -14,12 +14,10 @@
  * limitations under the License.
  */
 
-use cafebabe::ClassFile;
-
 use crate::{oops::{array_klass::ArrayKlass, normal_klass::NormalKlass, prim_klass::PrimKlass}, utils::linked_list::LinkedListNode};
 
 #[derive(Debug)]
-enum KlassData {
+pub enum KlassData {
     Normal(NormalKlass),
     Prim(PrimKlass),
     ArrayKlass(ArrayKlass)
@@ -29,7 +27,7 @@ enum KlassData {
 pub struct Klass {
     pub cld_node: LinkedListNode<Self>,
 
-    _klass_data: KlassData,
+    klass_data: KlassData,
 }
 
 impl Klass {

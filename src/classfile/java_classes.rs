@@ -14,91 +14,29 @@
  * limitations under the License.
  */
 
-use std::{cell::OnceCell, mem::offset_of, ptr::NonNull, sync::{Arc, LazyLock, OnceLock, Weak, atomic::AtomicPtr}};
+use std::{ptr::NonNull, sync::{OnceLock, atomic::AtomicPtr}};
 
-use crate::{classfile::{class_loader::ClassLoader, class_loader_data::ClassLoaderData}, oops::{klass::Klass, obj_desc::ObjDesc, oop_hierarchy::OOP}, utils::global_defs::JInt};
-use super::vm_symbols::VMSymbols;
+use tokio::sync::mpsc;
 
-pub trait JavaClass {
-    fn name() -> &'static str;
+use crate::{classfile::{class_loader::ClassLoader, cld_actor::CLDMsg}, oops::{klass::Klass, oop_hierarchy::OOP}, runtime::universe::Universe};
 
-    fn klass() -> NonNull<Klass> {
-        static CACHE: OnceLock<AtomicPtr<Klass>> = OnceLock::new();
+pub struct JavaClasses {
+    java_lang_Object: NonNull<Klass>,
+    java_lang_String: NonNull<Klass>,
+    java_lang_Class: NonNull<Klass>,
+    java_lang_Throwable: NonNull<Klass>
+}
 
-        let klass = CACHE.get_or_init(|| -> _ {
-            let klass = ClassLoader::load_class(None, String::from(Self::name())).unwrap();
-            AtomicPtr::new(klass.as_ptr())
-        });
+impl JavaClasses {
+    pub async fn new() -> Self {
+        let (tx, mut rx) = mpsc::channel(1);
+        let msg = CLDMsg::GetCLD { loader: OOP::null(), reply_tx: tx };
 
-        unsafe {
-            NonNull::new_unchecked(*klass.as_ptr())
+        Universe::actor_mailbox().send_cld(msg);
+        let cld = rx.recv().await.unwrap();
+
+        Self {
+            java_lang_Object: 
         }
     }
-}
-
-macro_rules! define_java_class {
-    (
-        [$type_name:ty, $symbol_name:ident] {
-            $($field_name:ident : $field_type:ty,)*
-        }
-    ) => {
-        paste::paste! {
-            #[repr(C)]
-            pub struct $type_name {
-                _desc: ObjDesc,
-
-                $(
-                    $field_name: $field_type,
-                )*
-            }
-
-            impl JavaClass for $type_name {
-                fn name() -> &'static str {
-                    VMSymbols:: $symbol_name ()
-                }
-            }
-
-            impl $type_name {
-                $(
-                    pub const fn [<$field_name _offset>]() -> usize {
-                        offset_of!(Self, $field_name)
-                    }
-                )*
-            }
-        }
-    }
-}
-
-macro_rules! define_java_prim_class {
-    (
-        $type_name:ty, $symbol_name:ident
-    ) => {
-        paste::paste! {
-            #[repr(C)]
-            pub struct $type_name;
-
-            impl JavaClass for $type_name {
-                fn name() -> &'static str {
-                    VMSymbols:: $symbol_name ()
-                }
-            }
-        }
-    }
-}
-
-define_java_prim_class!(PrimBool, prim_bool);
-define_java_prim_class!(PrimByte, prim_byte);
-define_java_prim_class!(PrimChar, prim_char);
-define_java_prim_class!(PrimShort, prim_short);
-define_java_prim_class!(PrimInt, prim_int);
-define_java_prim_class!(PrimLong, prim_long);
-define_java_prim_class!(PrimFloat, prim_float);
-define_java_prim_class!(PrimDouble, prim_double);
-
-define_java_class! {
-    [JavaLangClassLoader, java_lang_ClassLoader] {}
-}
-
-define_java_class! {
-    [JavaLangThrowable, java_lang_Throwable] {}
 }

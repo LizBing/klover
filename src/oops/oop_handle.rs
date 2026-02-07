@@ -14,39 +14,68 @@
  * limitations under the License.
  */
 
-use std::ptr::NonNull;
+use std::ptr::{NonNull, null_mut};
 
-use crate::{gc::oop_storage::OOPStorage, oops::{access::{Access, DECORATOR_IN_NATIVE, DECORATOR_INTERNAL_NONCOMPRESSED, DECORATOR_MO_VOLATILE}, oop_hierarchy::OOP}};
+use tokio::sync::mpsc;
+
+use crate::{gc::oop_storage_actor::OOPStorageMsg, oops::{access::{Access, DECORATOR_IN_NATIVE, DECORATOR_INTERNAL_NONCOMPRESSED, DECORATOR_MO_VOLATILE}, oop_hierarchy::OOP}, runtime::{actor_mailbox::ActorMailbox, universe::Universe}};
 
 #[derive(Debug)]
 pub struct OOPHandle {
-    _raw: NonNull<OOP>,
-    _s: &'static OOPStorage
+    raw: *mut OOP,
+    storage_index: usize
 }
 
 impl OOPHandle {
-    pub fn new(s: &'static OOPStorage) -> Self {
+    pub fn new() -> Self {
         Self {
-            _raw: s.allocate(),
-            _s: s
+            raw: null_mut(),
+            storage_index: 0
         }
+    }
+
+    pub async  fn with_storage(storage_index: usize) -> Self {
+        let mut res = Self::new();
+        res.init(storage_index).await;
+
+        res
+    }
+
+    pub async fn init(&mut self, storage_index: usize) {
+        let (tx, mut rx) = mpsc::channel(1);
+        let msg = OOPStorageMsg::Allocate { index: storage_index, reply_tx: tx };
+
+        Universe::actor_mailbox().send_oop_storage(msg);
+
+        *self = Self {
+            raw: unsafe { rx.recv().await.unwrap().as_mut() },
+            storage_index: storage_index
+        };
     }
 }
 
 impl Drop for OOPHandle {
     fn drop(&mut self) {
-        self._s.free(self._raw);
+        if !self.raw.is_null() {
+            let msg = OOPStorageMsg::Free { index: self.storage_index, addr: unsafe { NonNull::new_unchecked(self.raw) } };
+            Universe::actor_mailbox().send_oop_storage(msg);
+        }
+        
     }
 }
 
 impl OOPHandle {
     pub fn load(&self) -> OOP {
         Access::<{DECORATOR_INTERNAL_NONCOMPRESSED | DECORATOR_IN_NATIVE | DECORATOR_MO_VOLATILE}>
-            ::oop_load(self._raw.as_ptr())
+            ::oop_load(self.raw)
     }
 
-    pub fn store<const D: u32>(&self, n: OOP) {
+    pub fn store(&self, n: OOP) {
         Access::<{DECORATOR_INTERNAL_NONCOMPRESSED | DECORATOR_IN_NATIVE | DECORATOR_MO_VOLATILE}>
-            ::oop_store(self._raw.as_ptr(), n);
+            ::oop_store(self.raw, n);
+    }
+
+    pub fn equals(&self, oop: OOP) -> bool {
+        self.load().raw() == oop.raw()
     }
 }

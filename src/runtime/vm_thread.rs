@@ -13,3 +13,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+use crate::oops::oop_hierarchy::OOP;
+
+#[derive(Debug)]
+pub struct VMThread {
+    pending_oop: OOP
+}
+
+impl VMThread {
+    pub fn new() -> Self {
+        Self {
+            pending_oop: OOP::null()
+        }
+    }
+}
+
+impl VMThread {}

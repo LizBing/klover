@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Lei Zaakjyu
+ * Copyright 2026 Lei Zaakjyu
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,3 +13,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+use tokio::sync::mpsc;
+
+use crate::{classfile::cld_actor::CLDMsg, gc::oop_storage_actor::OOPStorageMsg};
+
+#[derive(Debug)]
+pub struct ActorMailbox {
+    cld_tx: mpsc::UnboundedSender<CLDMsg>,
+    oop_storage_tx: mpsc::UnboundedSender<OOPStorageMsg>,
+}
+
+impl ActorMailbox {
+    pub fn send_cld(&self, msg: CLDMsg) {
+        self.cld_tx.send(msg).unwrap()
+    }
+
+    pub fn send_oop_storage(&self, msg: OOPStorageMsg) {
+        self.oop_storage_tx.send(msg).unwrap()
+    }
+}

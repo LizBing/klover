@@ -16,13 +16,14 @@
 
 use std::sync::OnceLock;
 
-use crate::gc::managed_heap::ManagedHeap;
+use crate::{gc::managed_heap::ManagedHeap, runtime::actor_mailbox::ActorMailbox};
 
 static UNIVERSE: OnceLock<Universe> = OnceLock::new();
 
 #[derive(Debug)]
 pub struct Universe {
-    heap: ManagedHeap
+    heap: ManagedHeap,
+    actor_sender: ActorMailbox
 }
 
 impl Universe {
@@ -32,11 +33,15 @@ impl Universe {
 }
 
 impl Universe {
-    fn universe() -> &'static Universe {
+    fn this() -> &'static Universe {
         UNIVERSE.get().expect("Should call Universe::initialize() in advance.")
     }
 
     pub fn heap() -> &'static ManagedHeap {
-        &Self::universe().heap
+        &Self::this().heap
+    }
+
+    pub fn actor_mailbox() -> &'static ActorMailbox {
+        &Self::this().actor_sender
     }
 }

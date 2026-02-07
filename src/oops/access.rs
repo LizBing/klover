@@ -73,7 +73,7 @@ impl<const D: u32> Access<D> {
 
     // addr: *const NarrowOOP
     #[inline]
-    pub fn oop_store<T>(addr: *const T, oop: OOP) {
+    pub fn oop_store<T>(addr: *mut T, oop: OOP) {
         unimplemented!()
     }
 
