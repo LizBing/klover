@@ -14,59 +14,19 @@
  * limitations under the License.
  */
 
-use std::ptr::NonNull;
+use std::{cell::{RefCell, UnsafeCell}, ptr::NonNull};
 
-use crate::oops::{klass::Klass, oop_hierarchy::OOP};
+use crate::oops::klass::Klass;
 
-pub trait MemAllocator {
-    fn word_size(&self) -> usize;
+pub struct MemAllocator {
+    word_size: usize,
+    klass: NonNull<Klass>,
 
-    fn _initialize(&self);
+    is_array: bool,
+    length: usize,
 
-    fn allocate(&self) -> OOP {
-        unimplemented!()
-    }
+    do_zero: bool,
 }
 
-pub struct ObjAllocator {
-    _word_size: usize
+impl MemAllocator {
 }
-
-impl ObjAllocator {
-    pub fn new(klass: NonNull<Klass>, word_size: usize) -> Self {
-        unimplemented!()
-    }
-}
-
-impl MemAllocator for ObjAllocator {
-    fn word_size(&self) -> usize {
-        self._word_size
-    }
-
-    fn _initialize(&self) {
-        unimplemented!()
-    }
-}
-
-pub struct ObjArrayAllocator {
-    _word_size: usize,
-    _length: i32,
-    _do_zero: bool
-}
-
-impl ObjArrayAllocator {
-    pub fn new(klass: NonNull<Klass>, word_size: usize, length: i32, do_zero: bool) -> Self {
-        unimplemented!()
-    }
-}
-
-impl MemAllocator for ObjArrayAllocator {
-    fn word_size(&self) -> usize {
-        self._word_size
-    }
-
-    fn _initialize(&self) {
-        unimplemented!()
-    }
-}
-

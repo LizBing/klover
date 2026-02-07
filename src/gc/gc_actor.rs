@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Lei Zaakjyu
+ * Copyright 2026 Lei Zaakjyu
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,30 +14,24 @@
  * limitations under the License.
  */
 
-use cafebabe::ClassFile;
+use std::sync::mpsc;
 
-use crate::{oops::{array_klass::ArrayKlass, normal_klass::NormalKlass, prim_klass::PrimKlass}, utils::linked_list::LinkedListNode};
-
-#[derive(Debug)]
-enum KlassData {
-    Normal(NormalKlass),
-    Prim(PrimKlass),
-    ArrayKlass(ArrayKlass)
+pub enum GCMsg {
+    Shutdown,
 }
 
-#[derive(Debug)]
-pub struct Klass {
-    pub cld_node: LinkedListNode<Self>,
-
-    _klass_data: KlassData,
+pub struct GCActor {
+    rx: mpsc::Receiver<GCMsg>,
 }
 
-impl Klass {
-    pub fn name(&self) -> &str {
-        unimplemented!()
+impl GCActor {
+    pub fn new(rx: mpsc::Receiver<GCMsg>) -> Self {
+        Self {
+            rx: rx,
+        }
     }
+}
 
-    pub fn unit_word_size(&self) -> usize {
-        unimplemented!()
-    }
+impl GCActor {
+
 }

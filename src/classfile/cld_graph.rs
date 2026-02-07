@@ -14,33 +14,35 @@
  * limitations under the License.
  */
 
-use std::sync::{OnceLock, mpsc::Sender};
+use std::{ptr::NonNull, sync::Arc};
 
-use crossbeam::queue::SegQueue;
+use crate::{classfile::class_loader_data::ClassLoaderData, oops::oop_hierarchy::OOP};
 
-use crate::classfile::class_loader_data::{CLDMsg, ClassLoaderData};
-
-static GRAPH: OnceLock<ClassLoaderDataGraph> = OnceLock::new();
+const INIT_CAPACITY_OF_CLD_GRAPH: usize = 128;
 
 #[derive(Debug)]
 pub struct ClassLoaderDataGraph {
-    _queue: SegQueue<Sender<CLDMsg>>
+    array: Vec<Arc<ClassLoaderData>>
 }
 
 impl ClassLoaderDataGraph {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
-            _queue: SegQueue::new()
+            array: Vec::with_capacity(INIT_CAPACITY_OF_CLD_GRAPH)
         }
     }
-
-    pub fn initialize() {
-        GRAPH.set(Self::new()).unwrap()
-    }
 }
 
 impl ClassLoaderDataGraph {
-    pub fn register(cld_sender: Sender<CLDMsg>) {
-        GRAPH.get().unwrap()._queue.push(cld_sender);
+    pub fn register_cld(&mut self, loader: OOP) -> Arc<ClassLoaderData> {
+        unsafe {
+            let mut uninit = Arc::<ClassLoaderData>::new_uninit();
+            Arc::get_mut(&mut uninit).unwrap().assume_init_mut().init(loader);
+
+            let cld = uninit.assume_init();
+            self.array.push(cld.clone());
+
+            cld
+        }
     }
 }

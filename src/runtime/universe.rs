@@ -16,23 +16,27 @@
 
 use std::sync::OnceLock;
 
+use crate::gc::managed_heap::ManagedHeap;
+
 static UNIVERSE: OnceLock<Universe> = OnceLock::new();
 
 #[derive(Debug)]
-pub struct Universe {}
+pub struct Universe {
+    heap: ManagedHeap
+}
 
 impl Universe {
     pub fn initialize() {
-        UNIVERSE.set(Self::new()).unwrap();
-    }
-
-    fn new() -> Self {
-        Self {}
+        unimplemented!()
     }
 }
 
 impl Universe {
     fn universe() -> &'static Universe {
         UNIVERSE.get().expect("Should call Universe::initialize() in advance.")
+    }
+
+    pub fn heap() -> &'static ManagedHeap {
+        &Self::universe().heap
     }
 }

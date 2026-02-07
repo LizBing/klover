@@ -14,11 +14,8 @@
  * limitations under the License.
  */
 
-use std::{cell::LazyCell, sync::{LazyLock, OnceLock}};
 
 use crate::{memory::{bumper::Bumper, mem_region::MemRegion, virt_space::VirtSpace}, utils::global_defs::HeapWord};
-
-static MANAGED_HEAP: OnceLock<ManagedHeap> = OnceLock::new();
 
 #[derive(Debug)]
 pub struct ManagedHeap {
@@ -30,11 +27,7 @@ unsafe impl Send for ManagedHeap {}
 unsafe impl Sync for ManagedHeap {}
 
 impl ManagedHeap {
-    pub fn initialize(word_size: usize) {
-        MANAGED_HEAP.set(Self::new(word_size)).unwrap()
-    }
-
-    fn new(word_size: usize) -> Self {
+    pub fn new(word_size: usize) -> Self {
         let mut vm = VirtSpace::new(word_size, VirtSpace::page_byte_size(), false);
         vm.expand_by(word_size);
         
@@ -48,10 +41,6 @@ impl ManagedHeap {
 }
 
 impl ManagedHeap {
-    pub fn heap() -> &'static ManagedHeap {
-        MANAGED_HEAP.get().unwrap()
-    }
-
     pub fn description() -> &'static str {
         "Do-nothing GC"
     }
@@ -61,15 +50,6 @@ impl ManagedHeap {
     }
 
     pub fn mem_allocation(&self, word_size: usize, do_zero: bool) -> *const HeapWord {
-        let res = self._bumper.par_alloc_with_size(word_size);
-        assert!(!res.is_null(), "out of memory(managed heap).");
-
-        if do_zero {
-            unsafe {
-                MemRegion::with_size(res as *const _, word_size).memset(0);
-            }
-        }
-
-        res
+        unimplemented!()
     }
 }

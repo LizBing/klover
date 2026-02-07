@@ -22,7 +22,7 @@ use crate::oops::{mark_word::MarkWord, obj_desc::ObjDesc};
 #[derive(Debug, Clone, Copy)]
 pub struct OOP(*const ObjDesc);
 
-unsafe impl Send for OOP {}
+// unsafe impl Send for OOP {}
 
 impl OOP {
     pub fn null() -> OOP {

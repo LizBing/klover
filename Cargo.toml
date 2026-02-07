@@ -15,3 +15,4 @@ crossbeam = "0.8.4"
 modular-bitfield = "0.13.1"
 paste = "1.0.15"
 region = "3.0.2"
+tokio = { version = "1.49.0", features = ["sync"]}
