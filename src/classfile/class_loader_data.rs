@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-use std::ptr::NonNull;
+use std::{ptr::{NonNull, null_mut}, sync::atomic::AtomicPtr};
 
-use crate::{gc::oop_storage_actor::CLD_STORAGE_INDEX, init_ll, oops::{klass::Klass, oop_handle::OOPHandle, oop_hierarchy::OOP}, utils::linked_list::{LinkedList, LinkedListNode}};
+use crate::{gc::oop_storage_actor::CLD_STORAGE_INDEX, init_ll, metaspace::metaspace::MSChunk, oops::{klass::Klass, oop_handle::OOPHandle, oop_hierarchy::OOP}, utils::linked_list::{LinkedList, LinkedListNode}};
 
 #[derive(Debug)]
 pub struct ClassLoaderData {
@@ -24,6 +24,8 @@ pub struct ClassLoaderData {
 
     pub mirror: OOPHandle,
     klasses: LinkedList<Klass>,
+
+    ms_chunk: AtomicPtr<MSChunk>
 }
 
 impl ClassLoaderData {
@@ -32,7 +34,9 @@ impl ClassLoaderData {
             cld_graph_node: LinkedListNode::new(),
 
             mirror: OOPHandle::with_storage(CLD_STORAGE_INDEX).await,
-            klasses: LinkedList::new()
+            klasses: LinkedList::new(),
+
+            ms_chunk: AtomicPtr::new(null_mut())
         };
         init_ll!(&mut self.klasses, Klass, cld_node);
 
@@ -44,7 +48,9 @@ impl ClassLoaderData {
             cld_graph_node: LinkedListNode::new(),
 
             mirror: OOPHandle::new(),
-            klasses: LinkedList::new()
+            klasses: LinkedList::new(),
+
+            ms_chunk: AtomicPtr::new(null_mut())
         };
 
         init_ll!(&mut self.klasses, Klass, cld_node);
@@ -53,7 +59,7 @@ impl ClassLoaderData {
 
 impl ClassLoaderData {
     // returns false if duplicated
-    pub fn register_klass(&mut self, klass: NonNull<Klass>) -> bool {
+    pub fn register_klass(&mut self, mut klass: NonNull<Klass>) -> bool {
         if self.klasses.iterate(|iter| -> Option<()> {
             if iter.value().name() == unsafe { klass.as_ref().name() } {
                 Some(())
@@ -62,7 +68,7 @@ impl ClassLoaderData {
             return false;
         }
 
-        unsafe { self.klasses.push_back(klass.as_ref()); }
+        unsafe { self.klasses.push_back(klass.as_mut()); }
 
         true
     }
