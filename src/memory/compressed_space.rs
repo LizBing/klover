@@ -16,54 +16,106 @@
 
 use std::ptr::null;
 
-use crate::{memory::virt_space::VirtSpace, utils::global_defs::{Address, G, LOG_BYTES_PER_WORD, Word}};
+use crate::{align_down, memory::virt_space::VirtSpace, utils::global_defs::{Address, ByteSize, G, LOG_BYTES_PER_WORD, Word, WordSize}};
 
 const SLOT_BYTE_SIZE: usize = size_of::<Word>();
-const MAX_CAPACITY_IN_BYTE: usize = 32 * G - SLOT_BYTE_SIZE;
 
-pub type NarrowPtr = u32;
+pub type NarrowAddr = u32;
+
+#[repr(transparent)]
+#[derive(Debug, Clone, Copy)]
+pub struct NarrowPtr(NarrowAddr);
+
+impl NarrowPtr {
+    pub const fn null() -> Self {
+        NarrowPtr(0)
+    }
+
+    pub const fn new(value: NarrowAddr) -> Self {
+        Self(value)
+    }
+
+    pub const fn value(self) -> NarrowAddr {
+        self.0
+    }
+
+    pub const fn is_null(self) -> bool {
+        self.value() == 0
+    }
+}
 
 // A wrapper for VirtSpace
 #[derive(Debug)]
 pub struct CompressedSpace {
-    _vs: VirtSpace,
+    vs: VirtSpace,
 }
 
 impl CompressedSpace {
     pub fn new(vs: VirtSpace) -> Self {
-        assert!(vs.reserved().size_in_bytes() <= MAX_CAPACITY_IN_BYTE);
+        assert!(vs.reserved().size.value() <= Self::max_capacity().value());
 
         Self {
-            _vs: vs
+            vs
         }
     }
 }
 
 impl CompressedSpace {
-    pub fn null_narrow() -> NarrowPtr { 0 }
+    pub fn max_capacity() -> WordSize {
+        WordSize::from(ByteSize(align_down!(32 * G - SLOT_BYTE_SIZE, VirtSpace::page_byte_size())))
+    }
 
     pub fn vs(&self) -> &VirtSpace {
-        &self._vs
+        &self.vs
     }
 }
 
 impl CompressedSpace {
     #[inline(always)]
     pub fn base(&self) -> Address {
-        self._vs.reserved().start() as _
+        self.vs.reserved().start as _
     } 
 
     #[inline(always)]
     pub fn encode<T>(&self, ptr: *const T) -> NarrowPtr {
-        if ptr.is_null() { return Self::null_narrow(); }
+        if ptr.is_null() { return NarrowPtr::null() }
 
-        (((ptr as Address) - self.base() + SLOT_BYTE_SIZE) >> LOG_BYTES_PER_WORD) as _
+        NarrowPtr((((ptr as Address) - self.base() + SLOT_BYTE_SIZE) >> LOG_BYTES_PER_WORD) as _)
     }
 
     #[inline(always)]
     pub fn decode<T>(&self, nptr: NarrowPtr) -> *const T {
-        if nptr == Self::null_narrow() { return null(); }
+        if nptr.is_null() { return null(); }
 
-        (((nptr as Address) << LOG_BYTES_PER_WORD) - SLOT_BYTE_SIZE + self.base()) as _
+        (((nptr.value() as Address) << LOG_BYTES_PER_WORD) - SLOT_BYTE_SIZE + self.base()) as _
+    }
+}
+
+#[derive(Debug)]
+pub struct NarrowEncoder {
+    base: Address
+}
+
+impl NarrowEncoder {
+    pub fn new(base: Address) -> Self {
+        Self {
+            base: base
+        }
+    }
+}
+
+impl NarrowEncoder {
+    #[inline(always)]
+    pub fn encode<T>(&self, ptr: *const T) -> NarrowPtr {
+        if ptr.is_null() { return NarrowPtr::null() }
+
+        NarrowPtr((((ptr as Address) - self.base + SLOT_BYTE_SIZE) >> LOG_BYTES_PER_WORD) as _)
+    }
+
+    #[inline(always)]
+    pub fn decode<T>(&self, nptr: NarrowPtr) -> *const T {
+        if nptr.is_null() { return null(); }
+
+        (((nptr.value() as Address) << LOG_BYTES_PER_WORD) - SLOT_BYTE_SIZE + self.base) as _
     }
 }

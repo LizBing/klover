@@ -21,8 +21,8 @@ use crate::{gc::oop_storage_actor::CLD_STORAGE_INDEX, init_ll, oops::{klass::Kla
 #[derive(Debug)]
 pub struct ClassLoaderData {
     pub cld_graph_node: LinkedListNode<Self>,
-    pub mirror: OOPHandle,
 
+    pub mirror: OOPHandle,
     klasses: LinkedList<Klass>,
 }
 

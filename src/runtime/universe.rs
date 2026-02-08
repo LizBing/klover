@@ -16,14 +16,16 @@
 
 use std::sync::OnceLock;
 
-use crate::{gc::managed_heap::ManagedHeap, runtime::actor_mailbox::ActorMailbox};
+use crate::{gc::managed_heap::ManagedHeap, memory::compressed_space::NarrowEncoder, runtime::{actor_mailboxes::ActorMailboxes, vm_flags::VMFlags}};
 
 static UNIVERSE: OnceLock<Universe> = OnceLock::new();
 
 #[derive(Debug)]
 pub struct Universe {
     heap: ManagedHeap,
-    actor_sender: ActorMailbox
+    ms_narrow_encoder: NarrowEncoder,
+    actor_mailboxes: ActorMailboxes,
+    vm_flags: VMFlags
 }
 
 impl Universe {
@@ -41,7 +43,15 @@ impl Universe {
         &Self::this().heap
     }
 
-    pub fn actor_mailbox() -> &'static ActorMailbox {
-        &Self::this().actor_sender
+    pub fn actor_mailboxes() -> &'static ActorMailboxes {
+        &Self::this().actor_mailboxes
+    }
+
+    pub fn vm_flags() -> &'static VMFlags {
+        &Self::this().vm_flags
+    }
+
+    pub fn ms_narrow_encoder() -> &'static NarrowEncoder {
+        &Self::this().ms_narrow_encoder
     }
 }

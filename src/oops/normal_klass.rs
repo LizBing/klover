@@ -14,29 +14,35 @@
  * limitations under the License.
  */
 
-use std::sync::Arc;
+use std::{cell::OnceCell, ptr::NonNull, sync::Arc};
+
+use cafebabe::{ClassAccessFlags, ClassFile};
 
 use crate::classfile::class_loader_data::ClassLoaderData;
 
 #[derive(Debug)]
-pub struct NormalKlass {
-    name: String,
-    loader: Arc<ClassLoaderData>
+pub struct NormalKlass<'a> {
+    raw_bytes: Vec<u8>,
+    parsed: OnceCell<ClassFile<'a>>,
+    loader: NonNull<ClassLoaderData>,
 }
 
-impl NormalKlass {
-    pub fn new(stream: Vec<u8>, loader: Arc<ClassLoaderData>) -> Result<Self, String> {
-        let parsed = match cafebabe::parse_class(stream.as_slice()) {
-            Ok(x) => x,
-
-            Err(_) => return Err(String::from("bad class file stream"))
-        };
-
-        let klass = Self {
-            name: parsed.this_class.to_string(),
+impl<'a> NormalKlass<'a> {
+    pub fn new(stream: Vec<u8>, loader: NonNull<ClassLoaderData>) -> Self {
+        Self {
+            raw_bytes: stream,
+            parsed: OnceCell::new(),
             loader: loader
-        };
+        }
+    }
 
-        Ok(klass)
+    pub fn init(&'a self) -> bool {
+        let parsed = match cafebabe::parse_class(&self.raw_bytes) {
+            Ok(x) => x,
+            Err(_) => return false
+        };
+        self.parsed.set(parsed).unwrap();
+
+        true
     }
 }

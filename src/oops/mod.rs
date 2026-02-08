@@ -25,3 +25,5 @@ pub mod array_klass;
 pub mod mark_word;
 pub mod normal_klass;
 pub mod prim_klass;
+
+pub mod symbol;

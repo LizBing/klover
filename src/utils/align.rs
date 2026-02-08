@@ -29,13 +29,6 @@ macro_rules! is_arch_aligned {
 }
 
 #[macro_export]
-macro_rules! is_page_aligned {
-    ($n: expr) => {
-        crate::is_aligned!($n, crate::memory::virt_space::VirtSpace::page_size())
-    };
-}
-
-#[macro_export]
 macro_rules! align_up {
     ($n: expr, $a: expr) => {
         (($n + (($a) - 1)) & !(($a) - 1))
@@ -46,12 +39,5 @@ macro_rules! align_up {
 macro_rules! align_down {
     ($n: expr, $a: expr) => {
         ($n & !(($a) - 1))
-    };
-}
-
-#[macro_export]
-macro_rules! heap_word_align_up {
-    ($n:expr) => {
-        crate::align_up!($n, size_of::<crate::utils::global_defs::HeapWord>())
     };
 }

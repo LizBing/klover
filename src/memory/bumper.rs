@@ -14,31 +14,45 @@
  * limitations under the License.
  */
 
-use std::{mem::MaybeUninit, ptr::{null, null_mut}, sync::atomic::{AtomicPtr, Ordering}};
+use std::{mem::MaybeUninit, ptr::null_mut, sync::atomic::{AtomicPtr, Ordering}};
 
-use crate::{heap_word_align_up, memory::mem_region::MemRegion, utils::global_defs::{HeapWord, LOG_BYTES_PER_WORD, word_size_of}};
+use crate::{memory::mem_region::MemRegion, utils::global_defs::{ByteSize, HeapWord, WordSize}};
 
 #[derive(Debug)]
 pub struct Bumper {
-    _mr: MemRegion,
-    _top: AtomicPtr<HeapWord>,
+    mr: MemRegion,
+    top: AtomicPtr<HeapWord>,
 }
 
 impl Bumper {
     pub fn new(mr: MemRegion) -> Self {
         Self {
-            _mr: mr.clone(),
-            _top: AtomicPtr::new(mr.start() as _)
+            mr: mr.clone(),
+            top: AtomicPtr::new(mr.start as _)
         }
     }
 }
 
 impl Bumper {
-    pub fn alloc_with_size(&mut self, word_size: usize) -> *mut HeapWord {
-        let top = self._top.get_mut();
+    pub fn mr(&self) -> &MemRegion {
+        &self.mr
+    }
 
-        let new_top = unsafe { top.add(word_size) };
-        if new_top >= self._mr.end() as _ {
+    pub fn allocated(&self) -> WordSize {
+        MemRegion::with_end(self.mr.start, self.top.load(Ordering::Relaxed)).size
+    }
+
+    pub fn remaining(&self) -> WordSize {
+        MemRegion::with_end(self.top.load(Ordering::Relaxed), self.mr.end()).size
+    }
+}
+
+impl Bumper {
+    pub fn alloc_with_size(&mut self, size: WordSize) -> *mut HeapWord {
+        let top = self.top.get_mut();
+
+        let new_top = unsafe { top.add(size.value()) };
+        if new_top >= self.mr.end() as _ {
             return null_mut();
         }
 
@@ -49,19 +63,19 @@ impl Bumper {
     }
     
     pub fn alloc<T: Sized>(&mut self) -> *mut MaybeUninit<T> {
-        self.alloc_with_size(word_size_of::<T>()) as _
+        self.alloc_with_size(WordSize::from(ByteSize(size_of::<T>()))) as _
     }
 
-    pub fn par_alloc_with_size(&self, word_size: usize) -> *mut HeapWord {
-        let mut top = self._top.load(Ordering::Relaxed);
+    pub fn par_alloc_with_size(&self, size: WordSize) -> *mut HeapWord {
+        let mut top = self.top.load(Ordering::Relaxed);
         let res;
         loop {
-            let new_top = unsafe { top.add(word_size) };
-            if new_top >= self._mr.end() as _ {
+            let new_top = unsafe { top.add(size.value()) };
+            if new_top >= self.mr.end() as _ {
                 return null_mut();
             }
 
-            match self._top.compare_exchange_weak(top, new_top, Ordering::Relaxed, Ordering::Relaxed) {
+            match self.top.compare_exchange_weak(top, new_top, Ordering::Relaxed, Ordering::Relaxed) {
                 Ok(_) => {
                     res = top;
                     break;
@@ -77,6 +91,6 @@ impl Bumper {
     }
 
     pub fn par_alloc<T: Sized>(&self) -> *mut MaybeUninit<T> {
-        self.par_alloc_with_size(word_size_of::<T>()) as _
+        self.par_alloc_with_size(WordSize::from(ByteSize(size_of::<T>()))) as _
     }
 }

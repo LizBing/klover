@@ -18,7 +18,7 @@ use std::ptr::{NonNull, null_mut};
 
 use tokio::sync::mpsc;
 
-use crate::{gc::oop_storage_actor::OOPStorageMsg, oops::{access::{Access, DECORATOR_IN_NATIVE, DECORATOR_INTERNAL_NONCOMPRESSED, DECORATOR_MO_VOLATILE}, oop_hierarchy::OOP}, runtime::{actor_mailbox::ActorMailbox, universe::Universe}};
+use crate::{gc::oop_storage_actor::OOPStorageMsg, oops::{access::{Access, DECORATOR_IN_NATIVE, DECORATOR_INTERNAL_NONCOMPRESSED, DECORATOR_MO_VOLATILE}, oop_hierarchy::OOP}, runtime::{actor_mailboxes::ActorMailboxes, universe::Universe}};
 
 #[derive(Debug)]
 pub struct OOPHandle {
@@ -45,7 +45,7 @@ impl OOPHandle {
         let (tx, mut rx) = mpsc::channel(1);
         let msg = OOPStorageMsg::Allocate { index: storage_index, reply_tx: tx };
 
-        Universe::actor_mailbox().send_oop_storage(msg);
+        Universe::actor_mailboxes().send_oop_storage(msg);
 
         *self = Self {
             raw: unsafe { rx.recv().await.unwrap().as_mut() },
@@ -58,7 +58,7 @@ impl Drop for OOPHandle {
     fn drop(&mut self) {
         if !self.raw.is_null() {
             let msg = OOPStorageMsg::Free { index: self.storage_index, addr: unsafe { NonNull::new_unchecked(self.raw) } };
-            Universe::actor_mailbox().send_oop_storage(msg);
+            Universe::actor_mailboxes().send_oop_storage(msg);
         }
         
     }

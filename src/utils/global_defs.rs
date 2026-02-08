@@ -14,10 +14,7 @@
  * limitations under the License.
  */
 
-use core::fmt;
-use std::ptr::null;
-
-use crate::heap_word_align_up;
+use crate::align_up;
 
 pub type Address = usize;
 
@@ -27,73 +24,33 @@ pub type Word = *const WordImpl;
 pub struct HeapWordImpl;
 pub type HeapWord = *const HeapWordImpl;
 
-pub const fn word_size_of<T: Sized>() -> usize {
-    into_word_size(size_of::<T>())
-}
-
-pub const fn into_word_size(byte_size: usize) -> usize {
-    heap_word_align_up!(byte_size) >> LOG_BYTES_PER_WORD
-}
-
-pub const fn into_byte_size(word_size: usize) -> usize {
-    word_size << LOG_BYTES_PER_WORD
-}
-
-/*
-#[repr(transparent)]
-#[derive(Clone, Copy, Debug)]
-pub struct HeapAddress(*const HeapWord);
-
-impl HeapAddress {
-    pub fn new<T: Into<*const HeapWord>>(n: T) -> Self {
-        Self(n.into())
-    }
-
-    pub fn as_ptr<T>(self) -> *const T {
-        self.0 as _
-    }
-
-    pub fn is_null(self) -> bool {
-        self.0 == null()
-    }
-
-    pub fn equals(left: Self, right: Self) -> bool {
-        left.0 == right.0
-    }
-
-    pub fn diff_in_bytes(left: Self, right: Self) -> isize {
-        left.0 as isize - right.0 as isize
-    }
-
-    pub fn diff_in_words(left: Self, right: Self) -> isize {
-        Self::diff_in_bytes(left, right) >> LOG_BYTES_PER_WORD
-    }
-
-    pub fn delta_in_bytes(left: Self, right: Self) -> usize {
-        assert!(left.0 >= right.0, "left({}) should be greater than right({})", left, right);
-
-        left.0 as usize - right.0 as usize
-    }
-
-    pub fn delta_in_words(left: Self, right: Self) -> usize {
-        Self::delta_in_bytes(left, right) >> LOG_BYTES_PER_WORD
-    }
-
-    pub fn offset_in_bytes(self, offs: isize) -> Self {
-        Self::new(self.0.wrapping_byte_offset(offs))
-    }
-
-    pub fn offset_in_words(self, offs: isize) -> Self {
-        Self::new(self.0.wrapping_offset(offs))
+#[derive(Debug, Clone, Copy)]
+pub struct ByteSize(pub usize);
+impl From<WordSize> for ByteSize {
+    #[inline]
+    fn from(value: WordSize) -> Self {
+        Self(value.0 << LOG_BYTES_PER_WORD)
     }
 }
 
-impl fmt::Display for HeapAddress {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:p}", self.0)
+impl ByteSize {
+    #[inline]
+    pub fn value(self) -> usize { self.0 }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct WordSize(pub usize);
+impl From<ByteSize> for WordSize {
+    #[inline]
+    fn from(value: ByteSize) -> Self {
+        Self(align_up!(value.0, size_of::<Word>()) >> LOG_BYTES_PER_WORD)
     }
 }
-*/
+
+impl WordSize {
+    #[inline]
+    pub fn value(self) -> usize { self.0 }
+}
 
 pub const LOG_BYTES_PER_WORD: i32 = 3;
 pub const LOG_BITS_PER_BYTE: i32 = 3;
@@ -103,13 +60,6 @@ pub const LOG_BITS_PER_INT: i32 = LOG_BITS_PER_BYTE + LOG_BYTES_PER_INT;
 pub const K: usize = 1024;
 pub const M: usize = K * K;
 pub const G: usize = M * K;
-
-#[macro_export]
-macro_rules! PTR_FORMAT {
-    () => {
-        "{:p}"
-    };
-}
 
 pub trait JavaPrimType: Copy {}
 macro_rules! define_java_prim_types {

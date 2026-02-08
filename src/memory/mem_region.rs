@@ -14,76 +14,59 @@
  * limitations under the License.
  */
 
-use std::{ptr::{null, null_mut}};
+use std::{marker::PhantomData, ptr::{null, null_mut}};
 
-use crate::{memory::virt_space::VirtSpace, utils::global_defs::{HeapWord, LOG_BYTES_PER_WORD}};
+use crate::{memory::virt_space::VirtSpace, utils::global_defs::{ByteSize, HeapWord, WordSize}};
 
 #[derive(Clone, Debug)]
 pub struct MemRegion {
-    _start: *mut HeapWord,
-    _word_size: usize
+    pub start: *const HeapWord,
+    pub size: WordSize,
+
+    __: PhantomData<()>     // Avoid being constructed by MemRegion {...}
 }
 
 impl MemRegion {
     pub fn new() -> Self {
         Self {
-            _start: null_mut(),
-            _word_size: 0
+            start: null_mut(),
+            size: WordSize(0),
+            __: PhantomData
         }
     }
 
-    pub fn with_size<T: Into<*const HeapWord>>(start: T, word_size: usize) -> Self {
+    pub fn with_size(start: *const HeapWord, size: WordSize) -> Self {
         Self {
-            _start: start.into() as _,
-            _word_size: word_size
+            start: start,
+            size: size,
+            __: PhantomData
         }
     }
 
-    pub fn with_end<T: Into<*const HeapWord> + Copy>(start: T, end: T) -> Self {
+    pub fn with_end(start: *const HeapWord, end: *const HeapWord) -> Self {
         Self {
-            _start: start.into() as _,
-            _word_size: unsafe {
-                end.into().offset_from_unsigned(start.into())
-            }
+            start: start,
+            size: WordSize(unsafe { end.offset_from_unsigned(start) }),
+            __: PhantomData
         }
     }
 }
 
 impl MemRegion {
-    pub fn start(&self) -> *const HeapWord {
-        self._start
-    }
-
     pub fn end(&self) -> *const HeapWord {
-        unsafe { self._start.add(self._word_size) }
+        unsafe { self.start.add(self.size.value()) }
     }
 
     pub fn last_word(&self) -> *const HeapWord {
         unsafe { self.end().sub(1) }
     }
 
-    pub fn size_in_words(&self) -> usize {
-        self._word_size
+    pub fn contains<T>(&self, addr: *const T) -> bool {
+        self.start <= addr as _ && addr < self.end() as _
     }
 
-    pub fn size_in_bytes(&self) -> usize {
-        self._word_size << LOG_BYTES_PER_WORD
-    }
-
-    pub fn contains<T: Into<*const HeapWord> + Copy>(&self, addr: T) -> bool {
-        self._start <= addr.into() as _ && addr.into() < self.end() as _
-    }
-
-    pub fn set_start<T: Into<*const HeapWord>>(&mut self, n: T) {
-        self._start = n.into() as _
-    }
-
-    pub fn set_end<T: Into<*const HeapWord>>(&mut self, n: T) {
-        self._word_size = unsafe { n.into().offset_from_unsigned(self._start) };
-    }
-
-    pub fn set_size(&mut self, word_size: usize) {
-        self._word_size = word_size
+    pub fn set_end(&mut self, n: *const HeapWord) {
+        self.size = WordSize(unsafe { n.offset_from_unsigned(self.start) });
     }
 }
 
@@ -91,7 +74,7 @@ impl MemRegion {
     pub unsafe fn touch(&self) {
         let step = VirtSpace::page_byte_size();
 
-        let mut iter = self._start as *mut HeapWord;
+        let mut iter = self.start as *mut HeapWord;
         loop {
             if !self.contains(iter as *const _) { break; }
 
@@ -102,6 +85,6 @@ impl MemRegion {
     }
 
     pub unsafe fn memset(&self, b: u8) {
-        std::ptr::write_bytes(self._start as *mut HeapWord, b, self.size_in_bytes());
+        std::ptr::write_bytes(self.start as *mut HeapWord, b, ByteSize::from(self.size).value());
     }
 }

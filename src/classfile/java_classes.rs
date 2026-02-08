@@ -27,6 +27,7 @@ pub struct JavaClasses {
     java_lang_Throwable: NonNull<Klass>
 }
 
+/*
 impl JavaClasses {
     pub async fn new() -> Self {
         let (tx, mut rx) = mpsc::channel(1);
@@ -40,3 +41,6 @@ impl JavaClasses {
         }
     }
 }
+*/
+
+impl JavaClasses {}

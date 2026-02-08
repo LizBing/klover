@@ -44,7 +44,7 @@ impl<T> LinkedListNode<T> {
         next._prev = n;
     }
 
-    fn erase(&mut self) {
+    pub unsafe fn erase(&mut self) {
         let prev = unsafe { &mut *self._prev };
         let next = unsafe { &mut *self._next };
 
@@ -53,7 +53,6 @@ impl<T> LinkedListNode<T> {
     }
 }
 
-
 #[derive(Debug)]
 pub struct LinkedList<T> {
     _field_offs: usize,
@@ -61,7 +60,7 @@ pub struct LinkedList<T> {
 }
 
 impl<T> LinkedList<T> {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             _field_offs: 0,
             _dummy: LinkedListNode::new()
@@ -146,7 +145,7 @@ impl<T> LinkedListIter<'_, T> {
     }
 
     pub fn erase(&mut self) {
-        self.pos.erase();
+        unsafe { self.pos.erase(); }
     }
 
     pub fn value(&self) -> &T {

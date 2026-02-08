@@ -16,24 +16,12 @@
 
 use tokio::sync::mpsc;
 
-pub enum GCMsg {
+pub struct MSActor {
+    rx: mpsc::UnboundedReceiver<MSMsg>
+}
+
+pub enum MSMsg {
     Shutdown,
 }
 
-unsafe impl Send for GCMsg {}
-
-pub struct GCActor {
-    rx: mpsc::UnboundedReceiver::<GCMsg>,
-}
-
-impl GCActor {
-    pub fn new(rx: mpsc::UnboundedReceiver<GCMsg>) -> Self {
-        Self {
-            rx: rx,
-        }
-    }
-}
-
-impl GCActor {
-
-}
+unsafe impl Send for MSMsg {}

@@ -17,8 +17,8 @@
 use crate::{oops::{array_klass::ArrayKlass, normal_klass::NormalKlass, prim_klass::PrimKlass}, utils::linked_list::LinkedListNode};
 
 #[derive(Debug)]
-pub enum KlassData {
-    Normal(NormalKlass),
+pub enum KlassData<'a> {
+    Normal(NormalKlass<'a>),
     Prim(PrimKlass),
     ArrayKlass(ArrayKlass)
 }
@@ -27,7 +27,7 @@ pub enum KlassData {
 pub struct Klass {
     pub cld_node: LinkedListNode<Self>,
 
-    klass_data: KlassData,
+    klass_data: KlassData<'static>,
 }
 
 impl Klass {

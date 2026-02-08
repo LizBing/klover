@@ -14,4 +14,5 @@
  * limitations under the License.
  */
 
-pub mod klass_space;
+pub mod metaspace;
+pub mod ms_actor;

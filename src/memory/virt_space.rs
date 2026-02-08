@@ -15,31 +15,29 @@
  */
 
 
-use std::{cell::Cell, fmt::Debug};
+use std::fmt::Debug;
 
 use region::{Allocation, Protection};
 
-use crate::{align_up, utils::global_defs::HeapWord};
+use crate::{align_up, utils::global_defs::{Address, ByteSize, HeapWord, WordSize}};
 
 use super::mem_region::MemRegion;
 
 pub struct VirtSpace {
-    _guard: Allocation,
+    guard: Allocation,
 
-    _reserved: MemRegion,
-    _alignment: usize,
+    reserved: MemRegion,
 
-    _commit_top: *const HeapWord,
-    _executable: bool
+    commit_top: *const HeapWord,
+    executable: bool
 }
 
 impl Debug for VirtSpace {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("VirtSpace")
-            .field("_reserved", self.reserved())
-            .field("_alignment", &self._alignment)
-            .field("_executable", &self._executable)
-            .field("(output of Self::committed())", &self.committed());
+            .field("reserved", self.reserved())
+            .field("executable", &self.executable)
+            .field("Self::committed()", &self.committed());
 
         Ok(())
     }
@@ -53,17 +51,17 @@ impl VirtSpace {
 
 impl VirtSpace {
     pub fn reserved(&self) -> &MemRegion {
-        &self._reserved
+        &self.reserved
     }
 
     pub fn committed(&self) -> MemRegion {
-        MemRegion::with_end(self.reserved().start(), self._commit_top)
+        MemRegion::with_end(self.reserved().start, self.commit_top)
     }
 }
 
 impl VirtSpace {
     fn prot_helper(&self) -> region::Protection {
-        if self._executable {
+        if self.executable {
             Protection::READ_WRITE_EXECUTE
         } else {
             Protection::READ_WRITE
@@ -72,74 +70,63 @@ impl VirtSpace {
 }
 
 impl VirtSpace {
-    pub fn new(mut word_size: usize, mut alignment: usize, executable: bool) -> Self {
-        alignment = align_up!(alignment, Self::page_byte_size());
-        word_size = align_up!(word_size, alignment);
+    pub fn new(size: WordSize, executable: bool) -> Self {
+        let byte_size = align_up!(ByteSize::from(size).value(), Self::page_byte_size());
 
-        let guard = region::alloc(word_size * size_of::<HeapWord>(), Protection::NONE).unwrap();
-    
-        let mr = MemRegion::with_size(guard.as_ptr(), word_size);
+        let guard = region::alloc(byte_size, Protection::NONE).unwrap();
+        let mr = MemRegion::with_size(guard.as_ptr(), WordSize::from(ByteSize(byte_size)));
 
         Self {
-            _guard: guard,
+            guard,
 
-            _reserved: mr.clone(),
-            _alignment: alignment,
+            reserved: mr.clone(),
+            commit_top: mr.start,
 
-            _commit_top: mr.start(),
-
-            _executable: executable
+            executable
         }
     }
 
-    pub fn with_addr<T: Into<*const HeapWord> + Copy>(addr: T, mut word_size: usize, mut alignment: usize, executable: bool) -> Self {
-        alignment = align_up!(alignment, Self::page_byte_size());
-        word_size = align_up!(word_size, alignment);
+    pub fn with_addr(addr: *const HeapWord, size: WordSize, executable: bool) -> Self {
+        let byte_size = align_up!(ByteSize::from(size).value(), Self::page_byte_size());
 
-        let guard = region::alloc_at(addr.into(), word_size * size_of::<HeapWord>(), Protection::NONE).unwrap();
+        let guard = region::alloc_at(addr, byte_size, Protection::NONE).unwrap();
 
         Self {
-            _guard: guard,
+            guard,
 
-            _reserved: MemRegion::with_size(addr, word_size),
-            _alignment: alignment,
+            reserved: MemRegion::with_size(addr, WordSize::from(ByteSize(byte_size))),
+            commit_top: addr.into(),
 
-            _commit_top: addr.into(),
-
-            _executable: executable
+            executable
         }
     }
 }
 
 impl VirtSpace {
     // Pretouch memory by invoking MemRegion::touch()
-    pub fn expand_by(&mut self, mut word_size: usize) -> bool {
-        word_size = align_up!(word_size, self._alignment);
-
+    pub fn expand_by(&mut self, size: WordSize) -> bool {
         unsafe {
-            let new_top = self._commit_top.add(word_size);
+            let new_top = self.commit_top.add(size.value());
             if !self.reserved().contains(new_top) {
                 return false;
             }
 
-            region::protect(self._commit_top, word_size * size_of::<HeapWord>(), self.prot_helper()).unwrap();
-            self._commit_top = new_top;
+            region::protect(self.commit_top, ByteSize::from(size).value(), self.prot_helper()).unwrap();
+            self.commit_top = new_top;
         }
 
         true
     }
 
-    pub fn shrink_by(&mut self, mut word_size: usize) -> bool {
-        word_size = align_up!(word_size, self._alignment);
-
+    pub fn shrink_by(&mut self, size: WordSize) -> bool {
         unsafe {
-            let new_top = self._commit_top.sub(word_size);
+            let new_top = self.commit_top.sub(size.value());
             if !self.reserved().contains(new_top) {
                 return false;
             }
         
-            region::protect(new_top, word_size * size_of::<HeapWord>(), Protection::NONE).unwrap();
-            self._commit_top = new_top;
+            region::protect(new_top, ByteSize::from(size).value(), Protection::NONE).unwrap();
+            self.commit_top = new_top;
         }
 
         true

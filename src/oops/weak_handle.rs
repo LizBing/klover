@@ -44,7 +44,7 @@ impl WeakHandle {
         let (tx, mut rx) = mpsc::channel(1);
         let msg = OOPStorageMsg::Allocate { index: storage_index, reply_tx: tx };
 
-        Universe::actor_mailbox().send_oop_storage(msg);
+        Universe::actor_mailboxes().send_oop_storage(msg);
 
         *self = Self {
             raw: unsafe { rx.recv().await.unwrap().as_mut() },
@@ -57,7 +57,7 @@ impl Drop for WeakHandle {
     fn drop(&mut self) {
         if !self.raw.is_null() {
             let msg = OOPStorageMsg::Free { index: self.storage_index, addr: unsafe { NonNull::new_unchecked(self.raw) } };
-            Universe::actor_mailbox().send_oop_storage(msg);
+            Universe::actor_mailboxes().send_oop_storage(msg);
         }
         
     }

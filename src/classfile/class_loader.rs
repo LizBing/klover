@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-use std::{ptr::NonNull, sync::Arc};
+use std::ptr::NonNull;
 
-use crate::{classfile::class_loader_data::ClassLoaderData, metaspace::klass_space::KlassSpace, oops::{klass::Klass, normal_klass::NormalKlass}};
+use crate::{classfile::class_loader_data::ClassLoaderData, oops::klass::Klass};
 
 pub struct ClassLoader;
 
@@ -26,10 +26,6 @@ impl ClassLoader {
     }
 
     pub fn load_class(loader: NonNull<ClassLoaderData>, name: String) -> Result<NonNull<Klass>, String> {
-        unimplemented!()
-    }
-
-    pub fn find_class(loader: NonNull<ClassLoaderData>, name: String) -> Result<NonNull<Klass>, String> {
         unimplemented!()
     }
 }

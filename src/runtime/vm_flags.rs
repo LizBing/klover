@@ -14,26 +14,19 @@
  * limitations under the License.
  */
 
-use tokio::sync::mpsc;
+use std::sync::LazyLock;
 
-pub enum GCMsg {
-    Shutdown,
+use crate::utils::global_defs::G;
+
+#[derive(Debug)]
+pub struct VMFlags {
+    pub xmx: LazyLock<usize>
 }
 
-unsafe impl Send for GCMsg {}
-
-pub struct GCActor {
-    rx: mpsc::UnboundedReceiver::<GCMsg>,
-}
-
-impl GCActor {
-    pub fn new(rx: mpsc::UnboundedReceiver<GCMsg>) -> Self {
+impl VMFlags {
+    pub fn new() -> Self {
         Self {
-            rx: rx,
+            xmx: LazyLock::new(|| 1 * G)
         }
     }
-}
-
-impl GCActor {
-
 }

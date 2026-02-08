@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
-pub mod actor_mailbox;
+pub mod actor_mailboxes;
+pub mod vm_flags;
 pub mod vm_thread;
 pub mod universe;

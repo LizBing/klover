@@ -16,20 +16,25 @@
 
 use tokio::sync::mpsc;
 
-use crate::{classfile::cld_actor::CLDMsg, gc::oop_storage_actor::OOPStorageMsg};
+use crate::{classfile::cld_actor::CLDMsg, gc::oop_storage_actor::OOPStorageMsg, metaspace::ms_actor::MSMsg};
 
 #[derive(Debug)]
-pub struct ActorMailbox {
+pub struct ActorMailboxes {
     cld_tx: mpsc::UnboundedSender<CLDMsg>,
     oop_storage_tx: mpsc::UnboundedSender<OOPStorageMsg>,
+    ms_tx: mpsc::UnboundedSender<MSMsg>,
 }
 
-impl ActorMailbox {
+impl ActorMailboxes {
     pub fn send_cld(&self, msg: CLDMsg) {
         self.cld_tx.send(msg).unwrap()
     }
 
     pub fn send_oop_storage(&self, msg: OOPStorageMsg) {
         self.oop_storage_tx.send(msg).unwrap()
+    }
+
+    pub fn send_metaspace(&self, msg: MSMsg) {
+        self.ms_tx.send(msg).unwrap()
     }
 }

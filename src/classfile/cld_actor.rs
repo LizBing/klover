@@ -24,7 +24,7 @@ pub enum CLDMsg {
 
     RegisterKlass { loader: NonNull<ClassLoaderData>, klass: NonNull<Klass>, reply_tx: mpsc::Sender<bool> },
 
-    GetCLD { loader: OOP, reply_tx: mpsc::Sender<NonNull<ClassLoaderData>> },
+    FindCLD { loader: OOP, reply_tx: mpsc::Sender<Option<NonNull<ClassLoaderData>>> },
 
     Shutdown
 }
@@ -59,7 +59,10 @@ impl CLDActor {
                     reply_tx.send(res).await.unwrap();
                 }
 
-                CLDMsg::GetCLD { loader, reply_tx } => {}
+                CLDMsg::FindCLD { loader, reply_tx } => {
+                    let res = self.graph.find_cld(loader);
+                    reply_tx.send(res).await.unwrap();
+                }
 
                 CLDMsg::Shutdown => break
             }
