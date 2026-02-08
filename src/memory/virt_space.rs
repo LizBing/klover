@@ -19,7 +19,7 @@ use std::fmt::Debug;
 
 use region::{Allocation, Protection};
 
-use crate::{align_up, utils::global_defs::{Address, ByteSize, HeapWord, WordSize}};
+use crate::{align_up, utils::global_defs::{ByteSize, HeapWord, WordSize}};
 
 use super::mem_region::MemRegion;
 
@@ -29,7 +29,7 @@ pub struct VirtSpace {
     reserved: MemRegion,
 
     commit_top: *const HeapWord,
-    executable: bool
+    executable: bool,
 }
 
 impl Debug for VirtSpace {
@@ -44,8 +44,8 @@ impl Debug for VirtSpace {
 }
 
 impl VirtSpace {
-    pub fn page_byte_size() -> usize {
-        region::page::size()
+    pub fn page_size() -> ByteSize {
+        ByteSize(region::page::size())
     }
 }
 
@@ -70,11 +70,11 @@ impl VirtSpace {
 }
 
 impl VirtSpace {
-    pub fn new(size: WordSize, executable: bool) -> Self {
-        let byte_size = align_up!(ByteSize::from(size).value(), Self::page_byte_size());
+    pub fn new(size: ByteSize, executable: bool) -> Self {
+        let aligned = ByteSize(align_up!(size.value(), Self::page_size().value()));
 
-        let guard = region::alloc(byte_size, Protection::NONE).unwrap();
-        let mr = MemRegion::with_size(guard.as_ptr(), WordSize::from(ByteSize(byte_size)));
+        let guard = region::alloc(aligned.value(), Protection::NONE).unwrap();
+        let mr = MemRegion::with_size(guard.as_ptr(), aligned.into());
 
         Self {
             guard,
@@ -86,15 +86,15 @@ impl VirtSpace {
         }
     }
 
-    pub fn with_addr(addr: *const HeapWord, size: WordSize, executable: bool) -> Self {
-        let byte_size = align_up!(ByteSize::from(size).value(), Self::page_byte_size());
+    pub fn with_addr(addr: *const HeapWord, size: ByteSize, executable: bool) -> Self {
+        let aligned = ByteSize(align_up!(size.value(), Self::page_size().value()));
 
-        let guard = region::alloc_at(addr, byte_size, Protection::NONE).unwrap();
+        let guard = region::alloc_at(addr, aligned.value(), Protection::NONE).unwrap();
 
         Self {
             guard,
 
-            reserved: MemRegion::with_size(addr, WordSize::from(ByteSize(byte_size))),
+            reserved: MemRegion::with_size(addr, aligned.into()),
             commit_top: addr.into(),
 
             executable
@@ -104,28 +104,32 @@ impl VirtSpace {
 
 impl VirtSpace {
     // Pretouch memory by invoking MemRegion::touch()
-    pub fn expand_by(&mut self, size: WordSize) -> bool {
+    pub fn expand_by(&mut self, size: ByteSize) -> bool {
+        let aligned = WordSize::from(size);
+
         unsafe {
-            let new_top = self.commit_top.add(size.value());
+            let new_top = self.commit_top.add(aligned.value());
             if !self.reserved().contains(new_top) {
                 return false;
             }
 
-            region::protect(self.commit_top, ByteSize::from(size).value(), self.prot_helper()).unwrap();
+            region::protect(self.commit_top, ByteSize::from(aligned).value(), self.prot_helper()).unwrap();
             self.commit_top = new_top;
         }
 
         true
     }
 
-    pub fn shrink_by(&mut self, size: WordSize) -> bool {
+    pub fn shrink_by(&mut self, size: ByteSize) -> bool {
+        let aligned = WordSize::from(size);
+
         unsafe {
-            let new_top = self.commit_top.sub(size.value());
+            let new_top = self.commit_top.sub(aligned.value());
             if !self.reserved().contains(new_top) {
                 return false;
             }
         
-            region::protect(new_top, ByteSize::from(size).value(), Protection::NONE).unwrap();
+            region::protect(new_top, ByteSize::from(aligned).value(), Protection::NONE).unwrap();
             self.commit_top = new_top;
         }
 

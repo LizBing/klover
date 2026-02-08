@@ -15,7 +15,7 @@
  */
 
 
-use crate::{memory::{bumper::Bumper, mem_region::MemRegion, virt_space::VirtSpace}, utils::global_defs::{HeapWord, WordSize}};
+use crate::{memory::{bumper::Bumper, mem_region::MemRegion, virt_space::VirtSpace}, utils::global_defs::{ByteSize, HeapWord, WordSize}};
 
 #[derive(Debug)]
 pub struct ManagedHeap {
@@ -27,9 +27,9 @@ unsafe impl Send for ManagedHeap {}
 unsafe impl Sync for ManagedHeap {}
 
 impl ManagedHeap {
-    pub fn new(size: WordSize) -> Self {
+    pub fn new(size: ByteSize) -> Self {
         let mut vm = VirtSpace::new(size, false);
-        vm.expand_by(vm.reserved().size);
+        vm.expand_by(vm.reserved().size.into());
         
         let committed = vm.committed();
 

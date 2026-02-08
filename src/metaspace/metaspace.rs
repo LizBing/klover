@@ -14,35 +14,107 @@
  * limitations under the License.
  */
 
-use crate::{init_ll, memory::{compressed_space::CompressedSpace, mem_region::MemRegion, virt_space::VirtSpace}, runtime::universe::Universe, utils::{global_defs::{ByteSize, WordSize}, linked_list::{LinkedList, LinkedListNode}}};
+use std::ptr::NonNull;
+
+use crate::{align_up, init_ll, is_aligned, memory::{bumper::Bumper, compressed_space::{CompressedSpace, NarrowEncoder}, mem_region::MemRegion, virt_space::VirtSpace}, runtime::universe::Universe, utils::{global_defs::{ByteSize, K, WordSize}, linked_list::{LinkedList, LinkedListNode}}};
+
+pub const SMALL_MSCHUNK_SIZE: ByteSize = ByteSize(8 * K);
 
 #[derive(Debug)]
 pub struct Metaspace {
     comp_space: CompressedSpace,
-    cs_chunk_list: LinkedList<MetaChunk>,
-
-    // code_space maybe...
+    chunk_list: LinkedList<MSChunk>,
+    free_list: LinkedList<MSChunk>,
 }
 
 impl Metaspace {
     pub fn new() -> Self {
-        let cvs = VirtSpace::new(WordSize::from(ByteSize(*Universe::vm_flags().xmx)), false);
+        // ensure
+        assert!(is_aligned!(SMALL_MSCHUNK_SIZE.value(), VirtSpace::page_size().value()));
+
+        let cvs = VirtSpace::new(*Universe::vm_flags().xmx, false);
 
         Self {
             comp_space: CompressedSpace::new(cvs),
-            cs_chunk_list: LinkedList::new()
+            chunk_list: LinkedList::new(),
+            free_list: LinkedList::new()
         }
     }
 
     pub fn init(&mut self) {
-        init_ll!(&mut self.cs_chunk_list, MetaChunk, node)
+        init_ll!(&mut self.chunk_list, MSChunk, chunk_list_node);
+        init_ll!(&mut self.free_list, MSChunk, owning_node);
     }
 }
 
-impl Metaspace {}
+impl Metaspace {
+    pub fn create_narrow_encoder(&self) -> NarrowEncoder {
+        NarrowEncoder::new(self.comp_space.base())
+    }
+
+    pub fn alloc_small_chunk(&mut self) -> NonNull<MSChunk> {
+        if let Some(x) = self.free_list.pop_back() {
+            x.bumper.clear();
+            unsafe {
+                return NonNull::new_unchecked(x as *const _ as _);
+            }
+        }
+
+        let vs = &mut self.comp_space.vs;
+
+        let start = vs.committed().end();
+        assert!(vs.expand_by(SMALL_MSCHUNK_SIZE), "out of memory(metaspace)");
+
+        let chunk = Box::leak(Box::new(MSChunk::new(MemRegion::with_size(start, SMALL_MSCHUNK_SIZE.into()))));
+        self.chunk_list.push_back(chunk);
+
+        unsafe { NonNull::new_unchecked(chunk) }
+    }
+
+    pub fn alloc_sized_chunk(&mut self, size: ByteSize) -> NonNull<MSChunk> {
+        let chunk_size = ByteSize(align_up!(size.value(), SMALL_MSCHUNK_SIZE.value()));
+
+        if chunk_size.value() == SMALL_MSCHUNK_SIZE.value() {
+            if let Some(x) = self.free_list.pop_back() {
+                x.bumper.clear();
+                unsafe {
+                    return NonNull::new_unchecked(x as *const _ as _);
+                }
+            }
+        }
+
+        let vs = &mut self.comp_space.vs;
+        
+        let start = vs.committed().end();
+        assert!(vs.expand_by(chunk_size), "out of memory(metaspace)");
+
+        let chunk = Box::leak(Box::new(MSChunk::new(MemRegion::with_size(start, chunk_size.into()))));
+        self.chunk_list.push_back(chunk);
+
+        unsafe { NonNull::new_unchecked(chunk) }
+    }
+
+    pub fn free_chunk(&mut self, mut c: NonNull<MSChunk>) {
+        unsafe {
+            self.free_list.push_back(c.as_mut());
+        }
+    }
+}
 
 #[derive(Debug)]
-pub struct MetaChunk {
-    pub(super) node: LinkedListNode<Self>,
-    mr: MemRegion
+pub struct MSChunk {
+    pub(super) chunk_list_node: LinkedListNode<Self>,
+    pub owning_node: LinkedListNode<Self>,
+
+    pub bumper: Bumper
+}
+
+impl MSChunk {
+    fn new(mr: MemRegion) -> Self {
+        Self {
+            chunk_list_node: LinkedListNode::new(),
+            owning_node: LinkedListNode::new(),
+            bumper: Bumper::new(mr)
+        }
+    }
 }

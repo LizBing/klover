@@ -20,59 +20,59 @@ use std::{fmt::Debug, ops::{Deref, DerefMut}, ptr::null_mut};
 
 #[derive(Debug)]
 pub struct LinkedListNode<T> {
-    _prev: *mut Self,
-    _next: *mut Self,
+    prev: *mut Self,
+    next: *mut Self,
 }
 
 impl<T> LinkedListNode<T> {
     pub const fn new() -> Self {
         Self {
-            _prev: null_mut(),
-            _next: null_mut(),
+            prev: null_mut(),
+            next: null_mut(),
         }
     }
 }
 
 impl<T> LinkedListNode<T> {
     fn insert(&mut self, n: &mut Self) {
-        let next = unsafe { &mut *self._next };
+        let next = unsafe { &mut *self.next };
 
-        n._prev = self;
-        n._next = self._next;
+        n.prev = self;
+        n.next = self.next;
 
-        self._next = n;
-        next._prev = n;
+        self.next = n;
+        next.prev = n;
     }
 
     pub unsafe fn erase(&mut self) {
-        let prev = unsafe { &mut *self._prev };
-        let next = unsafe { &mut *self._next };
+        let prev = unsafe { &mut *self.prev };
+        let next = unsafe { &mut *self.next };
 
-        prev._next = next;
-        next._prev = prev;
+        prev.next = next;
+        next.prev = prev;
     }
 }
 
 #[derive(Debug)]
 pub struct LinkedList<T> {
-    _field_offs: usize,
-    _dummy: LinkedListNode<T>,
+    field_offs: usize,
+    dummy: LinkedListNode<T>,
 }
 
 impl<T> LinkedList<T> {
     pub const fn new() -> Self {
         Self {
-            _field_offs: 0,
-            _dummy: LinkedListNode::new()
+            field_offs: 0,
+            dummy: LinkedListNode::new()
         }
     }
 
     pub fn init(&mut self, field_offs: usize) {
-        let dummy_addr = &self._dummy as *const _ as *mut _;
+        let dummy_addr = &self.dummy as *const _ as *mut _;
 
         *self = Self {
-            _field_offs: field_offs,
-            _dummy: LinkedListNode { _prev: dummy_addr, _next: dummy_addr }
+            field_offs,
+            dummy: LinkedListNode { prev: dummy_addr, next: dummy_addr }
         };
     }
 }
@@ -85,52 +85,64 @@ macro_rules! init_ll {
 }
 
 impl<T> LinkedList<T> {
-    unsafe fn into_node(n: &T, offs: usize) -> &mut LinkedListNode<T> {
+    unsafe fn into_node(n: &mut T, offs: usize) -> &mut LinkedListNode<T> {
         &mut *((n as *const T).byte_add(offs) as *mut LinkedListNode<T>)
     }
 
-    unsafe fn into_owner(n: &LinkedListNode<T>, offs: usize) -> &T {
-        &*((n as *const LinkedListNode<T>).byte_sub(offs) as *const T)
+    unsafe fn into_owner(n: &mut LinkedListNode<T>, offs: usize) -> &mut T {
+        &mut *((n as *const LinkedListNode<T>).byte_sub(offs) as *mut T)
     }
 }
 
 impl<T> LinkedList<T> {
-    pub fn push_front(&mut self, n: &T) {
-        self._dummy.insert(unsafe { Self::into_node(n, self._field_offs) });
+    pub fn push_front(&mut self, n: &mut T) {
+        self.dummy.insert(unsafe { Self::into_node(n, self.field_offs) });
     }
 
-    pub fn push_back(&mut self, n: &T) {
+    pub fn push_back(&mut self, n: &mut T) {
         unsafe {
-            (*(self._dummy._prev)).insert(Self::into_node(n, self._field_offs));
+            (*(self.dummy.prev)).insert(Self::into_node(n, self.field_offs));
         }
     }
 
-    pub fn pop_front(&mut self) -> Option<&T> {
+    pub fn pop_front(&mut self) -> Option<&mut T> {
         if self.is_empty() { return None; }
 
         unsafe {
-            let next = &mut *self._dummy._next;
+            let next = &mut *self.dummy.next;
             next.erase();
 
-            Some(Self::into_owner(next, self._field_offs))
+            Some(Self::into_owner(next, self.field_offs))
         }
     }
 
-    pub fn pop_back(&mut self) -> Option<&T> {
+    pub fn pop_back(&mut self) -> Option<&mut T> {
         if self.is_empty() { return None; }
 
         unsafe {
-            let prev = &mut *self._dummy._prev;
+            let prev = &mut *self.dummy.prev;
             prev.erase();
 
-            Some(Self::into_owner(prev, self._field_offs))
+            Some(Self::into_owner(prev, self.field_offs))
         }
     }
 }
 
 impl<T> LinkedList<T> {
     pub fn is_empty(&self) -> bool {
-        self._dummy._next as *const _ == &self._dummy
+        self.dummy.next as *const _ == &self.dummy
+    }
+
+    pub fn front(&self) -> Option<&T> {
+        if self.is_empty() { return None; }
+
+        unsafe { Some(Self::into_owner(&mut *self.dummy.next, self.field_offs)) }
+    }
+
+    pub fn back(&self) -> Option<&T> {
+        if self.is_empty() { return None; }
+
+        unsafe { Some(Self::into_owner(&mut *self.dummy.prev, self.field_offs)) }
     }
 }
 
@@ -148,7 +160,7 @@ impl<T> LinkedListIter<'_, T> {
         unsafe { self.pos.erase(); }
     }
 
-    pub fn value(&self) -> &T {
+    pub fn value(&mut self) -> &mut T {
         unsafe {
             LinkedList::into_owner(self.pos, self.field_offs)
         }
@@ -156,21 +168,21 @@ impl<T> LinkedListIter<'_, T> {
 }
 
 impl <T> LinkedList<T> {
-    pub fn iterate<F: Fn(&LinkedListIter<T>) -> Option<Ret>, Ret>(&self, f: F) -> Option<Ret> {
+    pub fn iterate<F: Fn(&mut LinkedListIter<T>) -> Option<Ret>, Ret>(&mut self, f: F) -> Option<Ret> {
         unsafe {
             let mut iter = LinkedListIter {
-                field_offs: self._field_offs,
-                pos: &mut *self._dummy._next
+                field_offs: self.field_offs,
+                pos: &mut *self.dummy.next
             };
 
             loop {
-                if iter.pos as *const _ == &self._dummy { break; }
+                if iter.pos as *const _ == &self.dummy { break; }
 
-                match f(&iter) {
+                match f(&mut iter) {
                     Some(x) => return Some(x),
 
                     None => {
-                        iter.pos = &mut *iter.pos._next;
+                        iter.pos = &mut *iter.pos.next;
                     }
                 }
             }
@@ -179,21 +191,21 @@ impl <T> LinkedList<T> {
         None
     }
     
-    pub fn iterate_reversed<F: Fn(&LinkedListIter<T>) -> Option<Ret>, Ret>(&self, f: F) -> Option<Ret> {
+    pub fn iterate_reversed<F: Fn(&mut LinkedListIter<T>) -> Option<Ret>, Ret>(&mut self, f: F) -> Option<Ret> {
         unsafe {
             let mut iter = LinkedListIter {
-                field_offs: self._field_offs,
-                pos: &mut *self._dummy._prev
+                field_offs: self.field_offs,
+                pos: &mut *self.dummy.prev
             };
 
             loop {
-                if iter.pos as *const _ == &self._dummy { break; }
+                if iter.pos as *const _ == &self.dummy { break; }
 
-                match f(&iter) {
+                match f(&mut iter) {
                     Some(x) => return Some(x),
 
                     None => {
-                        iter.pos = &mut *iter.pos._prev;
+                        iter.pos = &mut *iter.pos.prev;
                     }
                 }
             }

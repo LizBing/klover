@@ -16,10 +16,10 @@
 
 use std::ptr::NonNull;
 
-use crate::{oops::{klass::Klass, obj_desc::{ArrayObjDesc, ObjDesc}, oop_hierarchy::OOP}, utils::global_defs::word_size_of};
+use crate::{oops::{klass::Klass, obj_desc::{ArrayObjDesc, ObjDesc}, oop_hierarchy::OOP}, utils::global_defs::WordSize};
 
 pub struct MemAllocator {
-    word_size: usize,
+    word_size: WordSize,
     klass: NonNull<Klass>,
 
     is_array: bool,
@@ -30,27 +30,11 @@ pub struct MemAllocator {
 
 impl MemAllocator {
     pub fn new(klass: NonNull<Klass>, do_zero: bool) -> Self {
-        let word_size = unsafe { word_size_of::<ObjDesc>() + klass.as_ref().unit_word_size() };
-
-        Self {
-            word_size: word_size,
-            klass: klass,
-            is_array: false,
-            length: 0,
-            do_zero: do_zero
-        }
+        unimplemented!()
     }
 
     pub fn new_array(klass: NonNull<Klass>, len: usize) -> Self {
-        let word_size = unsafe { word_size_of::<ArrayObjDesc>() + klass.as_ref().unit_word_size() * len };
-
-        Self {
-            word_size: word_size,
-            klass: klass,
-            is_array: true,
-            length: len,
-            do_zero: true
-        }
+        unimplemented!()
     }
 }
 

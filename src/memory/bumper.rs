@@ -48,6 +48,10 @@ impl Bumper {
 }
 
 impl Bumper {
+    pub fn clear(&mut self) {
+        *self.top.get_mut() = self.mr.start as _
+    }
+
     pub fn alloc_with_size(&mut self, size: WordSize) -> *mut HeapWord {
         let top = self.top.get_mut();
 
@@ -63,7 +67,7 @@ impl Bumper {
     }
     
     pub fn alloc<T: Sized>(&mut self) -> *mut MaybeUninit<T> {
-        self.alloc_with_size(WordSize::from(ByteSize(size_of::<T>()))) as _
+        self.alloc_with_size(ByteSize(size_of::<T>()).into()) as _
     }
 
     pub fn par_alloc_with_size(&self, size: WordSize) -> *mut HeapWord {
@@ -91,6 +95,6 @@ impl Bumper {
     }
 
     pub fn par_alloc<T: Sized>(&self) -> *mut MaybeUninit<T> {
-        self.par_alloc_with_size(WordSize::from(ByteSize(size_of::<T>()))) as _
+        self.par_alloc_with_size(ByteSize(size_of::<T>()).into()) as _
     }
 }

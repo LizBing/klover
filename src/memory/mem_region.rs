@@ -72,7 +72,7 @@ impl MemRegion {
 
 impl MemRegion {
     pub unsafe fn touch(&self) {
-        let step = VirtSpace::page_byte_size();
+        let step = VirtSpace::page_size();
 
         let mut iter = self.start as *mut HeapWord;
         loop {
@@ -80,7 +80,7 @@ impl MemRegion {
 
             iter.write_volatile(null());
 
-            iter = iter.byte_add(step);
+            iter = iter.byte_add(step.value());
         }
     }
 

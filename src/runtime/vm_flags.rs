@@ -16,17 +16,17 @@
 
 use std::sync::LazyLock;
 
-use crate::utils::global_defs::G;
+use crate::utils::global_defs::{ByteSize, G};
 
 #[derive(Debug)]
 pub struct VMFlags {
-    pub xmx: LazyLock<usize>
+    pub xmx: LazyLock<ByteSize>
 }
 
 impl VMFlags {
     pub fn new() -> Self {
         Self {
-            xmx: LazyLock::new(|| 1 * G)
+            xmx: LazyLock::new(|| ByteSize(1 * G))
         }
     }
 }
