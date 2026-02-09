@@ -85,6 +85,7 @@ impl SymbolTable {
 }
 
 impl SymbolTable {
+    // with read lock
     pub fn intern(&self, cld: &mut ClassLoaderData, bytes: &[u8]) -> NonNull<Symbol> {
         let hash = Symbol::compute_hash(bytes);
         let bucket_index: usize = (hash % self.mask as u32) as usize;
@@ -93,7 +94,6 @@ impl SymbolTable {
         let attempt = bucket.find(bytes);
         if !attempt.is_null() { return unsafe { NonNull::new_unchecked(attempt) } }
 
-        // be careful of ABA here
         let mem = cld.mem_alloc_with_size(ByteSize(size_of::<Symbol>() + bytes.len()));
         let new_symbol = unsafe { &mut *(mem.as_ptr() as *mut Symbol) };
     

@@ -104,16 +104,19 @@ impl ClassLoaderData {
         let handle = unsafe { NonNull::new_unchecked(self as *const _ as _) };
         if size.value() < SMALL_MSCHUNK_SIZE.value() / 2 {
             let (tx, mut rx) = mpsc::channel(1);
+            
             let msg = MSMsg::TryAndAllocateSmallChunk { cld: handle, size, reply_tx: tx };
             Universe::actor_mailboxes().send_metaspace(msg);
-
+            
             rx.blocking_recv().unwrap()
         } else {
             let (tx, mut rx) = mpsc::channel(1);
+
             let msg = MSMsg::AllocateSizedChunk { cld: handle, size, reply_tx: tx };
             Universe::actor_mailboxes().send_metaspace(msg);
-
-            unsafe { NonNull::new(rx.blocking_recv().unwrap().as_mut().bumper.alloc_with_size(size.into())).unwrap() }
+            let new_chunk = unsafe { rx.blocking_recv().unwrap().as_mut() };
+            
+            unsafe { NonNull::new(new_chunk.bumper.alloc_with_size(size.into())).unwrap() }
         }
     }
 }
