@@ -18,16 +18,16 @@ use std::{ptr::NonNull, sync::atomic::{AtomicPtr, Ordering}};
 
 use tokio::sync::mpsc;
 
-use crate::{memory::compressed_space::NarrowEncoder, metaspace::metaspace::{MSChunk, Metaspace}, utils::global_defs::{ByteSize, HeapWord}};
+use crate::{classfile::class_loader_data::ClassLoaderData, memory::compressed_space::NarrowEncoder, metaspace::metaspace::{MSChunk, Metaspace}, utils::global_defs::{ByteSize, HeapWord}};
 
 pub enum MSMsg {
     Shutdown,
 
-    TryAndAllocateSmallChunk { slot: AtomicPtr<MSChunk>, size: ByteSize, reply_tx: mpsc::Sender<*const HeapWord> },
+    TryAndAllocateSmallChunk { cld: NonNull<ClassLoaderData>, size: ByteSize, reply_tx: mpsc::Sender<NonNull<HeapWord>> },
 
-    AllocateSizedChunk { size: ByteSize, reply_tx: mpsc::Sender<NonNull<MSChunk>> },
+    AllocateSizedChunk { cld: NonNull<ClassLoaderData>, size: ByteSize, reply_tx: mpsc::Sender<NonNull<MSChunk>> },
 
-    FreeChunk { chunk: NonNull<MSChunk> },
+    FreeChunks { cld: NonNull<ClassLoaderData> },
 }
 
 unsafe impl Send for MSMsg {}
@@ -63,31 +63,25 @@ impl MSActor {
             match self.rx.recv().await.unwrap() {
                 MSMsg::Shutdown => break,
 
-                MSMsg::TryAndAllocateSmallChunk { slot, size, reply_tx } => {
+                MSMsg::TryAndAllocateSmallChunk { mut cld, size, reply_tx } => {
                     unsafe {
-                        let chunk = slot.load(Ordering::Relaxed);
-                        let attempt = (*chunk).bumper.par_alloc_with_size(size.into());
-                        if !attempt.is_null() {
-                            reply_tx.send(attempt).await.unwrap();
-                        } else {
-                            let new_chunk = self.metaspace.alloc_small_chunk().as_mut();
-
-                            let res = new_chunk.bumper.alloc_with_size(size.into());
-                            debug_assert!(!res.is_null());
-
-                            slot.store(new_chunk, Ordering::Release);
-
-                            reply_tx.send(res).await.unwrap()
-                        }
+                        reply_tx.send(self.metaspace.try_and_alloc_small_chunk(cld.as_mut(), size)).await.unwrap()
                     }
                 }
 
-                MSMsg::AllocateSizedChunk { size, reply_tx } => {
-                    reply_tx.send(self.metaspace.alloc_sized_chunk(size)).await.unwrap()
+                MSMsg::AllocateSizedChunk { mut cld, size, reply_tx } => {
+                    let chunk = self.metaspace.alloc_sized_chunk(size);
+                    unsafe {
+                        cld.as_mut().record_new_sized_chunk(chunk);
+                    }
+
+                    reply_tx.send(chunk).await.unwrap()
                 }
 
-                MSMsg::FreeChunk { chunk } => {
-                    self.metaspace.free_chunk(chunk);
+                MSMsg::FreeChunks { mut cld } => {
+                    unsafe {
+                        cld.as_mut().drop_chunks(|x| self.metaspace.free_chunk(x));
+                    }
                 }
             }
         }

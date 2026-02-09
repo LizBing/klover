@@ -14,9 +14,11 @@
  * limitations under the License.
  */
 
-use std::{ptr::{NonNull, null_mut}, sync::atomic::AtomicPtr};
+use std::{ptr::{NonNull, null_mut}, sync::atomic::{AtomicPtr, Ordering}};
 
-use crate::{gc::oop_storage_actor::CLD_STORAGE_INDEX, init_ll, metaspace::metaspace::MSChunk, oops::{klass::Klass, oop_handle::OOPHandle, oop_hierarchy::OOP}, utils::linked_list::{LinkedList, LinkedListNode}};
+use tokio::sync::mpsc;
+
+use crate::{gc::oop_storage_actor::CLD_STORAGE_INDEX, init_ll, is_aligned, metaspace::{metaspace::{MSChunk, SMALL_MSCHUNK_SIZE}, ms_actor::MSMsg}, oops::{klass::Klass, oop_handle::OOPHandle, oop_hierarchy::OOP, symbol_table::SymbolTable}, runtime::universe::Universe, utils::{global_defs::{ByteSize, HeapWord}, linked_list::{LinkedList, LinkedListNode}}};
 
 #[derive(Debug)]
 pub struct ClassLoaderData {
@@ -24,8 +26,11 @@ pub struct ClassLoaderData {
 
     pub mirror: OOPHandle,
     klasses: LinkedList<Klass>,
+    klass_count: usize,
 
-    ms_chunk: AtomicPtr<MSChunk>
+    owned_chunks: LinkedList<MSChunk>,
+    current_chunk: AtomicPtr<MSChunk>,
+    symbol_table: SymbolTable,
 }
 
 impl ClassLoaderData {
@@ -35,10 +40,14 @@ impl ClassLoaderData {
 
             mirror: OOPHandle::with_storage(CLD_STORAGE_INDEX).await,
             klasses: LinkedList::new(),
+            klass_count: 0,
 
-            ms_chunk: AtomicPtr::new(null_mut())
+            owned_chunks: LinkedList::new(),
+            current_chunk: AtomicPtr::new(null_mut()),
+            symbol_table: SymbolTable::new()
         };
         init_ll!(&mut self.klasses, Klass, cld_node);
+        init_ll!(&mut self.owned_chunks, MSChunk, owning_node);
 
         self.mirror.store(loader);
     }
@@ -49,8 +58,11 @@ impl ClassLoaderData {
 
             mirror: OOPHandle::new(),
             klasses: LinkedList::new(),
+            klass_count: 0,
 
-            ms_chunk: AtomicPtr::new(null_mut())
+            owned_chunks: LinkedList::new(),
+            current_chunk: AtomicPtr::new(null_mut()),
+            symbol_table: SymbolTable::new()
         };
 
         init_ll!(&mut self.klasses, Klass, cld_node);
@@ -69,7 +81,77 @@ impl ClassLoaderData {
         }
 
         unsafe { self.klasses.push_back(klass.as_mut()); }
+        self.klass_count += 1;
+
+        if self.symbol_table_needs_rehashing() {
+            self.symbol_table.try_rehash();
+        }
 
         true
+    }
+}
+
+impl ClassLoaderData {
+    pub async fn mem_alloc_with_size(&mut self, size: ByteSize) -> NonNull<HeapWord> {
+        let res = self.try_mem_alloc(size, Ordering::Acquire);
+        if !res.is_null() {
+            return unsafe { NonNull::new_unchecked(res) };
+        }
+
+        let handle = unsafe { NonNull::new_unchecked(self) };
+        if size.value() < SMALL_MSCHUNK_SIZE.value() / 2 {
+            let (tx, mut rx) = mpsc::channel(1);
+            let msg = MSMsg::TryAndAllocateSmallChunk { cld: handle, size, reply_tx: tx };
+            Universe::actor_mailboxes().send_metaspace(msg);
+
+            rx.recv().await.unwrap()
+        } else {
+            let (tx, mut rx) = mpsc::channel(1);
+            let msg = MSMsg::AllocateSizedChunk { cld: handle, size, reply_tx: tx };
+            Universe::actor_mailboxes().send_metaspace(msg);
+
+            unsafe { NonNull::new(rx.recv().await.unwrap().as_mut().bumper.alloc_with_size(size.into())).unwrap() }
+        }
+    }
+}
+
+// helpers
+impl ClassLoaderData {
+    fn symbol_table_needs_rehashing(&self) -> bool {
+        debug_assert!(self.klass_count > 0);
+
+        self.klass_count % 64 == 0
+    }
+
+    pub fn try_mem_alloc(&self, size: ByteSize, order: Ordering) -> *mut HeapWord {
+        let chunk = self.current_chunk.load(order);
+        if chunk.is_null() { return null_mut() }
+
+        unsafe {
+            (*chunk).bumper.par_alloc_with_size(size.into())
+        }
+    }
+
+    pub fn release_new_chunk(&mut self, mut chunk: NonNull<MSChunk>) {
+        unsafe {
+            self.current_chunk.store(chunk.as_mut(), Ordering::Release);
+            self.owned_chunks.push_back(chunk.as_mut());
+        }
+    }
+
+    pub fn record_new_sized_chunk(&mut self, mut chunk: NonNull<MSChunk>) {
+        unsafe {
+            self.owned_chunks.push_back(chunk.as_mut());
+        }
+    }
+
+    pub fn drop_chunks<F: FnMut(NonNull<MSChunk>)>(&mut self, mut f: F) {
+        self.current_chunk.store(null_mut(), Ordering::Relaxed);
+        loop {
+            match self.owned_chunks.pop_back() {
+                Some(x) => unsafe { f(NonNull::new_unchecked(x)) },
+                None => break
+            }
+        }
     }
 }

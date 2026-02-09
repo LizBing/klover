@@ -14,18 +14,20 @@
  * limitations under the License.
  */
 
-use std::{slice::from_raw_parts, sync::atomic::AtomicU32};
+use std::{ptr, slice::from_raw_parts, sync::atomic::AtomicU32};
 
 #[repr(C)]
 pub struct Symbol {
-    hash: AtomicU32,
+    pub next: *mut Symbol,
+
+    hash: u32,
     len: u16,
-    body: [u8; 2]
+    body: [u8; 2],
 }
 
 impl Symbol {
     #[inline]
-    fn compute_hash(bytes: &[u8]) -> u32 {
+    pub fn compute_hash(bytes: &[u8]) -> u32 {
         let mut h: u32 = 0;
 
         for &b in bytes {
@@ -34,6 +36,15 @@ impl Symbol {
         assert!(h != 0);
 
         h
+    }
+}
+
+impl Symbol {
+    pub fn init(&mut self, bytes: &[u8], hash: u32) {
+        self.hash = hash;
+        self.len = bytes.len() as _;
+        
+        unsafe { ptr::copy_nonoverlapping(bytes.as_ptr(), self.as_bytes().as_ptr() as _, self.len()); }
     }
 }
 
@@ -47,13 +58,7 @@ impl Symbol {
     }
 
     pub fn hash(&self) -> u32 {
-        let h = self.hash.load(std::sync::atomic::Ordering::Relaxed);
-        if h != 0 { return h; }
-
-        let computed = Self::compute_hash(self.as_bytes());
-        self.hash.store(computed, std::sync::atomic::Ordering::Relaxed);
-
-        computed
+        self.hash
     }
 }
 

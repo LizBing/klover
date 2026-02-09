@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-use std::ptr::NonNull;
+use std::{ptr::NonNull, sync::atomic::Ordering};
 
-use crate::{align_up, init_ll, is_aligned, memory::{bumper::Bumper, compressed_space::{CompressedSpace, NarrowEncoder}, mem_region::MemRegion, virt_space::VirtSpace}, runtime::universe::Universe, utils::{global_defs::{ByteSize, K, WordSize}, linked_list::{LinkedList, LinkedListNode}}};
+use crate::{align_up, classfile::class_loader_data::ClassLoaderData, init_ll, is_aligned, memory::{bumper::Bumper, compressed_space::{CompressedSpace, NarrowEncoder}, mem_region::MemRegion, virt_space::VirtSpace}, runtime::universe::Universe, utils::{global_defs::{ByteSize, HeapWord, K, WordSize}, linked_list::{LinkedList, LinkedListNode}}};
 
 pub const SMALL_MSCHUNK_SIZE: ByteSize = ByteSize(8 * K);
 
@@ -96,7 +96,27 @@ impl Metaspace {
 
     pub fn free_chunk(&mut self, mut c: NonNull<MSChunk>) {
         unsafe {
+            c.as_mut().owning_node.erase();
             self.free_list.push_back(c.as_mut());
+        }
+    }
+}
+
+impl Metaspace {
+    pub fn try_and_alloc_small_chunk(&mut self, cld: &mut ClassLoaderData, size: ByteSize) -> NonNull<HeapWord> {
+        unsafe {
+            let attempt = cld.try_mem_alloc(size, Ordering::Relaxed);
+            if !attempt.is_null() {
+                return NonNull::new_unchecked(attempt);
+            }
+
+            let mut new_chunk = self.alloc_small_chunk();
+            let res = new_chunk.as_mut().bumper.alloc_with_size(size.into());
+            debug_assert!(!res.is_null());
+
+            cld.release_new_chunk(new_chunk);
+
+            NonNull::new_unchecked(res)
         }
     }
 }
