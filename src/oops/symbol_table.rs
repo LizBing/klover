@@ -14,7 +14,9 @@
  * limitations under the License.
  */
 
-use std::{ops::IndexMut, ptr::{NonNull, null, null_mut}};
+use std::{ptr::{NonNull, null_mut}, sync::atomic::{AtomicUsize, Ordering}};
+
+use parking_lot::Mutex;
 
 use crate::{classfile::class_loader_data::ClassLoaderData, oops::symbol::Symbol, utils::global_defs::ByteSize};
 
@@ -60,11 +62,11 @@ impl Bucket {
 
 #[derive(Debug)]
 pub struct SymbolTable {
-    buckets: Vec<Bucket>,
+    buckets: Vec<Mutex<Bucket>>,
     mask: usize,
 
-    symbol_count: usize,
-    max_bucket_len_index: usize
+    symbol_count: AtomicUsize,
+    max_bucket_len: AtomicUsize
 }
 
 impl SymbolTable {
@@ -72,35 +74,34 @@ impl SymbolTable {
         let mut res = Self {
             buckets: Vec::new(),
             mask: INIT_BUCKET_COUNT - 1,
-            symbol_count: 0,
-            max_bucket_len_index: 0,
+            symbol_count: AtomicUsize::new(0),
+            max_bucket_len: AtomicUsize::new(0),
         };
 
-        res.buckets.resize_with(INIT_BUCKET_COUNT, || Bucket { head: null_mut(), len: 0 });
+        res.buckets.resize_with(INIT_BUCKET_COUNT, || Mutex::new(Bucket { head: null_mut(), len: 0 }));
     
         res
     }
 }
 
 impl SymbolTable {
-    pub async fn intern(&mut self, cld: &mut ClassLoaderData, bytes: &[u8]) -> NonNull<Symbol> {
+    pub fn intern(&self, cld: &mut ClassLoaderData, bytes: &[u8]) -> NonNull<Symbol> {
         let hash = Symbol::compute_hash(bytes);
         let bucket_index: usize = (hash % self.mask as u32) as usize;
 
-        let bucket = &mut self.buckets[bucket_index];
+        let mut bucket = self.buckets[bucket_index].lock();
         let attempt = bucket.find(bytes);
         if !attempt.is_null() { return unsafe { NonNull::new_unchecked(attempt) } }
 
-        let mem = cld.mem_alloc_with_size(ByteSize(size_of::<Symbol>() + bytes.len())).await;
+        // be careful of ABA here
+        let mem = cld.mem_alloc_with_size(ByteSize(size_of::<Symbol>() + bytes.len()));
         let new_symbol = unsafe { &mut *(mem.as_ptr() as *mut Symbol) };
     
         new_symbol.init(bytes, hash);
 
         bucket.push(new_symbol);
-        self.symbol_count += 1;
-        if bucket.len > self.buckets[self.max_bucket_len_index].len {
-            self.max_bucket_len_index = bucket_index;
-        }
+        self.symbol_count.fetch_add(1, Ordering::AcqRel);
+        self.try_update_max_bucket_len(bucket.len);
 
         unsafe { NonNull::new_unchecked(new_symbol) }
     }
@@ -108,7 +109,14 @@ impl SymbolTable {
 
 impl SymbolTable {
     fn need_rehash(&self) -> bool {
-        self.symbol_count > self.buckets.len() || self.buckets[self.max_bucket_len_index].len > 8
+        self.symbol_count.load(Ordering::Acquire) > self.buckets.len() || self.max_bucket_len.load(Ordering::Acquire) > 8
+    }
+
+    fn try_update_max_bucket_len(&self, n: usize) {
+        let exp = self.max_bucket_len.load(Ordering::Acquire);
+        if n > exp {
+            let _ = self.max_bucket_len.compare_exchange(exp, n, Ordering::AcqRel, Ordering::Relaxed);
+        }
     }
 
     pub fn try_rehash(&mut self) -> bool {
@@ -120,21 +128,21 @@ impl SymbolTable {
         self.mask = new_len - 1;
 
         let mut new_buckets = Vec::with_capacity(new_len);
-        new_buckets.resize_with(new_len, || Bucket { head: null_mut(), len: 0 });
+        new_buckets.resize_with(new_len, || Mutex::new(Bucket { head: null_mut(), len: 0 }));
 
-        self.max_bucket_len_index = 0;
+        self.max_bucket_len.store(0, Ordering::Relaxed);
         for old_bucket in old_buckets {
             loop {
-                let n = old_bucket.pop();
+                let n = old_bucket.get_mut().pop();
                 if n.is_null() { break; }
                 let symbol = unsafe { &mut *n };
 
                 let new_bucket_index = (symbol.hash() % self.mask as u32) as usize;
-                let new_bucket = &mut new_buckets[new_bucket_index];
+                let new_bucket = &mut new_buckets[new_bucket_index].get_mut();
 
                 new_bucket.push(symbol);
-                if new_bucket.len > new_buckets[self.max_bucket_len_index].len {
-                    self.max_bucket_len_index = new_bucket_index;
+                if new_bucket.len > self.max_bucket_len.load(Ordering::Relaxed) {
+                    self.max_bucket_len.fetch_add(1, Ordering::Relaxed);
                 }
             }
         }

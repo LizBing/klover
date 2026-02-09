@@ -110,8 +110,8 @@ impl Metaspace {
                 return NonNull::new_unchecked(attempt);
             }
 
-            let mut new_chunk = self.alloc_small_chunk();
-            let res = new_chunk.as_mut().bumper.alloc_with_size(size.into());
+            let new_chunk = self.alloc_small_chunk().as_mut();
+            let res = new_chunk.bumper.alloc_with_size(size.into());
             debug_assert!(!res.is_null());
 
             cld.release_new_chunk(new_chunk);

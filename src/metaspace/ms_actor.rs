@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-use std::{ptr::NonNull, sync::atomic::{AtomicPtr, Ordering}};
+use std::ptr::NonNull;
 
 use tokio::sync::mpsc;
 
@@ -65,17 +65,18 @@ impl MSActor {
 
                 MSMsg::TryAndAllocateSmallChunk { mut cld, size, reply_tx } => {
                     unsafe {
-                        reply_tx.send(self.metaspace.try_and_alloc_small_chunk(cld.as_mut(), size)).await.unwrap()
+                        let res = self.metaspace.try_and_alloc_small_chunk(cld.as_mut(), size);
+                        reply_tx.blocking_send(res).unwrap()
                     }
                 }
 
                 MSMsg::AllocateSizedChunk { mut cld, size, reply_tx } => {
-                    let chunk = self.metaspace.alloc_sized_chunk(size);
+                    let mut chunk = self.metaspace.alloc_sized_chunk(size);
                     unsafe {
-                        cld.as_mut().record_new_sized_chunk(chunk);
+                        cld.as_mut().claim_new_sized_chunk(chunk.as_mut());
                     }
 
-                    reply_tx.send(chunk).await.unwrap()
+                    reply_tx.blocking_send(chunk).unwrap()
                 }
 
                 MSMsg::FreeChunks { mut cld } => {

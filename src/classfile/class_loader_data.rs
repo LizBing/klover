@@ -14,11 +14,12 @@
  * limitations under the License.
  */
 
-use std::{ptr::{NonNull, null_mut}, sync::atomic::{AtomicPtr, Ordering}};
+use std::{ptr::{NonNull, null_mut}, sync::{atomic::{AtomicPtr, Ordering}}};
 
+use parking_lot::RwLock;
 use tokio::sync::mpsc;
 
-use crate::{gc::oop_storage_actor::CLD_STORAGE_INDEX, init_ll, is_aligned, metaspace::{metaspace::{MSChunk, SMALL_MSCHUNK_SIZE}, ms_actor::MSMsg}, oops::{klass::Klass, oop_handle::OOPHandle, oop_hierarchy::OOP, symbol_table::SymbolTable}, runtime::universe::Universe, utils::{global_defs::{ByteSize, HeapWord}, linked_list::{LinkedList, LinkedListNode}}};
+use crate::{gc::oop_storage_actor::CLD_STORAGE_INDEX, init_ll, metaspace::{metaspace::{MSChunk, SMALL_MSCHUNK_SIZE}, ms_actor::MSMsg}, oops::{klass::Klass, oop_handle::OOPHandle, oop_hierarchy::OOP, symbol_table::SymbolTable}, runtime::universe::Universe, utils::{global_defs::{ByteSize, HeapWord}, linked_list::{LinkedList, LinkedListNode}}};
 
 #[derive(Debug)]
 pub struct ClassLoaderData {
@@ -30,21 +31,21 @@ pub struct ClassLoaderData {
 
     owned_chunks: LinkedList<MSChunk>,
     current_chunk: AtomicPtr<MSChunk>,
-    symbol_table: SymbolTable,
+    pub symbol_table: RwLock<SymbolTable>,
 }
 
 impl ClassLoaderData {
-    pub async fn init(&mut self, loader: OOP) {
+    pub fn init(&mut self, loader: OOP) {
         *self = Self {
             cld_graph_node: LinkedListNode::new(),
 
-            mirror: OOPHandle::with_storage(CLD_STORAGE_INDEX).await,
+            mirror: OOPHandle::with_storage(CLD_STORAGE_INDEX),
             klasses: LinkedList::new(),
             klass_count: 0,
 
             owned_chunks: LinkedList::new(),
             current_chunk: AtomicPtr::new(null_mut()),
-            symbol_table: SymbolTable::new()
+            symbol_table: RwLock::new(SymbolTable::new())
         };
         init_ll!(&mut self.klasses, Klass, cld_node);
         init_ll!(&mut self.owned_chunks, MSChunk, owning_node);
@@ -62,10 +63,11 @@ impl ClassLoaderData {
 
             owned_chunks: LinkedList::new(),
             current_chunk: AtomicPtr::new(null_mut()),
-            symbol_table: SymbolTable::new()
+            symbol_table: RwLock::new(SymbolTable::new())
         };
 
         init_ll!(&mut self.klasses, Klass, cld_node);
+        init_ll!(&mut self.owned_chunks, MSChunk, owning_node);
     }
 }
 
@@ -84,7 +86,8 @@ impl ClassLoaderData {
         self.klass_count += 1;
 
         if self.symbol_table_needs_rehashing() {
-            self.symbol_table.try_rehash();
+            let mut guard = self.symbol_table.write();
+            guard.try_rehash();
         }
 
         true
@@ -92,25 +95,25 @@ impl ClassLoaderData {
 }
 
 impl ClassLoaderData {
-    pub async fn mem_alloc_with_size(&mut self, size: ByteSize) -> NonNull<HeapWord> {
+    pub fn mem_alloc_with_size(&self, size: ByteSize) -> NonNull<HeapWord> {
         let res = self.try_mem_alloc(size, Ordering::Acquire);
         if !res.is_null() {
             return unsafe { NonNull::new_unchecked(res) };
         }
 
-        let handle = unsafe { NonNull::new_unchecked(self) };
+        let handle = unsafe { NonNull::new_unchecked(self as *const _ as _) };
         if size.value() < SMALL_MSCHUNK_SIZE.value() / 2 {
             let (tx, mut rx) = mpsc::channel(1);
             let msg = MSMsg::TryAndAllocateSmallChunk { cld: handle, size, reply_tx: tx };
             Universe::actor_mailboxes().send_metaspace(msg);
 
-            rx.recv().await.unwrap()
+            rx.blocking_recv().unwrap()
         } else {
             let (tx, mut rx) = mpsc::channel(1);
             let msg = MSMsg::AllocateSizedChunk { cld: handle, size, reply_tx: tx };
             Universe::actor_mailboxes().send_metaspace(msg);
 
-            unsafe { NonNull::new(rx.recv().await.unwrap().as_mut().bumper.alloc_with_size(size.into())).unwrap() }
+            unsafe { NonNull::new(rx.blocking_recv().unwrap().as_mut().bumper.alloc_with_size(size.into())).unwrap() }
         }
     }
 }
@@ -132,17 +135,13 @@ impl ClassLoaderData {
         }
     }
 
-    pub fn release_new_chunk(&mut self, mut chunk: NonNull<MSChunk>) {
-        unsafe {
-            self.current_chunk.store(chunk.as_mut(), Ordering::Release);
-            self.owned_chunks.push_back(chunk.as_mut());
-        }
+    pub fn release_new_chunk(&mut self, chunk: &mut MSChunk) {
+        self.current_chunk.store(chunk, Ordering::Release);
+        self.owned_chunks.push_back(chunk);
     }
 
-    pub fn record_new_sized_chunk(&mut self, mut chunk: NonNull<MSChunk>) {
-        unsafe {
-            self.owned_chunks.push_back(chunk.as_mut());
-        }
+    pub fn claim_new_sized_chunk(&mut self, chunk: &mut MSChunk) {
+        self.owned_chunks.push_back(chunk);
     }
 
     pub fn drop_chunks<F: FnMut(NonNull<MSChunk>)>(&mut self, mut f: F) {
