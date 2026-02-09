@@ -33,21 +33,21 @@ impl WeakHandle {
         }
     }
 
-    pub async fn with_storage(storage_index: usize) -> Self {
+    pub fn with_storage(storage_index: usize) -> Self {
         let mut res = Self::new();
-        res.init(storage_index).await;
+        res.init(storage_index);
 
         res
     }
 
-    pub async fn init(&mut self, storage_index: usize) {
+    pub fn init(&mut self, storage_index: usize) {
         let (tx, mut rx) = mpsc::channel(1);
         let msg = OOPStorageMsg::Allocate { index: storage_index, reply_tx: tx };
 
         Universe::actor_mailboxes().send_oop_storage(msg);
 
         *self = Self {
-            raw: unsafe { rx.recv().await.unwrap().as_mut() },
+            raw: unsafe { rx.blocking_recv().unwrap().as_mut() },
             storage_index: storage_index
         };
     }

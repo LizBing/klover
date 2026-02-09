@@ -50,18 +50,18 @@ impl CLDActor {
         loop {
             match self.rx.recv().await.unwrap() {
                 CLDMsg::RegisterCLD { loader, reply_tx } => {
-                    let cld = self.graph.register_cld(loader).await;
-                    reply_tx.send(cld).await.unwrap();
+                    let cld = self.graph.register_cld(loader);
+                    reply_tx.blocking_send(cld).unwrap();
                 }
 
                 CLDMsg::RegisterKlass { mut loader, klass, reply_tx } => {
                     let res = unsafe { loader.as_mut().register_klass(klass) };
-                    reply_tx.send(res).await.unwrap();
+                    reply_tx.blocking_send(res).unwrap();
                 }
 
                 CLDMsg::FindCLD { loader, reply_tx } => {
                     let res = self.graph.find_cld(loader);
-                    reply_tx.send(res).await.unwrap();
+                    reply_tx.blocking_send(res).unwrap();
                 }
 
                 CLDMsg::Shutdown => break

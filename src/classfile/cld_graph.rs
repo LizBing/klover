@@ -39,11 +39,11 @@ impl ClassLoaderDataGraph {
 }
 
 impl ClassLoaderDataGraph {
-    pub async fn register_cld(&mut self, loader: OOP) -> NonNull<ClassLoaderData> {
+    pub fn register_cld(&mut self, loader: OOP) -> NonNull<ClassLoaderData> {
         assert!(!loader.is_null());
 
         let mut cld = unsafe { Box::<ClassLoaderData>::new_uninit().assume_init() };
-        cld.init(loader).await;
+        cld.init(loader);
 
         let res = unsafe { NonNull::new_unchecked(Box::leak(cld)) };
         self.array.push(res);

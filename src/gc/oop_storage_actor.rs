@@ -57,7 +57,7 @@ impl OOPStorageActor {
         loop {
             match self.rx.recv().await.unwrap() {
                 OOPStorageMsg::Allocate { index, reply_tx } => {
-                    reply_tx.send(self.array[index].allocate()).await.unwrap()
+                    reply_tx.blocking_send(self.array[index].allocate()).unwrap()
                 }
 
                 OOPStorageMsg::Free { index, addr } => {
