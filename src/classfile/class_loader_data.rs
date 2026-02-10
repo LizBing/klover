@@ -16,10 +16,9 @@
 
 use std::{ptr::{NonNull, null_mut}, sync::{atomic::{AtomicPtr, Ordering}}};
 
-use parking_lot::RwLock;
 use tokio::sync::mpsc;
 
-use crate::{gc::oop_storage_actor::CLD_STORAGE_INDEX, init_ll, metaspace::{metaspace::{MSChunk, SMALL_MSCHUNK_SIZE}, ms_actor::MSMsg}, oops::{klass::Klass, oop_handle::OOPHandle, oop_hierarchy::OOP, symbol_table::SymbolTable}, runtime::universe::Universe, utils::{global_defs::{ByteSize, HeapWord}, linked_list::{LinkedList, LinkedListNode}}};
+use crate::{gc::oop_storage_actor::CLD_STORAGE_INDEX, init_ll, metaspace::{metaspace::{MSChunk, SMALL_MSCHUNK_SIZE}, ms_actor::MSMsg}, oops::{klass::Klass, oop_handle::OOPHandle, oop_hierarchy::OOP, symbol::Symbol}, runtime::universe::Universe, utils::{global_defs::{ByteSize, HeapWord}, linked_list::{LinkedList, LinkedListNode}}};
 
 #[derive(Debug)]
 pub struct ClassLoaderData {
@@ -31,7 +30,6 @@ pub struct ClassLoaderData {
 
     owned_chunks: LinkedList<MSChunk>,
     current_chunk: AtomicPtr<MSChunk>,
-    pub symbol_table: RwLock<SymbolTable>,
 }
 
 impl ClassLoaderData {
@@ -45,7 +43,6 @@ impl ClassLoaderData {
 
             owned_chunks: LinkedList::new(),
             current_chunk: AtomicPtr::new(null_mut()),
-            symbol_table: RwLock::new(SymbolTable::new())
         };
         init_ll!(&mut self.klasses, Klass, cld_node);
         init_ll!(&mut self.owned_chunks, MSChunk, owning_node);
@@ -63,7 +60,6 @@ impl ClassLoaderData {
 
             owned_chunks: LinkedList::new(),
             current_chunk: AtomicPtr::new(null_mut()),
-            symbol_table: RwLock::new(SymbolTable::new())
         };
 
         init_ll!(&mut self.klasses, Klass, cld_node);
@@ -75,7 +71,7 @@ impl ClassLoaderData {
     // returns false if duplicated
     pub fn register_klass(&mut self, mut klass: NonNull<Klass>) -> bool {
         if self.klasses.iterate(|iter| -> Option<()> {
-            if iter.value().name() == unsafe { klass.as_ref().name() } {
+            if iter.value().name() as *const Symbol == unsafe { klass.as_ref().name() } {
                 Some(())
             } else { None }
         }).is_some() {
@@ -84,11 +80,6 @@ impl ClassLoaderData {
 
         unsafe { self.klasses.push_back(klass.as_mut()); }
         self.klass_count += 1;
-
-        if self.symbol_table_needs_rehashing() {
-            let mut guard = self.symbol_table.write();
-            guard.try_rehash();
-        }
 
         true
     }
@@ -116,19 +107,13 @@ impl ClassLoaderData {
             Universe::actor_mailboxes().send_metaspace(msg);
             let new_chunk = unsafe { rx.blocking_recv().unwrap().as_mut() };
             
-            unsafe { NonNull::new(new_chunk.bumper.alloc_with_size(size.into())).unwrap() }
+            NonNull::new(new_chunk.bumper.alloc_with_size(size.into())).unwrap()
         }
     }
 }
 
 // helpers
 impl ClassLoaderData {
-    fn symbol_table_needs_rehashing(&self) -> bool {
-        debug_assert!(self.klass_count > 0);
-
-        self.klass_count % 64 == 0
-    }
-
     pub fn try_mem_alloc(&self, size: ByteSize, order: Ordering) -> *mut HeapWord {
         let chunk = self.current_chunk.load(order);
         if chunk.is_null() { return null_mut() }

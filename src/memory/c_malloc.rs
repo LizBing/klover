@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Lei Zaakjyu
+ * Copyright 2026 Lei Zaakjyu
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,22 +16,12 @@
 
 use std::ptr::NonNull;
 
-use cafebabe::{attributes::CodeData};
+use crate::utils::global_defs::ByteSize;
 
-use crate::oops::{klass::Klass, symbol::Symbol};
-
-#[derive(Debug)]
-pub struct Method {
-    name: NonNull<Symbol>,
-    klass: NonNull<Klass>
+pub unsafe fn c_malloc<T>(size: ByteSize) -> NonNull<T> {
+    NonNull::new(libc::malloc(size.value()) as _).expect("out of memory(c heap)")
 }
 
-impl Method {
-    pub fn code_data(&self) -> Option<&CodeData<'_>> {
-        unimplemented!()
-    }
-
-    pub fn klass(&self) -> NonNull<Klass> {
-        unimplemented!()
-    }
+pub unsafe fn c_free<T>(addr: *const T) {
+    libc::free(addr as _)
 }

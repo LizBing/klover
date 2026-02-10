@@ -15,6 +15,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "812e12b5285cc515a9c72a5c1d3b6d46a19dac5acfef5265968c166106e31dd3"
 
 [[package]]
+name = "bumpalo"
+version = "3.19.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5dd9dc738b7a8311c7ade152424974d8115f2cdad61e8dab8dac9f2362298510"
+
+[[package]]
 name = "cafebabe"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -97,8 +103,10 @@ name = "klover"
 version = "0.1.0"
 dependencies = [
  "bitflags 2.10.0",
+ "bumpalo",
  "cafebabe",
  "crossbeam",
+ "libc",
  "modular-bitfield",
  "parking_lot",
  "paste",

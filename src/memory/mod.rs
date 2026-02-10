@@ -16,5 +16,6 @@
 
 pub mod bumper;
 pub mod compressed_space;
+pub mod c_malloc;
 pub mod mem_region;
 pub mod virt_space;

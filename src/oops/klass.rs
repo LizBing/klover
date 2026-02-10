@@ -14,7 +14,9 @@
  * limitations under the License.
  */
 
-use crate::{oops::{array_klass::ArrayKlass, normal_klass::NormalKlass, prim_klass::PrimKlass}, utils::linked_list::LinkedListNode};
+use std::ptr::NonNull;
+
+use crate::{classfile::class_loader_data::ClassLoaderData, oops::{array_klass::ArrayKlass, normal_klass::NormalKlass, prim_klass::PrimKlass, symbol::Symbol}, utils::linked_list::LinkedListNode};
 
 #[derive(Debug)]
 pub enum KlassData<'a> {
@@ -26,12 +28,15 @@ pub enum KlassData<'a> {
 #[derive(Debug)]
 pub struct Klass {
     pub cld_node: LinkedListNode<Self>,
-
     klass_data: KlassData<'static>,
 }
 
 impl Klass {
-    pub fn name(&self) -> &str {
+    pub fn name(&self) -> &Symbol {
+        unimplemented!()
+    }
+
+    pub fn cld(&self) -> &ClassLoaderData {
         unimplemented!()
     }
 
