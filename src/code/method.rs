@@ -16,14 +16,35 @@
 
 use std::ptr::NonNull;
 
-use cafebabe::{attributes::CodeData};
+use cafebabe::{MethodAccessFlags, MethodInfo, attributes::{AttributeInfo, CodeData}, descriptors::MethodDescriptor};
 
-use crate::oops::{klass::Klass, symbol::Symbol};
+use crate::{oops::{klass::{Klass, KlassHandle}, symbol::SymbolHandle}, runtime::universe::Universe};
 
 #[derive(Debug)]
-pub struct Method {
-    name: NonNull<Symbol>,
-    klass: NonNull<Klass>
+pub struct Method<'a> {
+    name: SymbolHandle,
+    acc_flags: MethodAccessFlags,
+    desc: MethodDescriptor<'a>,
+    attrs: Vec<AttributeInfo<'a>>,
+
+    klass: KlassHandle,
+}
+
+impl<'a> Method<'a> {
+    pub fn new<'b: 'a>(minfo: &'b MethodInfo, klass: KlassHandle) -> Self {
+        let cld = klass.cld();
+        let perm_sym = cld.is_bootstrap_cld();
+
+        let mut attrs = Vec::new();
+
+        Self {
+            name: Universe::symbol_table().intern(minfo.name.as_bytes(), perm_sym),
+            acc_flags: minfo.access_flags,
+            desc: minfo.descriptor.clone(),
+            attrs: attrs,
+            klass: klass
+        }
+    }
 }
 
 impl Method {

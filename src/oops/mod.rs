@@ -27,3 +27,4 @@ pub mod normal_klass;
 pub mod prim_klass;
 
 pub mod symbol;
+pub mod rt_attr;

@@ -16,7 +16,9 @@
 
 use std::ptr::NonNull;
 
-use crate::{classfile::class_loader_data::ClassLoaderData, oops::{array_klass::ArrayKlass, normal_klass::NormalKlass, prim_klass::PrimKlass, symbol::Symbol}, utils::linked_list::LinkedListNode};
+use crate::{classfile::class_loader_data::{CLDHandle, ClassLoaderData}, oops::{array_klass::ArrayKlass, normal_klass::NormalKlass, prim_klass::PrimKlass, symbol::{Symbol, SymbolHandle}}, utils::{handle::Handle, linked_list::LinkedListNode}};
+
+pub type KlassHandle = Handle<Klass>;
 
 #[derive(Debug)]
 pub enum KlassData<'a> {
@@ -32,11 +34,11 @@ pub struct Klass {
 }
 
 impl Klass {
-    pub fn name(&self) -> &Symbol {
+    pub fn name(&self) -> &SymbolHandle {
         unimplemented!()
     }
 
-    pub fn cld(&self) -> &ClassLoaderData {
+    pub fn cld(&self) -> &CLDHandle {
         unimplemented!()
     }
 

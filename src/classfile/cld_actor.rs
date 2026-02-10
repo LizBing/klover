@@ -17,12 +17,12 @@
 use std::ptr::NonNull;
 use tokio::sync::mpsc;
 
-use crate::{classfile::{class_loader_data::ClassLoaderData, cld_graph::ClassLoaderDataGraph}, oops::{klass::Klass, oop_hierarchy::OOP}};
+use crate::{classfile::{class_loader_data::{CLDHandle, ClassLoaderData}, cld_graph::ClassLoaderDataGraph}, oops::{klass::{Klass, KlassHandle}, oop_hierarchy::OOP}};
 
 pub enum CLDMsg {
     RegisterCLD { loader: OOP, reply_tx: mpsc::Sender<NonNull<ClassLoaderData>> },
 
-    RegisterKlass { loader: NonNull<ClassLoaderData>, klass: NonNull<Klass>, reply_tx: mpsc::Sender<bool> },
+    RegisterKlass { loader: CLDHandle, klass: KlassHandle, reply_tx: mpsc::Sender<bool> },
 
     FindCLD { loader: OOP, reply_tx: mpsc::Sender<Option<NonNull<ClassLoaderData>>> },
 
@@ -35,6 +35,8 @@ pub struct CLDActor {
     rx: mpsc::UnboundedReceiver<CLDMsg>,
     graph: ClassLoaderDataGraph
 }
+
+unsafe impl Send for CLDActor {}
 
 impl CLDActor {
     pub fn new(rx: mpsc::UnboundedReceiver<CLDMsg>) -> CLDActor {
@@ -55,7 +57,7 @@ impl CLDActor {
                 }
 
                 CLDMsg::RegisterKlass { mut loader, klass, reply_tx } => {
-                    let res = unsafe { loader.as_mut().register_klass(klass) };
+                    let res = loader.register_klass(klass);
                     reply_tx.blocking_send(res).unwrap();
                 }
 

@@ -20,9 +20,9 @@ use crate::{classfile::cld_actor::CLDMsg, gc::oop_storage_actor::OOPStorageMsg, 
 
 #[derive(Debug)]
 pub struct ActorMailboxes {
-    cld_tx: mpsc::UnboundedSender<CLDMsg>,
-    oop_storage_tx: mpsc::UnboundedSender<OOPStorageMsg>,
-    ms_tx: mpsc::UnboundedSender<MSMsg>,
+    pub(super) cld_tx: mpsc::UnboundedSender<CLDMsg>,
+    pub(super) oop_storage_tx: mpsc::UnboundedSender<OOPStorageMsg>,
+    pub(super) ms_tx: mpsc::UnboundedSender<MSMsg>,
 }
 
 impl ActorMailboxes {

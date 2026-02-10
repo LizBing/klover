@@ -38,6 +38,8 @@ impl ManagedHeap {
             _bumper: Bumper::new(committed)
         }
     }
+
+    pub fn init(&mut self) { }
 }
 
 impl ManagedHeap {

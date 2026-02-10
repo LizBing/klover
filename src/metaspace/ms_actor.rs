@@ -37,10 +37,12 @@ pub struct MSActor {
     rx: mpsc::UnboundedReceiver<MSMsg>
 }
 
+unsafe impl Send for MSActor {}
+
 impl MSActor {
-    pub fn new(rx: mpsc::UnboundedReceiver<MSMsg>) -> Self {
+    pub fn new(rx: mpsc::UnboundedReceiver<MSMsg>, ms_size: ByteSize) -> Self {
         let mut res = Self {
-            metaspace: Metaspace::new(),
+            metaspace: Metaspace::new(ms_size),
             rx: rx
         };
 

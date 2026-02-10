@@ -23,6 +23,7 @@ use crate::{memory::c_malloc::c_malloc, oops::symbol::{Symbol, SymbolHandle}, ut
 
 const FIXED_BUCKET_LEN: usize = u16::MAX as usize + 1;
 
+#[derive(Debug)]
 struct Bucket {
     head: *mut Symbol,
 }
@@ -66,6 +67,7 @@ impl Bucket {
     }
 }
 
+#[derive(Debug)]
 pub struct SymbolTable {
     // Arena for permenant symbols(e.g. symbols from bootstrap class loader)
     arena: Bump,
@@ -75,6 +77,9 @@ pub struct SymbolTable {
 
     buckets: Vec<Mutex<Bucket>>,
 }
+
+unsafe impl Send for SymbolTable {}
+unsafe impl Sync for SymbolTable {}
 
 impl SymbolTable {
     pub fn new() -> Self {
@@ -108,7 +113,7 @@ impl SymbolTable {
             symbol = self.arena.alloc_layout(layout).as_ptr() as *mut Symbol;
             unsafe { (*symbol).init(bytes, hash, true); }
         } else {
-            symbol = unsafe { c_malloc(size).as_ptr() };
+            symbol = unsafe { c_malloc(size).as_mut().assume_init_mut() };
             unsafe { (*symbol).init(bytes, hash, false); }
         }
 

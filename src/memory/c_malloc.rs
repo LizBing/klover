@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-use std::ptr::NonNull;
+use std::{mem::MaybeUninit, ptr::NonNull};
 
 use crate::utils::global_defs::ByteSize;
 
-pub unsafe fn c_malloc<T>(size: ByteSize) -> NonNull<T> {
+pub unsafe fn c_malloc<T>(size: ByteSize) -> NonNull<MaybeUninit<T>> {
     NonNull::new(libc::malloc(size.value()) as _).expect("out of memory(c heap)")
 }
 

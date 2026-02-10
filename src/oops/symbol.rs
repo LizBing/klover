@@ -99,6 +99,7 @@ impl Symbol {
     }
 }
 
+#[derive(Debug)]
 pub struct SymbolHandle {
     raw: NonNull<Symbol>
 }
@@ -112,6 +113,12 @@ impl SymbolHandle {
         Self {
             raw: n
         }
+    }
+}
+
+impl SymbolHandle {
+    pub fn equals(&self, n: &SymbolHandle) -> bool {
+        self.raw == n.raw
     }
 }
 

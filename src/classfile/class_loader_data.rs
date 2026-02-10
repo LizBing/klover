@@ -14,17 +14,21 @@
  * limitations under the License.
  */
 
-use std::{ptr::{NonNull, null_mut}, sync::{atomic::{AtomicPtr, Ordering}}};
+use std::{mem::MaybeUninit, ops::DerefMut, ptr::{NonNull, null_mut}, sync::atomic::{AtomicPtr, Ordering}};
 
 use tokio::sync::mpsc;
 
-use crate::{gc::oop_storage_actor::CLD_STORAGE_INDEX, init_ll, metaspace::{metaspace::{MSChunk, SMALL_MSCHUNK_SIZE}, ms_actor::MSMsg}, oops::{klass::Klass, oop_handle::OOPHandle, oop_hierarchy::OOP, symbol::Symbol}, runtime::universe::Universe, utils::{global_defs::{ByteSize, HeapWord}, linked_list::{LinkedList, LinkedListNode}}};
+use crate::{gc::oop_storage_actor::CLD_STORAGE_INDEX, init_ll, metaspace::{metaspace::{MSChunk, SMALL_MSCHUNK_SIZE}, ms_actor::MSMsg}, oops::{klass::{Klass, KlassHandle}, oop_handle::OOPHandle, oop_hierarchy::OOP, symbol::Symbol}, runtime::universe::Universe, utils::{global_defs::{ByteSize, HeapWord}, handle::Handle, linked_list::{LinkedList, LinkedListNode}}};
+
+pub type CLDHandle = Handle<ClassLoaderData>;
 
 #[derive(Debug)]
 pub struct ClassLoaderData {
     pub cld_graph_node: LinkedListNode<Self>,
 
     pub mirror: OOPHandle,
+    is_bootstrap_cld: bool,
+
     klasses: LinkedList<Klass>,
     klass_count: usize,
 
@@ -38,6 +42,8 @@ impl ClassLoaderData {
             cld_graph_node: LinkedListNode::new(),
 
             mirror: OOPHandle::with_storage(CLD_STORAGE_INDEX),
+            is_bootstrap_cld: false,
+
             klasses: LinkedList::new(),
             klass_count: 0,
 
@@ -55,6 +61,8 @@ impl ClassLoaderData {
             cld_graph_node: LinkedListNode::new(),
 
             mirror: OOPHandle::new(),
+            is_bootstrap_cld: true,
+
             klasses: LinkedList::new(),
             klass_count: 0,
 
@@ -69,16 +77,16 @@ impl ClassLoaderData {
 
 impl ClassLoaderData {
     // returns false if duplicated
-    pub fn register_klass(&mut self, mut klass: NonNull<Klass>) -> bool {
+    pub fn register_klass(&mut self, mut klass: KlassHandle) -> bool {
         if self.klasses.iterate(|iter| -> Option<()> {
-            if iter.value().name() as *const Symbol == unsafe { klass.as_ref().name() } {
+            if iter.value().name().equals(klass.name()) {
                 Some(())
             } else { None }
         }).is_some() {
             return false;
         }
 
-        unsafe { self.klasses.push_back(klass.as_mut()); }
+        self.klasses.push_back(klass.deref_mut());
         self.klass_count += 1;
 
         true
@@ -86,7 +94,20 @@ impl ClassLoaderData {
 }
 
 impl ClassLoaderData {
-    pub fn mem_alloc_with_size(&self, size: ByteSize) -> NonNull<HeapWord> {
+    pub fn is_bootstrap_cld(&self) -> bool {
+        self.is_bootstrap_cld
+    }
+}
+
+impl ClassLoaderData {
+    pub fn mem_alloc<T>(&self) -> NonNull<MaybeUninit<T>> {
+        let size = ByteSize::size_of::<T>();
+        unsafe {
+            NonNull::new_unchecked(self.mem_alloc_with_size(size).as_ptr() as _)
+        }
+    }
+
+    pub unsafe fn mem_alloc_with_size(&self, size: ByteSize) -> NonNull<HeapWord> {
         let res = self.try_mem_alloc(size, Ordering::Acquire);
         if !res.is_null() {
             return unsafe { NonNull::new_unchecked(res) };

@@ -16,12 +16,15 @@
 
 use std::sync::OnceLock;
 
-use crate::{gc::managed_heap::ManagedHeap, memory::compressed_space::NarrowEncoder, runtime::{actor_mailboxes::ActorMailboxes, vm_flags::VMFlags}};
+use tokio::sync::mpsc;
+
+use crate::{classfile::{cld_actor::CLDActor, symbol_table::SymbolTable}, gc::{managed_heap::ManagedHeap, oop_storage_actor::OOPStorageActor}, memory::compressed_space::NarrowEncoder, metaspace::ms_actor::MSActor, runtime::{actor_mailboxes::ActorMailboxes, vm_flags::VMFlags}};
 
 static UNIVERSE: OnceLock<Universe> = OnceLock::new();
 
 #[derive(Debug)]
 pub struct Universe {
+    symbol_table: SymbolTable,
     heap: ManagedHeap,
     ms_narrow_encoder: NarrowEncoder,
     actor_mailboxes: ActorMailboxes,
@@ -30,7 +33,42 @@ pub struct Universe {
 
 impl Universe {
     pub fn initialize() {
-        unimplemented!()
+        let mut vm_flags = VMFlags::new();
+        vm_flags.init();
+
+        let mut symbol_table = SymbolTable::new();
+
+        let mut heap = ManagedHeap::new(vm_flags.xmx.clone());
+        heap.init();
+
+        let (cld_tx, cld_rx) = mpsc::unbounded_channel();
+        let (oop_storage_tx, oop_storage_rx) = mpsc::unbounded_channel();
+        let (ms_tx, ms_rx) = mpsc::unbounded_channel();
+
+        let mailboxes = ActorMailboxes {
+            cld_tx: cld_tx,
+            oop_storage_tx: oop_storage_tx,
+            ms_tx: ms_tx
+        };
+
+        let cld_actor = CLDActor::new(cld_rx);
+
+        let oop_storage_actor = OOPStorageActor::new(oop_storage_rx);
+
+        let ms_actor = MSActor::new(ms_rx, *vm_flags.xmx);
+        let mne = ms_actor.create_narrow_encoder();
+
+        UNIVERSE.set(Self {
+            symbol_table: symbol_table,
+            heap: heap,
+            ms_narrow_encoder: mne,
+            actor_mailboxes: mailboxes,
+            vm_flags: vm_flags
+        }).unwrap();
+
+        tokio::spawn(cld_actor.run());
+        tokio::spawn(oop_storage_actor.run());
+        tokio::spawn(ms_actor.run());
     }
 }
 
@@ -53,5 +91,9 @@ impl Universe {
 
     pub fn ms_narrow_encoder() -> &'static NarrowEncoder {
         &Self::this().ms_narrow_encoder
+    }
+
+    pub fn symbol_table() -> &'static SymbolTable {
+        &Self::this().symbol_table
     }
 }

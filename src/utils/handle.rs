@@ -14,21 +14,41 @@
  * limitations under the License.
  */
 
-use std::sync::LazyLock;
+use std::{ops::{Deref, DerefMut}, ptr::NonNull};
 
-use crate::utils::global_defs::{ByteSize, G};
-
-#[derive(Debug)]
-pub struct VMFlags {
-    pub xmx: LazyLock<ByteSize>
+#[derive(Debug, Clone)]
+pub struct Handle<T> {
+    raw: NonNull<T>
 }
 
-impl VMFlags {
-    pub fn new() -> Self {
+impl<T> Handle<T> {
+    pub unsafe fn new(raw: NonNull<T>) -> Self {
         Self {
-            xmx: LazyLock::new(|| ByteSize(1 * G))
+            raw: raw
         }
     }
+}
 
-    pub fn init(&mut self) {}
+impl<T> Handle<T> {
+    fn raw(&self) -> NonNull<T> {
+        self.raw
+    }
+}
+
+impl<T> Deref for Handle<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        unsafe {
+            self.raw.as_ref()
+        }
+    }
+}
+
+impl<T> DerefMut for Handle<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        unsafe {
+            self.raw.as_mut()
+        }
+    }
 }

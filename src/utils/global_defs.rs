@@ -38,6 +38,13 @@ impl ByteSize {
     pub fn value(self) -> usize { self.0 }
 }
 
+impl ByteSize {
+    #[inline]
+    pub const fn size_of<T: Sized>() -> Self {
+        Self(size_of::<T>())
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct WordSize(pub usize);
 impl From<ByteSize> for WordSize {

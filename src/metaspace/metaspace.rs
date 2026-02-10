@@ -28,11 +28,11 @@ pub struct Metaspace {
 }
 
 impl Metaspace {
-    pub fn new() -> Self {
+    pub fn new(size: ByteSize) -> Self {
         // ensure
         assert!(is_aligned!(SMALL_MSCHUNK_SIZE.value(), VirtSpace::page_size().value()));
 
-        let cvs = VirtSpace::new(*Universe::vm_flags().xmx, false);
+        let cvs = VirtSpace::new(size, false);
 
         Self {
             comp_space: CompressedSpace::new(cvs),
