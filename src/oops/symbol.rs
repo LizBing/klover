@@ -44,7 +44,7 @@ impl Symbol {
 
     #[inline]
     pub fn cal_mem_size(bytes: &[u8]) -> ByteSize {
-        ByteSize(size_of::<Self>() - 2 + bytes.len())
+        ByteSize(size_of::<Self>() + bytes.len())
     }
 }
 
@@ -68,7 +68,7 @@ impl Symbol {
 
 impl Symbol {
     pub fn as_bytes(&self) -> &[u8] {
-        unsafe { from_raw_parts(&self.body[2], self.len as usize) }
+        unsafe { from_raw_parts((self as *const Self).add(1) as _, self.len as usize) }
     }
     
     pub fn len(&self) -> usize {
