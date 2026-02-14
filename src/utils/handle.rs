@@ -17,7 +17,7 @@
 use std::{ops::{Deref, DerefMut}, ptr::NonNull};
 
 #[derive(Debug, Clone)]
-pub struct Handle<T> {
+pub struct Handle<T: ?Sized> {
     raw: NonNull<T>
 }
 

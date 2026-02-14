@@ -27,4 +27,6 @@ pub mod normal_klass;
 pub mod prim_klass;
 
 pub mod symbol;
-pub mod rt_attr;
+pub mod rt_cp_items;
+pub mod rt_bytecode;
+pub mod rt_constant_pool;

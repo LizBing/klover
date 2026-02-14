@@ -14,22 +14,36 @@
  * limitations under the License.
  */
 
-use cafebabe::attributes::AttributeInfo;
+use cafebabe::bytecode::Opcode;
 
 use crate::oops::symbol::SymbolHandle;
 
-pub enum RuntimeAttrData {
-}
+pub struct RtObjectArrayType {}
 
-pub struct RuntimeAttrInfo {
+pub struct RtNameAndType {
     name: SymbolHandle,
-    data: RuntimeAttrData
+    desc: SymbolHandle
 }
 
-impl From<&AttributeInfo<'_>> for RuntimeAttrInfo {
-    fn from(value: &AttributeInfo<'_>) -> Self {
-        match value.data {
-            
-        }
-    }
+pub struct RtFieldRef {}
+
+pub struct RtMethodRef {}
+
+pub struct RtDynamicInfo {}
+
+pub struct RtInvokeDynamicInfo {}
+
+pub struct RtLoadable {}
+
+pub struct RtLookupTable {}
+
+pub struct RtRangeTable {}
+
+pub enum RtCPItem {
+    ObjectArrayType(RtObjectArrayType),
+    FieldRef(RtFieldRef),
+    MethodRef(RtMethodRef),
+    DynamicInfo(RtDynamicInfo),
+    InvokeDynamicInfo(RtInvokeDynamicInfo),
+    Loadable(RtLoadable),
 }

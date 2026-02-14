@@ -36,7 +36,7 @@ impl Universe {
         let mut vm_flags = VMFlags::new();
         vm_flags.init();
 
-        let mut symbol_table = SymbolTable::new();
+        let symbol_table = SymbolTable::new();
 
         let mut heap = ManagedHeap::new(vm_flags.xmx.clone());
         heap.init();

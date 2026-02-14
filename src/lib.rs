@@ -22,5 +22,5 @@ mod metaspace;
 mod oops;
 mod utils;
 
-mod code;
+// mod code;
 mod runtime;
