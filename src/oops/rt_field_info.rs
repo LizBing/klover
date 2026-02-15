@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Lei Zaakjyu
+ * Copyright 2026 Lei Zaakjyu
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,22 +14,10 @@
  * limitations under the License.
  */
 
-pub mod access;
-pub mod klass;
-pub mod obj_desc;
-pub mod oop_handle;
-pub mod oop_hierarchy;
-pub mod weak_handle;
+use crate::{oops::{rt_desc::RtFieldDesc, symbol::SymbolHandle}, utils::handle::Handle};
 
-pub mod array_klass;
-pub mod mark_word;
-pub mod normal_klass;
-pub mod prim_klass;
-
-pub mod symbol;
-pub mod rt_desc;
-pub mod rt_cp_items;
-pub mod rt_bytecode;
-pub mod rt_constant_pool;
-pub mod rt_field_info;
-pub mod rt_method_info;
+pub type FieldInfoHandle = Handle<RtFieldInfo>;
+pub struct RtFieldInfo {
+    name: SymbolHandle,
+    desc: RtFieldDesc
+}

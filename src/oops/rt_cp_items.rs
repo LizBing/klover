@@ -14,11 +14,36 @@
  * limitations under the License.
  */
 
-use cafebabe::bytecode::Opcode;
+use std::sync::OnceLock;
 
-use crate::oops::symbol::SymbolHandle;
+use cafebabe::{bytecode::Opcode, constant_pool::ObjectArrayType};
 
-pub struct RtObjectArrayType {}
+use crate::{classfile::symbol_table::SymbolTable, oops::{klass::KlassHandle, rt_desc::{RtFieldDesc, RtFieldType}, symbol::SymbolHandle}, runtime::universe::Universe};
+
+pub struct RtObjectArrayType {
+    unresolved: RtFieldDesc,
+    resolved: OnceLock<KlassHandle>,
+}
+
+impl RtObjectArrayType {
+    fn from_oat(value: &ObjectArrayType, perm: bool) -> Self {
+        match value {
+            ObjectArrayType::BinaryName(x) => {
+                Self {
+                    unresolved: RtFieldDesc::from_symbol(x.as_bytes(), perm),
+                    resolved: OnceLock::new()
+                }
+            }
+
+            ObjectArrayType::ArrayType(x) => {
+                Self {
+                    unresolved: RtFieldDesc::from_desc(x, perm),
+                    resolved: OnceLock::new()
+                }
+            }
+        }
+    }
+}
 
 pub struct RtNameAndType {
     name: SymbolHandle,
