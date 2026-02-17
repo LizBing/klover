@@ -16,7 +16,7 @@
 
 use std::mem::offset_of;
 
-use crate::{oops::mark_word::MarkWord};
+use crate::oops::mark_word::MarkWord;
 
 #[repr(C)]
 pub struct ObjDesc {

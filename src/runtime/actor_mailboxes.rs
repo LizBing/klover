@@ -16,7 +16,11 @@
 
 use tokio::sync::mpsc;
 
-use crate::{classfile::cld_actor::CLDMsg, gc::oop_storage_actor::OOPStorageMsg, metaspace::ms_actor::MSMsg};
+use crate::{
+    classfile::cld_actor::CLDMsg,
+    gc::oop_storage_actor::OOPStorageMsg,
+    metaspace::ms_actor::MSMsg
+};
 
 #[derive(Debug)]
 pub struct ActorMailboxes {

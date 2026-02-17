@@ -14,7 +14,16 @@
  * limitations under the License.
  */
 
-use modular_bitfield::{Specifier, bitfield, prelude::{B4, B26, B32, B62}};
+use modular_bitfield::{
+    Specifier,
+    bitfield,
+    prelude::{
+        B4,
+        B26,
+        B32,
+        B62
+    }
+};
 
 #[cfg(target_endian = "big")]
 compile_error!("Klover VM currently only supports little endian.");

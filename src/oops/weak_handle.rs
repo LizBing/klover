@@ -14,10 +14,26 @@
  * limitations under the License.
  */
 
-use std::ptr::{NonNull, null_mut};
+use std::ptr::{
+    NonNull,
+    null_mut
+};
+
 use tokio::sync::mpsc;
 
-use crate::{gc::oop_storage_actor::OOPStorageMsg, oops::{access::{Access, DECORATOR_IN_NATIVE, DECORATOR_INTERNAL_NONCOMPRESSED, DECORATOR_MO_VOLATILE}, oop_hierarchy::{NarrowOOP, OOP}}, runtime::universe::Universe};
+use crate::{
+    gc::oop_storage_actor::OOPStorageMsg,
+    oops::{
+        access::{
+            Access,
+            DECORATOR_IN_NATIVE,
+            DECORATOR_INTERNAL_NONCOMPRESSED,
+            DECORATOR_MO_VOLATILE
+        },
+        oop_hierarchy::OOP
+    }, 
+    runtime::universe::Universe
+};
 
 #[derive(Debug)]
 pub struct WeakHandle {

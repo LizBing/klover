@@ -14,7 +14,13 @@
  * limitations under the License.
  */
 
-use crate::{oops::{rt_desc::RtFieldDesc, symbol::SymbolHandle}, utils::handle::Handle};
+use crate::{
+    oops::{
+        rt_desc::RtFieldDesc,
+        symbol::SymbolHandle
+    },
+    utils::handle::Handle
+};
 
 pub type FieldInfoHandle = Handle<RtFieldInfo>;
 pub struct RtFieldInfo {

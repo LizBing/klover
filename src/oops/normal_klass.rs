@@ -14,9 +14,12 @@
  * limitations under the License.
  */
 
-use std::{cell::OnceCell, ptr::NonNull, sync::Arc};
+use std::{
+    cell::OnceCell,
+    ptr::NonNull
+};
 
-use cafebabe::{ClassAccessFlags, ClassFile};
+use cafebabe::ClassFile;
 
 use crate::classfile::class_loader_data::ClassLoaderData;
 

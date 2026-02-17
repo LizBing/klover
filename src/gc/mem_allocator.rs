@@ -14,32 +14,19 @@
  * limitations under the License.
  */
 
-use std::ptr::NonNull;
-
-use crate::{oops::{klass::Klass, obj_desc::{ArrayObjDesc, ObjDesc}, oop_hierarchy::OOP}, utils::global_defs::WordSize};
+use crate::{
+    oops::{
+        klass::KlassHandle,
+    },
+    utils::global_defs::WordSize
+};
 
 pub struct MemAllocator {
     word_size: WordSize,
-    klass: NonNull<Klass>,
+    klass: KlassHandle,
 
     is_array: bool,
     length: usize,
 
     do_zero: bool,
-}
-
-impl MemAllocator {
-    pub fn new(klass: NonNull<Klass>, do_zero: bool) -> Self {
-        unimplemented!()
-    }
-
-    pub fn new_array(klass: NonNull<Klass>, len: usize) -> Self {
-        unimplemented!()
-    }
-}
-
-impl MemAllocator {
-    pub fn allocate(&self) -> OOP {
-        unimplemented!()
-    }
 }

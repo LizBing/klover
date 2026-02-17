@@ -14,20 +14,34 @@
  * limitations under the License.
  */
 
-use std::ptr::NonNull;
+use std::{
+    ops::DerefMut,
+    ptr::NonNull
+};
 
 use tokio::sync::mpsc;
 
-use crate::{classfile::class_loader_data::ClassLoaderData, memory::compressed_space::NarrowEncoder, metaspace::metaspace::{MSChunk, Metaspace}, utils::global_defs::{ByteSize, HeapWord}};
+use crate::{
+    classfile::class_loader_data::CLDHandle,
+    memory::compressed_space::NarrowEncoder,
+    metaspace::metaspace::{
+        MSChunk,
+        Metaspace
+    },
+    utils::global_defs::{
+        ByteSize,
+        HeapWord
+    }
+};
 
 pub enum MSMsg {
     Shutdown,
 
-    TryAndAllocateSmallChunk { cld: NonNull<ClassLoaderData>, size: ByteSize, reply_tx: mpsc::Sender<NonNull<HeapWord>> },
+    TryAndAllocateSmallChunk { cld: CLDHandle, size: ByteSize, reply_tx: mpsc::Sender<NonNull<HeapWord>> },
 
-    AllocateSizedChunk { cld: NonNull<ClassLoaderData>, size: ByteSize, reply_tx: mpsc::Sender<NonNull<MSChunk>> },
+    AllocateSizedChunk { cld: CLDHandle, size: ByteSize, reply_tx: mpsc::Sender<NonNull<MSChunk>> },
 
-    FreeChunks { cld: NonNull<ClassLoaderData> },
+    FreeChunks { cld: CLDHandle },
 }
 
 unsafe impl Send for MSMsg {}
@@ -66,25 +80,21 @@ impl MSActor {
                 MSMsg::Shutdown => break,
 
                 MSMsg::TryAndAllocateSmallChunk { mut cld, size, reply_tx } => {
-                    unsafe {
-                        let res = self.metaspace.try_and_alloc_small_chunk(cld.as_mut(), size);
-                        reply_tx.blocking_send(res).unwrap()
-                    }
+                    let res = self.metaspace.try_and_alloc_small_chunk(cld.deref_mut(), size);
+                    reply_tx.blocking_send(res).unwrap()
                 }
 
                 MSMsg::AllocateSizedChunk { mut cld, size, reply_tx } => {
                     let mut chunk = self.metaspace.alloc_sized_chunk(size);
                     unsafe {
-                        cld.as_mut().claim_new_sized_chunk(chunk.as_mut());
+                        cld.claim_new_sized_chunk(chunk.as_mut());
                     }
 
                     reply_tx.blocking_send(chunk).unwrap()
                 }
 
                 MSMsg::FreeChunks { mut cld } => {
-                    unsafe {
-                        cld.as_mut().drop_chunks(|x| self.metaspace.free_chunk(x));
-                    }
+                    cld.drop_chunks(|x| self.metaspace.free_chunk(x));
                 }
             }
         }

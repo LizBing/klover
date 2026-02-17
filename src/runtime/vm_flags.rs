@@ -16,7 +16,10 @@
 
 use std::sync::LazyLock;
 
-use crate::utils::global_defs::{ByteSize, G};
+use crate::utils::global_defs::{
+    ByteSize,
+    G
+};
 
 #[derive(Debug)]
 pub struct VMFlags {
@@ -30,5 +33,5 @@ impl VMFlags {
         }
     }
 
-    pub fn init(&mut self) {}
+    // pub fn init(&mut self) {}
 }

@@ -16,14 +16,20 @@
 
 use std::ptr::NonNull;
 
-use crate::{classfile::class_loader_data::ClassLoaderData, oops::oop_hierarchy::OOP};
+use crate::{
+    classfile::class_loader_data::{
+        CLDHandle,
+        ClassLoaderData
+    },
+    oops::oop_hierarchy::OOP
+};
 
 const INIT_CAPACITY_OF_CLD_GRAPH: usize = 128;
 
 #[derive(Debug)]
 pub struct ClassLoaderDataGraph {
-    array: Vec<NonNull<ClassLoaderData>>,
-    bs_cld: NonNull<ClassLoaderData>
+    array: Vec<CLDHandle>,
+    bs_cld: CLDHandle
 }
 
 impl ClassLoaderDataGraph {
@@ -33,34 +39,32 @@ impl ClassLoaderDataGraph {
 
         Self {
             array: Vec::with_capacity(INIT_CAPACITY_OF_CLD_GRAPH),
-            bs_cld: unsafe { NonNull::new_unchecked(Box::leak(cld)) }
+            bs_cld: unsafe { CLDHandle::new(NonNull::new_unchecked(Box::leak(cld))) }
         }
     }
 }
 
 impl ClassLoaderDataGraph {
-    pub fn register_cld(&mut self, loader: OOP) -> NonNull<ClassLoaderData> {
+    pub fn register_cld(&mut self, loader: OOP) -> CLDHandle {
         assert!(!loader.is_null());
 
         let mut cld = unsafe { Box::<ClassLoaderData>::new_uninit().assume_init() };
         cld.init(loader);
 
-        let res = unsafe { NonNull::new_unchecked(Box::leak(cld)) };
-        self.array.push(res);
+        let res = unsafe { CLDHandle::new(NonNull::new_unchecked(Box::leak(cld))) };
+        self.array.push(res.clone());
 
         res
     }
 
-    pub fn find_cld(&self, loader: OOP) -> Option<NonNull<ClassLoaderData>> {
+    pub fn find_cld(&self, loader: OOP) -> Option<CLDHandle> {
         if loader.is_null() {
-            return Some(self.bs_cld);
+            return Some(self.bs_cld.clone());
         }
 
         for n in &self.array {
-            unsafe {
-                if n.as_ref().mirror.equals(loader) {
-                    return Some(n.clone());
-                }
+            if n.mirror.equals(loader) {
+                return Some((*n).clone());
             }
         }
 

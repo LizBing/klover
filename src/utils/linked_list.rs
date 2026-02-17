@@ -16,7 +16,10 @@
 
 // Intrusive Doubly Linked List
 
-use std::{fmt::Debug, ops::{Deref, DerefMut}, ptr::null_mut};
+use std::{
+    fmt::Debug, 
+    ptr::null_mut
+};
 
 #[derive(Debug)]
 pub struct LinkedListNode<T> {

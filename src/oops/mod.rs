@@ -32,4 +32,3 @@ pub mod rt_cp_items;
 pub mod rt_bytecode;
 pub mod rt_constant_pool;
 pub mod rt_field_info;
-pub mod rt_method_info;

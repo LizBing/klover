@@ -14,9 +14,38 @@
  * limitations under the License.
  */
 
-use std::{ptr::NonNull, sync::atomic::Ordering};
+use std::{
+    marker::PhantomData,
+    ptr::NonNull,
+    sync::atomic::Ordering
+};
 
-use crate::{align_up, classfile::class_loader_data::ClassLoaderData, init_ll, is_aligned, memory::{bumper::Bumper, compressed_space::{CompressedSpace, NarrowEncoder}, mem_region::MemRegion, virt_space::VirtSpace}, runtime::universe::Universe, utils::{global_defs::{ByteSize, HeapWord, K, WordSize}, linked_list::{LinkedList, LinkedListNode}}};
+use crate::{
+    align_up,
+    classfile::class_loader_data::ClassLoaderData,
+    init_ll,
+    is_aligned,
+    memory::{
+        bumper::Bumper,
+        compressed_space::{
+            CompressedSpace,
+            NarrowEncoder
+        },
+        mem_region::MemRegion,
+        virt_space::VirtSpace
+    },
+        utils::{
+            global_defs::{
+                ByteSize,
+                HeapWord,
+                K
+            },
+            linked_list::{
+                LinkedList,
+                LinkedListNode
+            }
+        }
+};
 
 pub const SMALL_MSCHUNK_SIZE: ByteSize = ByteSize(8 * K);
 
@@ -52,12 +81,10 @@ impl Metaspace {
         NarrowEncoder::new(self.comp_space.base())
     }
 
-    pub fn alloc_small_chunk(&mut self) -> NonNull<MSChunk> {
+    pub fn alloc_small_chunk(&mut self) -> &mut MSChunk {
         if let Some(x) = self.free_list.pop_back() {
             x.bumper.clear();
-            unsafe {
-                return NonNull::new_unchecked(x as *const _ as _);
-            }
+            return x;
         }
 
         let vs = &mut self.comp_space.vs;
@@ -68,7 +95,7 @@ impl Metaspace {
         let chunk = Box::leak(Box::new(MSChunk::new(MemRegion::with_size(start, SMALL_MSCHUNK_SIZE.into()))));
         self.chunk_list.push_back(chunk);
 
-        unsafe { NonNull::new_unchecked(chunk) }
+        chunk
     }
 
     pub fn alloc_sized_chunk(&mut self, size: ByteSize) -> NonNull<MSChunk> {
@@ -94,11 +121,9 @@ impl Metaspace {
         unsafe { NonNull::new_unchecked(chunk) }
     }
 
-    pub fn free_chunk(&mut self, mut c: NonNull<MSChunk>) {
-        unsafe {
-            c.as_mut().owning_node.erase();
-            self.free_list.push_back(c.as_mut());
-        }
+    pub fn free_chunk(&mut self, c: &mut MSChunk) {
+        unsafe { c.owning_node.erase(); }
+        self.free_list.push_back(c);
     }
 }
 
@@ -110,7 +135,7 @@ impl Metaspace {
                 return NonNull::new_unchecked(attempt);
             }
 
-            let new_chunk = self.alloc_small_chunk().as_mut();
+            let new_chunk = self.alloc_small_chunk();
             let res = new_chunk.bumper.alloc_with_size(size.into());
             debug_assert!(!res.is_null());
 
@@ -126,7 +151,9 @@ pub struct MSChunk {
     pub(super) chunk_list_node: LinkedListNode<Self>,
     pub owning_node: LinkedListNode<Self>,
 
-    pub bumper: Bumper
+    pub bumper: Bumper,
+
+    __: PhantomData<()>
 }
 
 impl MSChunk {
@@ -134,7 +161,9 @@ impl MSChunk {
         Self {
             chunk_list_node: LinkedListNode::new(),
             owning_node: LinkedListNode::new(),
-            bumper: Bumper::new(mr)
+            bumper: Bumper::new(mr),
+
+            __: PhantomData
         }
     }
 }

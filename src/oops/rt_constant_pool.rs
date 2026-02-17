@@ -16,7 +16,14 @@
 
 use std::ptr::NonNull;
 
-use crate::{classfile::class_loader_data::CLDHandle, oops::rt_cp_items::RtCPItem, utils::{global_defs::ByteSize, handle::Handle}};
+use crate::{
+    classfile::class_loader_data::CLDHandle,
+    oops::rt_cp_items::RtCPItem,
+    utils::{
+        global_defs::ByteSize,
+        handle::Handle
+    }
+};
 
 struct RtConstantPool {
     len: usize,

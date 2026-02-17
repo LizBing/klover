@@ -16,7 +16,17 @@
 
 use std::ptr::null;
 
-use crate::{align_down, memory::virt_space::VirtSpace, utils::global_defs::{Address, ByteSize, G, HeapWord, LOG_BYTES_PER_WORD}};
+use crate::{
+    align_down,
+    memory::virt_space::VirtSpace,
+    utils::global_defs::{
+        Address,
+        ByteSize,
+        G,
+        HeapWord,
+        LOG_BYTES_PER_WORD
+    }
+};
 
 const SLOT_SIZE: ByteSize = ByteSize(size_of::<HeapWord>());
 

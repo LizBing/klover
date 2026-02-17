@@ -14,9 +14,21 @@
  * limitations under the License.
  */
 
-use std::{ops::Deref, ptr::{self, NonNull, null_mut}, slice::from_raw_parts, sync::atomic::{AtomicU16, Ordering}};
+use std::{
+    ops::Deref,
+    ptr::{
+        self,
+        NonNull,
+        null_mut
+    },
+    slice::from_raw_parts,
+    sync::atomic::{
+        AtomicU16,
+        Ordering
+    }
+};
 
-use crate::{align_up, utils::global_defs::ByteSize};
+use crate::utils::global_defs::ByteSize;
 
 #[repr(C)]
 pub struct Symbol {

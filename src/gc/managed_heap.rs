@@ -15,7 +15,19 @@
  */
 
 
-use crate::{memory::{bumper::Bumper, mem_region::MemRegion, virt_space::VirtSpace}, utils::global_defs::{ByteSize, HeapWord, WordSize}};
+use std::ptr::NonNull;
+
+use crate::{
+    memory::{
+        bumper::Bumper,
+        mem_region::MemRegion,
+        virt_space::VirtSpace
+    },
+    utils::global_defs::{
+        ByteSize,
+        HeapWord
+    }
+};
 
 #[derive(Debug)]
 pub struct ManagedHeap {
@@ -39,7 +51,7 @@ impl ManagedHeap {
         }
     }
 
-    pub fn init(&mut self) { }
+    // pub fn init(&mut self) {}
 }
 
 impl ManagedHeap {
@@ -51,7 +63,7 @@ impl ManagedHeap {
         self._virt_space.reserved()
     }
 
-    pub fn mem_allocation(&self, word_size: usize, do_zero: bool) -> *const HeapWord {
+    pub fn mem_allocation(&self, word_size: usize, do_zero: bool) -> NonNull<HeapWord> {
         unimplemented!()
     }
 }

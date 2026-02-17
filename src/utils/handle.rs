@@ -14,14 +14,20 @@
  * limitations under the License.
  */
 
-use std::{ops::{Deref, DerefMut}, ptr::NonNull};
+use std::{
+    ops::{
+        Deref,
+        DerefMut
+    },
+    ptr::NonNull
+};
 
-#[derive(Debug, Clone)]
-pub struct Handle<T: ?Sized> {
+#[derive(Debug)]
+pub struct Handle<T: ?Sized + Sync> {
     raw: NonNull<T>
 }
 
-impl<T> Handle<T> {
+impl<T: Sync> Handle<T> {
     pub unsafe fn new(raw: NonNull<T>) -> Self {
         Self {
             raw: raw
@@ -29,13 +35,19 @@ impl<T> Handle<T> {
     }
 }
 
-impl<T> Handle<T> {
+impl<T: Sync> Clone for Handle<T> {
+    fn clone(&self) -> Self {
+        Self { raw: self.raw }
+    }
+}
+
+impl<T: Sync> Handle<T> {
     fn raw(&self) -> NonNull<T> {
         self.raw
     }
 }
 
-impl<T> Deref for Handle<T> {
+impl<T: Sync> Deref for Handle<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -45,7 +57,7 @@ impl<T> Deref for Handle<T> {
     }
 }
 
-impl<T> DerefMut for Handle<T> {
+impl<T: Sync> DerefMut for Handle<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe {
             self.raw.as_mut()

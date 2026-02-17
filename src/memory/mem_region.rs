@@ -14,9 +14,22 @@
  * limitations under the License.
  */
 
-use std::{marker::PhantomData, ptr::{null, null_mut}};
+use std::{
+    marker::PhantomData,
+    ptr::{
+        null,
+        null_mut
+    }
+};
 
-use crate::{memory::virt_space::VirtSpace, utils::global_defs::{ByteSize, HeapWord, WordSize}};
+use crate::{
+    memory::virt_space::VirtSpace,
+    utils::global_defs::{
+        ByteSize,
+        HeapWord,
+        WordSize
+    }
+};
 
 #[derive(Clone, Debug)]
 pub struct MemRegion {

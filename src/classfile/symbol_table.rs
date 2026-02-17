@@ -14,12 +14,27 @@
  * limitations under the License.
  */
 
-use std::{alloc::Layout, ptr::{NonNull, null_mut}, sync::atomic::AtomicUsize, u16};
+use std::{
+    alloc::Layout,
+    ptr::{
+        NonNull,
+        null_mut
+    },
+    sync::atomic::AtomicUsize,
+    u16
+};
 
 use bumpalo::Bump;
 use parking_lot::Mutex;
 
-use crate::{memory::c_malloc::c_malloc, oops::symbol::{Symbol, SymbolHandle}, utils::global_defs::Word};
+use crate::{
+    memory::c_malloc::c_malloc,
+    oops::symbol::{
+        Symbol,
+        SymbolHandle
+    },
+    utils::global_defs::Word
+};
 
 const FIXED_BUCKET_LEN: usize = u16::MAX as usize + 1;
 

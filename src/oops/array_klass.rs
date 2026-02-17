@@ -16,7 +16,7 @@
 
 use std::ptr::NonNull;
 
-use crate::oops::klass::{Klass};
+use crate::oops::klass::Klass;
 
 #[derive(Debug)]
 pub struct ArrayKlass {

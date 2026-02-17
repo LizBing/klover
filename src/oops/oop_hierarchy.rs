@@ -16,7 +16,10 @@
 
 use std::ptr::null;
 
-use crate::oops::{mark_word::MarkWord, obj_desc::ObjDesc};
+use crate::oops::{
+    mark_word::MarkWord,
+    obj_desc::ObjDesc
+};
 
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy)]

@@ -14,11 +14,52 @@
  * limitations under the License.
  */
 
-use std::{mem::MaybeUninit, ops::DerefMut, ptr::{NonNull, null_mut}, sync::atomic::{AtomicPtr, Ordering}};
+use std::{
+    mem::MaybeUninit,
+    ops::DerefMut,
+    ptr::{
+        NonNull,
+        null_mut
+    },
+    sync::atomic::{
+        AtomicPtr,
+        Ordering
+    }
+};
 
 use tokio::sync::mpsc;
 
-use crate::{gc::oop_storage_actor::CLD_STORAGE_INDEX, init_ll, metaspace::{metaspace::{MSChunk, SMALL_MSCHUNK_SIZE}, ms_actor::MSMsg}, oops::{klass::{Klass, KlassHandle}, oop_handle::OOPHandle, oop_hierarchy::OOP, symbol::Symbol}, runtime::universe::Universe, utils::{global_defs::{ByteSize, HeapWord}, handle::Handle, linked_list::{LinkedList, LinkedListNode}}};
+use crate::{
+    gc::oop_storage_actor::CLD_STORAGE_INDEX,
+    init_ll,
+    metaspace::{
+        metaspace::{
+            MSChunk,
+            SMALL_MSCHUNK_SIZE
+        },
+        ms_actor::MSMsg
+    },
+    oops::{
+        klass::{
+            Klass,
+            KlassHandle
+        },
+        oop_handle::OOPHandle,
+        oop_hierarchy::OOP
+    },
+    runtime::universe::Universe,
+    utils::{
+        global_defs::{
+            ByteSize,
+            HeapWord
+        },
+        handle::Handle,
+        linked_list::{
+            LinkedList,
+            LinkedListNode
+        }
+    }
+};
 
 pub type CLDHandle = Handle<ClassLoaderData>;
 
@@ -35,6 +76,8 @@ pub struct ClassLoaderData {
     owned_chunks: LinkedList<MSChunk>,
     current_chunk: AtomicPtr<MSChunk>,
 }
+
+unsafe impl Sync for ClassLoaderData {}
 
 impl ClassLoaderData {
     pub fn init(&mut self, loader: OOP) {
@@ -113,7 +156,7 @@ impl ClassLoaderData {
             return unsafe { NonNull::new_unchecked(res) };
         }
 
-        let handle = unsafe { NonNull::new_unchecked(self as *const _ as _) };
+        let handle = unsafe { CLDHandle::new(NonNull::new_unchecked(self as *const _ as _)) };
         if size.value() < SMALL_MSCHUNK_SIZE.value() / 2 {
             let (tx, mut rx) = mpsc::channel(1);
             
@@ -153,11 +196,11 @@ impl ClassLoaderData {
         self.owned_chunks.push_back(chunk);
     }
 
-    pub fn drop_chunks<F: FnMut(NonNull<MSChunk>)>(&mut self, mut f: F) {
+    pub fn drop_chunks<F: FnMut(&mut MSChunk)>(&mut self, mut f: F) {
         self.current_chunk.store(null_mut(), Ordering::Relaxed);
         loop {
             match self.owned_chunks.pop_back() {
-                Some(x) => unsafe { f(NonNull::new_unchecked(x)) },
+                Some(x) => f(x),
                 None => break
             }
         }

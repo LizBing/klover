@@ -18,7 +18,22 @@ use std::sync::OnceLock;
 
 use tokio::sync::mpsc;
 
-use crate::{classfile::{cld_actor::CLDActor, symbol_table::SymbolTable}, gc::{managed_heap::ManagedHeap, oop_storage_actor::OOPStorageActor}, memory::compressed_space::NarrowEncoder, metaspace::ms_actor::MSActor, runtime::{actor_mailboxes::ActorMailboxes, vm_flags::VMFlags}};
+use crate::{
+    classfile::{
+        cld_actor::CLDActor,
+        symbol_table::SymbolTable
+    },
+    gc::{
+        managed_heap::ManagedHeap,
+        oop_storage_actor::OOPStorageActor
+    },
+    memory::compressed_space::NarrowEncoder,
+    metaspace::ms_actor::MSActor,
+    runtime::{
+        actor_mailboxes::ActorMailboxes,
+        vm_flags::VMFlags
+    }
+};
 
 static UNIVERSE: OnceLock<Universe> = OnceLock::new();
 
@@ -33,13 +48,13 @@ pub struct Universe {
 
 impl Universe {
     pub fn initialize() {
-        let mut vm_flags = VMFlags::new();
-        vm_flags.init();
+        let vm_flags = VMFlags::new();
+        // vm_flags.init();
 
         let symbol_table = SymbolTable::new();
 
-        let mut heap = ManagedHeap::new(vm_flags.xmx.clone());
-        heap.init();
+        let heap = ManagedHeap::new(vm_flags.xmx.clone());
+        // heap.init();
 
         let (cld_tx, cld_rx) = mpsc::unbounded_channel();
         let (oop_storage_tx, oop_storage_rx) = mpsc::unbounded_channel();

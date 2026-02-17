@@ -14,7 +14,10 @@
  * limitations under the License.
  */
 
-use std::{mem::MaybeUninit, ptr::NonNull};
+use std::{
+    mem::MaybeUninit,
+    ptr::NonNull
+};
 
 use crate::utils::global_defs::ByteSize;
 

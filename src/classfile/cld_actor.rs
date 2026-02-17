@@ -14,17 +14,25 @@
  * limitations under the License.
  */
 
-use std::ptr::NonNull;
 use tokio::sync::mpsc;
 
-use crate::{classfile::{class_loader_data::{CLDHandle, ClassLoaderData}, cld_graph::ClassLoaderDataGraph}, oops::{klass::{Klass, KlassHandle}, oop_hierarchy::OOP}};
+use crate::{
+    classfile::{
+        class_loader_data::CLDHandle,
+        cld_graph::ClassLoaderDataGraph
+    },
+    oops::{
+        klass::KlassHandle,
+        oop_hierarchy::OOP
+    }
+};
 
 pub enum CLDMsg {
-    RegisterCLD { loader: OOP, reply_tx: mpsc::Sender<NonNull<ClassLoaderData>> },
+    RegisterCLD { loader: OOP, reply_tx: mpsc::Sender<CLDHandle> },
 
     RegisterKlass { loader: CLDHandle, klass: KlassHandle, reply_tx: mpsc::Sender<bool> },
 
-    FindCLD { loader: OOP, reply_tx: mpsc::Sender<Option<NonNull<ClassLoaderData>>> },
+    FindCLD { loader: OOP, reply_tx: mpsc::Sender<Option<CLDHandle>> },
 
     Shutdown
 }

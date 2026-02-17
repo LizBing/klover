@@ -14,9 +14,23 @@
  * limitations under the License.
  */
 
-use std::{mem::MaybeUninit, ptr::null_mut, sync::atomic::{AtomicPtr, Ordering}};
+use std::{
+    mem::MaybeUninit,
+    ptr::null_mut,
+    sync::atomic::{
+        AtomicPtr,
+        Ordering
+    }
+};
 
-use crate::{memory::mem_region::MemRegion, utils::global_defs::{ByteSize, HeapWord, WordSize}};
+use crate::{
+    memory::mem_region::MemRegion,
+    utils::global_defs::{
+        ByteSize,
+        HeapWord,
+        WordSize
+    }
+};
 
 #[derive(Debug)]
 pub struct Bumper {

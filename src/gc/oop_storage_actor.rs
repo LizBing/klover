@@ -14,10 +14,16 @@
  * limitations under the License.
  */
 
-use std::{array::from_fn, ptr::NonNull};
+use std::{
+    array::from_fn,
+    ptr::NonNull
+};
 use tokio::sync::mpsc;
 
-use crate::{gc::oop_storage::OOPStorage, oops::oop_hierarchy::OOP};
+use crate::{
+    gc::oop_storage::OOPStorage,
+    oops::oop_hierarchy::OOP
+};
 
 const ALL_START: usize = 0;
 const STRONG_START: usize = ALL_START;

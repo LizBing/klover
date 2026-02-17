@@ -33,7 +33,3 @@ impl GCActor {
         }
     }
 }
-
-impl GCActor {
-
-}

@@ -14,9 +14,19 @@
  * limitations under the License.
  */
 
-use std::ptr::NonNull;
-
-use crate::{classfile::class_loader_data::{CLDHandle, ClassLoaderData}, oops::{array_klass::ArrayKlass, normal_klass::NormalKlass, prim_klass::PrimKlass, symbol::{Symbol, SymbolHandle}}, utils::{handle::Handle, linked_list::LinkedListNode}};
+use crate::{
+    classfile::class_loader_data::CLDHandle,
+    oops::{
+        array_klass::ArrayKlass,
+        normal_klass::NormalKlass,
+        prim_klass::PrimKlass,
+        symbol::SymbolHandle
+    },
+    utils::{
+        handle::Handle,
+        linked_list::LinkedListNode
+    }
+};
 
 pub type KlassHandle = Handle<Klass>;
 
@@ -32,6 +42,8 @@ pub struct Klass {
     pub cld_node: LinkedListNode<Self>,
     klass_data: KlassData<'static>,
 }
+
+unsafe impl Sync for Klass {}
 
 impl Klass {
     pub fn name(&self) -> &SymbolHandle {

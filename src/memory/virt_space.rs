@@ -17,9 +17,19 @@
 
 use std::fmt::Debug;
 
-use region::{Allocation, Protection};
+use region::{
+    Allocation,
+    Protection
+};
 
-use crate::{align_up, utils::global_defs::{ByteSize, HeapWord, WordSize}};
+use crate::{
+    align_up,
+    utils::global_defs::{
+        ByteSize,
+        HeapWord,
+        WordSize
+    }
+};
 
 use super::mem_region::MemRegion;
 

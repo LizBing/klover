@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-pub mod barrier_set;
 pub mod gc_actor;
 pub mod managed_heap;
 pub mod mem_allocator;

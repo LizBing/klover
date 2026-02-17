@@ -16,7 +16,7 @@
 
 use std::ptr::NonNull;
 
-use crate::oops::oop_hierarchy::{NarrowOOP, OOP};
+use crate::oops::oop_hierarchy::OOP;
 
 #[derive(Debug)]
 pub struct OOPStorage;
