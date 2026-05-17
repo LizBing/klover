@@ -1,0 +1,3 @@
+/Users/lizbing/Workspace/Projects/myjvm/build/CMakeFiles/jvm.dir
+/Users/lizbing/Workspace/Projects/myjvm/build/CMakeFiles/edit_cache.dir
+/Users/lizbing/Workspace/Projects/myjvm/build/CMakeFiles/rebuild_cache.dir
