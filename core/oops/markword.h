@@ -1,7 +1,7 @@
 #ifndef CORE_OOPS_MARKWORD_H_
 #define CORE_OOPS_MARKWORD_H_
 
-#include "utils/global_defs.h"
+#include "core/utils/global_defs.h"
 
 static const int LOCKVALUE_NONE = 0x01;
 static const int LOCKVALUE_GC = 0x11;

@@ -12,6 +12,7 @@ add_library(jvm SHARED
 
 target_include_directories(jvm
   PUBLIC
-  ${CMAKE_SOURCE_DIR}/core
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/rust/include
 )
 

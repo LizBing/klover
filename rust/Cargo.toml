@@ -3,4 +3,9 @@ name = "rust"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+crate-type = ["staticlib"]
+
 [dependencies]
+"bitflags" = "2.11.1"
+"byteorder" = "1"
