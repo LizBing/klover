@@ -1,4 +1,4 @@
-use crate::class_parser::parse_error::{ParseError, ParseResult};
+use super::parse_error::{ParseError, ParseResult};
 
 pub struct ClassReader<'a> {
     stream: &'a [u8],
@@ -42,6 +42,24 @@ impl ClassReader<'_> {
         ]))
     }
 
+    pub fn read_i32(&mut self) -> ParseResult<i32> {
+        Ok(i32::from_be_bytes([
+            self.read_u8()?,
+            self.read_u8()?,
+            self.read_u8()?,
+            self.read_u8()?
+        ]))
+    }
+
+    pub fn read_f32(&mut self) -> ParseResult<f32> {
+        Ok(f32::from_be_bytes([
+            self.read_u8()?,
+            self.read_u8()?,
+            self.read_u8()?,
+            self.read_u8()?
+        ]))
+    }
+    
     pub fn read_i64(&mut self) -> ParseResult<i64> {
         Ok(i64::from_be_bytes([
             self.read_u8()?,
@@ -73,6 +91,8 @@ impl ClassReader<'_> {
             Some(x) => x,
             None => return Err(ParseError::EOF)
         };
+
+        self.pos += len;
 
         Ok(res)
     }

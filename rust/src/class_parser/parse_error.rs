@@ -4,7 +4,8 @@ pub enum ParseError {
     InvalidMagic(u32),
     InvalidVersion { minor: u16, major: u16 },
     InvalidCPTag(u8),
-    InvalidAccFlags(u16)
+    InvalidAccFlags(u16),
+    InvalidUtf8(Vec<u8>)
 }
 
 pub type ParseResult<T> = Result<T, ParseError>;

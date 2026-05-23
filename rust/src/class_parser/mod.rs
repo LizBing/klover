@@ -1,6 +1,6 @@
 mod acc_flags;
 mod attr_info;
-mod class_file;
+pub mod class_file;
 mod class_reader;
 mod cp_info;
 mod field_info;

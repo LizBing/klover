@@ -1,5 +1,6 @@
-use crate::class_parser::{class_reader::ClassReader, parse_error::ParseResult};
+use super::{class_reader::ClassReader, parse_error::ParseResult};
 
+#[derive(Debug)]
 pub struct MethodInfo {}
 
 impl MethodInfo {

@@ -1,8 +1,4 @@
-use std::io::{BufReader, Cursor};
-
-use byteorder::{BigEndian, ReadBytesExt};
-
-use crate::class_parser::{acc_flags::{self, AccFlags}, attr_info::AttrInfo, class_reader::ClassReader, cp_info::ConstantPoolInfo, field_info::FieldInfo, interface_info::InterfaceInfo, method_info::MethodInfo, parse_error::{ParseError, ParseResult}};
+use crate::class_parser::{acc_flags::AccFlags, attr_info::AttrInfo, class_reader::ClassReader, cp_info::ConstantPoolInfo, field_info::FieldInfo, interface_info::InterfaceInfo, method_info::MethodInfo, parse_error::{ParseError, ParseResult}};
 
 const VALID_MAGIC: u32 = 0xCAFEBABE;
 
@@ -18,7 +14,8 @@ pub struct ClassFile {
     attributes: Vec<AttrInfo>
 }
 
-struct ClassFileBuilder {
+#[derive(Debug)]
+pub struct ClassFileBuilder {
     this_class: u16,
     super_class: u16,
     acc_flags: AccFlags,
@@ -41,13 +38,13 @@ impl ClassFileBuilder {
     
         let minor = rd.read_u16()?;
         let major = rd.read_u16()?;
-        if (major < 45 || major > 65) || (major >= 56 && (minor != 0 && minor != 65535)) {
+        if (major < 45 || major > 69) || (major >= 56 && (minor != 0 && minor != 65535)) {
             return Err(ParseError::InvalidVersion { minor: minor, major: major })
         }
         
         let cp_count = rd.read_u16()?;
         let mut cp = Vec::new();
-        for _ in 0..cp_count {
+        for _ in 0..cp_count-1 {
             cp.push(ConstantPoolInfo::read(&mut rd)?);
         }
     

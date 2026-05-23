@@ -4,8 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [lib]
-crate-type = ["staticlib"]
+crate-type = ["staticlib", "rlib"]
 
 [dependencies]
 "bitflags" = "2.11.1"
 "byteorder" = "1"
+"parking_lot" = "0.12.5"

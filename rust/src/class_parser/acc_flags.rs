@@ -1,6 +1,7 @@
 use bitflags::bitflags;
 
 bitflags! {
+    #[derive(Debug)]
     pub struct AccFlags : u16 {
         const ACC_PUBLIC =      0x0001;
         const ACC_FINAL =       0x0010;
