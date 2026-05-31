@@ -1,6 +1,7 @@
 #ifndef CORE_OOPS_MARKWORD_H_
 #define CORE_OOPS_MARKWORD_H_
 
+#include "core/memory/comp_space_defs.h"
 #include "core/utils/global_defs.h"
 
 static const int LOCKVALUE_NONE = 0x01;
@@ -28,11 +29,11 @@ static const int COMPPTR_SHIFT = 31;
 static const uint64_t COMPPTR_MASK = (1ul << COMPPTR_BITS) - 1;
 static const uint64_t COMPPTR_MASK_IN_PLACE = COMPPTR_MASK << COMPPTR_SHIFT;
 
-static inline uint32_t mw_read_comp_ptr(uint64_t raw) {
+static inline comp_ptr_t mw_read_comp_ptr(uint64_t raw) {
   return (raw & COMPPTR_MASK_IN_PLACE) >> COMPPTR_SHIFT;
 }
 
-static inline uint64_t mw_write_comp_ptr(uint64_t raw, uint32_t value) {
+static inline uint64_t mw_write_comp_ptr(uint64_t raw, comp_ptr_t value) {
   return (raw & ~COMPPTR_MASK_IN_PLACE) | (((uint64_t)value) << COMPPTR_SHIFT);
 }
 

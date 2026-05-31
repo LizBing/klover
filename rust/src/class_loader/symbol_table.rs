@@ -1,10 +1,10 @@
-use std::{hash::Hash, iter::from_fn, ptr::{NonNull, null_mut}, sync::atomic::{AtomicU32, Ordering}};
+use std::{ptr::{NonNull, null_mut}, sync::atomic::{AtomicU32, Ordering}};
 
-use parking_lot::{Mutex, lock_api::Mutex};
+use parking_lot::Mutex;
 
 use crate::class_loader::symbol_handle::SymbolHandle;
 
-pub struct Symbol {
+pub(super) struct Symbol {
     next: *mut Symbol,
     ref_cnt: AtomicU32,
     

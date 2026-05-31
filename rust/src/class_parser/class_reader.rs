@@ -2,14 +2,14 @@ use super::parse_error::{ParseError, ParseResult};
 
 pub struct ClassReader<'a> {
     stream: &'a [u8],
-    pos: usize
+    pos: usize,
 }
 
 impl<'a> ClassReader<'a> {
     pub fn new(stream: &'a [u8]) -> Self {
         Self {
             stream: stream,
-            pos: 0
+            pos: 0,
         }
     }
 }
@@ -18,11 +18,11 @@ impl ClassReader<'_> {
     pub fn read_u8(&mut self) -> ParseResult<u8> {
         let res = match self.stream.get(self.pos) {
             Some(x) => Ok(*x),
-            None => Err(super::parse_error::ParseError::EOF)
+            None => Err(super::parse_error::ParseError::EOF),
         };
 
         self.pos += 1;
-        
+
         res
     }
 
@@ -38,7 +38,7 @@ impl ClassReader<'_> {
             self.read_u8()?,
             self.read_u8()?,
             self.read_u8()?,
-            self.read_u8()?
+            self.read_u8()?,
         ]))
     }
 
@@ -47,7 +47,7 @@ impl ClassReader<'_> {
             self.read_u8()?,
             self.read_u8()?,
             self.read_u8()?,
-            self.read_u8()?
+            self.read_u8()?,
         ]))
     }
 
@@ -56,10 +56,10 @@ impl ClassReader<'_> {
             self.read_u8()?,
             self.read_u8()?,
             self.read_u8()?,
-            self.read_u8()?
+            self.read_u8()?,
         ]))
     }
-    
+
     pub fn read_i64(&mut self) -> ParseResult<i64> {
         Ok(i64::from_be_bytes([
             self.read_u8()?,
@@ -69,10 +69,10 @@ impl ClassReader<'_> {
             self.read_u8()?,
             self.read_u8()?,
             self.read_u8()?,
-            self.read_u8()?
+            self.read_u8()?,
         ]))
     }
-    
+
     pub fn read_f64(&mut self) -> ParseResult<f64> {
         Ok(f64::from_be_bytes([
             self.read_u8()?,
@@ -82,14 +82,14 @@ impl ClassReader<'_> {
             self.read_u8()?,
             self.read_u8()?,
             self.read_u8()?,
-            self.read_u8()?
+            self.read_u8()?,
         ]))
     }
 
     pub fn read(&mut self, len: usize) -> ParseResult<&[u8]> {
-        let res = match self.stream.get(self.pos..self.pos+len+1) {
+        let res = match self.stream.get(self.pos..self.pos + len) {
             Some(x) => x,
-            None => return Err(ParseError::EOF)
+            None => return Err(ParseError::EOF),
         };
 
         self.pos += len;
@@ -97,5 +97,3 @@ impl ClassReader<'_> {
         Ok(res)
     }
 }
-
-
