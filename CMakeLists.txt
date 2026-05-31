@@ -10,6 +10,7 @@ set(CMAKE_C_STANDARD 11)
 
 add_library(jvm SHARED
   core/gc/gc.c
+  core/gc/oop_storage.c
   core/memory/virt_space.c
   core/metaspace/metaspace.c
 )
@@ -41,3 +42,12 @@ target_link_libraries(test_metaspace PRIVATE jvm)
 target_include_directories(test_metaspace PRIVATE ${CMAKE_SOURCE_DIR})
 
 add_test(NAME metaspace COMMAND test_metaspace)
+
+add_executable(test_oop_storage
+  core/tests/test_oop_storage.c
+)
+
+target_link_libraries(test_oop_storage PRIVATE jvm)
+target_include_directories(test_oop_storage PRIVATE ${CMAKE_SOURCE_DIR})
+
+add_test(NAME oop_storage COMMAND test_oop_storage)
