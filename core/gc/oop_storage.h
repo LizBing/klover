@@ -4,11 +4,14 @@
 #include "core/gc/oop_closure.h"
 #include "core/obj_model/oop_hierarchy.h"
 
-static const int STRONG_STORAGE_COUNT = 0;
+static const int STRONG_STORAGE_COUNT = 1;
 static const int WEAK_STORAGE_COUNT = 1;
 static const int ALL_STORAGE_COUNT = STRONG_STORAGE_COUNT + WEAK_STORAGE_COUNT;
 static const int STRONG_STORAGE_START = 0;
 static const int WEAK_STORAGE_START = STRONG_STORAGE_START + STRONG_STORAGE_COUNT;
+
+static const int KLASS_MIRROR_STORAGE = STRONG_STORAGE_START + 0;
+static const int CLD_MIRROR_STORAGE = WEAK_STORAGE_START + 0;
 
 void init_oop_storages();
 
