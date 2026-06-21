@@ -1,7 +1,7 @@
-#ifndef CORE_MEMORY_COMP_SPACE_DEFS_H_
-#define CORE_MEMORY_COMP_SPACE_DEFS_H_
+#ifndef MEMORY_COMP_SPACE_DEFS_H_
+#define MEMORY_COMP_SPACE_DEFS_H_
 
-#include "core/utils/global_defs.h"
+#include "utils/global_defs.h"
 
 static const uintptr_t METASPACE_BASE = 1ul << 43;
 static const uintptr_t GCHEAP_BASE = 1ul << 44;
@@ -37,4 +37,4 @@ typedef uint32_t comp_ptr_t;
          ? NULL                                                           \
          : (HeapWord*)((uintptr_t)(base) + ((uintptr_t)(comp_ptr) << COMP_PTR_SHIFT)))
 
-#endif /* CORE_MEMORY_COMP_SPACE_DEFS_H_ */
+#endif /* MEMORY_COMP_SPACE_DEFS_H_ */

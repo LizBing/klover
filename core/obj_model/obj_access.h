@@ -1,9 +1,9 @@
-#ifndef CORE_OBJ_MODEL_OBJ_ACCESS_H_
-#define CORE_OBJ_MODEL_OBJ_ACCESS_H_
+#ifndef OBJ_MODEL_OBJ_ACCESS_H_
+#define OBJ_MODEL_OBJ_ACCESS_H_
 
-#include "core/memory/comp_space_defs.h"
-#include "core/obj_model/markword.h"
-#include "core/obj_model/oop_hierarchy.h"
+#include "memory/comp_space_defs.h"
+#include "obj_model/markword.h"
+#include "obj_model/oop_hierarchy.h"
 
 #include <string.h>
 
@@ -190,4 +190,4 @@ static inline void* obj_array_data(oop_t obj) {
     return (char*)obj + ARRAY_DATA_OFFSET;
 }
 
-#endif /* CORE_OBJ_MODEL_OBJ_ACCESS_H_ */
+#endif /* OBJ_MODEL_OBJ_ACCESS_H_ */

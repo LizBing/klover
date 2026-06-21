@@ -1,7 +1,7 @@
-#ifndef CORE_MEMORY_VIRT_SPACE_H_
-#define CORE_MEMORY_VIRT_SPACE_H_
+#ifndef MEMORY_VIRT_SPACE_H_
+#define MEMORY_VIRT_SPACE_H_
 
-#include "core/utils/global_defs.h"
+#include "utils/global_defs.h"
 
 typedef struct VirtSpace VirtSpace;
 struct VirtSpace {

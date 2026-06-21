@@ -1,4 +1,4 @@
-#include "core/memory/virt_space.h"
+#include "memory/virt_space.h"
 
 #include <stdlib.h>
 #include <sys/mman.h>

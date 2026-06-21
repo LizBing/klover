@@ -1,8 +1,8 @@
-#ifndef CORE_OOPS_MARKWORD_H_
-#define CORE_OOPS_MARKWORD_H_
+#ifndef OOPS_MARKWORD_H_
+#define OOPS_MARKWORD_H_
 
-#include "core/memory/comp_space_defs.h"
-#include "core/utils/global_defs.h"
+#include "memory/comp_space_defs.h"
+#include "utils/global_defs.h"
 
 static const int LOCKVALUE_NONE = 0x01;
 static const int LOCKVALUE_GC = 0x11;
@@ -37,4 +37,4 @@ static inline uint64_t mw_write_comp_ptr(uint64_t raw, comp_ptr_t value) {
   return (raw & ~COMPPTR_MASK_IN_PLACE) | (((uint64_t)value) << COMPPTR_SHIFT);
 }
 
-#endif /* CORE_OOPS_MARKWORD_H_ */
+#endif /* OOPS_MARKWORD_H_ */

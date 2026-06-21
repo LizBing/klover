@@ -1,4 +1,4 @@
-#include "core/gc/oop_storage.h"
+#include "gc/oop_storage.h"
 
 #include <pthread.h>
 #include <stdlib.h>

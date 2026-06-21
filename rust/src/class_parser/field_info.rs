@@ -1,36 +1,49 @@
-use crate::class_parser::{acc_flags::AccFlags, attr_info::AttrInfo, parse_error::ParseError};
+use std::cell::OnceCell;
+
+use crate::class_loader::symbol_handle::SymbolHandle;
+use crate::class_parser::attr_info::AttrInfo;
+use crate::class_parser::class_file::{read_acc_flags, read_attrs, resolve_symbol};
+use crate::class_parser::field_type::FieldType;
+use crate::class_parser::acc_flags::AccFlags;
 
 use super::{class_reader::ClassReader, parse_error::ParseResult};
 
-#[derive(Debug)]
+/// Parsed field metadata — names resolved to `SymbolHandle`, attributes parsed.
+///
+/// This is the parsed, ready-to-use representation within a [`ClassFile`].
+/// The runtime counterpart (offset, storage layout, etc.) will be a separate
+/// `Field` type allocated in metaspace alongside `Klass`.
 pub struct FieldInfo {
     pub acc_flags: AccFlags,
-    pub name_index: u16,
-    pub desc_index: u16,
+    pub name: SymbolHandle,
+    pub desc: FieldType,
+    pub offs: OnceCell<usize>,
     pub attrs: Vec<AttrInfo>,
 }
 
 impl FieldInfo {
-    pub fn read(rd: &mut ClassReader) -> ParseResult<Self> {
-        let raw_acc_flags = rd.read_u16()?;
-        let acc_flags = match AccFlags::from_bits(raw_acc_flags) {
-            Some(x) => x,
-            None => return Err(ParseError::InvalidAccFlags(raw_acc_flags)),
-        };
-
+    /// Read and resolve a field from the class file stream.
+    pub(crate) fn read(
+        rd: &mut ClassReader,
+        cp: &[super::cp_info::ConstantPoolInfo]
+    ) -> ParseResult<Self> {
+        let acc_flags = read_acc_flags(rd)?;
+        
         let name_index = rd.read_u16()?;
         let desc_index = rd.read_u16()?;
-        let attrs_count = rd.read_u16()?;
-        let mut attrs = Vec::new();
-        for _ in 0..attrs_count {
-            attrs.push(AttrInfo::read(rd)?);
-        }
+
+        let attrs = read_attrs(rd, cp)?;
+
+        let name = resolve_symbol(name_index, cp)?;
+        let raw_desc = resolve_symbol(desc_index, cp)?.utf8().clone();
+        let desc = FieldType::resolve(raw_desc)?;
 
         Ok(Self {
-            acc_flags,
-            name_index,
-            desc_index,
-            attrs,
+            acc_flags: acc_flags,
+            name: name,
+            desc: desc,
+            offs: OnceCell::new(),
+            attrs: attrs
         })
     }
 }

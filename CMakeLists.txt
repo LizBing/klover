@@ -17,7 +17,7 @@ add_library(jvm SHARED
 
 target_include_directories(jvm
   PUBLIC
-  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/core
   ${CMAKE_SOURCE_DIR}/rust/include
 )
 
@@ -51,3 +51,4 @@ target_link_libraries(test_oop_storage PRIVATE jvm)
 target_include_directories(test_oop_storage PRIVATE ${CMAKE_SOURCE_DIR})
 
 add_test(NAME oop_storage COMMAND test_oop_storage)
+

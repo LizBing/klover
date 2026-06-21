@@ -1,8 +1,8 @@
-use std::ptr::NonNull;
-use std::sync::Mutex;
+use std::{mem, ptr};
+use std::ptr::{NonNull, drop_in_place};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 
 const SMALL_CHUNK_BYTE_SIZE: usize = 8 * 1024; // 8 KB
 const BUMP_THRESHOLD: usize = SMALL_CHUNK_BYTE_SIZE / 2; // 4 KB
@@ -155,10 +155,7 @@ impl MSAllocator {
 
         // Record the chunk.
         {
-            let mut chunks = self
-                .chunks
-                .lock()
-                .expect("MSAllocator::chunks lock poisoned");
+            let mut chunks = self.chunks.lock();
             chunks.push(new_chunk);
         }
 
@@ -178,10 +175,7 @@ impl MSAllocator {
 
         // Record the chunk.
         {
-            let mut chunks = self
-                .chunks
-                .lock()
-                .expect("MSAllocator::chunks lock poisoned");
+            let mut chunks = self.chunks.lock();
             chunks.push(chunk);
         }
 
@@ -193,7 +187,7 @@ impl Drop for MSAllocator {
     fn drop(&mut self) {
         // All chunks — including the current bump chunk — are tracked
         // in `chunks`.  Drain and free each one through the C layer.
-        let chunks = self.chunks.get_mut().unwrap();
+        let chunks = self.chunks.get_mut();
         for chunk in chunks.drain(..) {
             unsafe { ms_free_chunk(chunk.as_ptr()) };
         }
@@ -241,6 +235,12 @@ impl<T> std::ops::Deref for MSBox<T> {
 impl<T> std::ops::DerefMut for MSBox<T> {
     fn deref_mut(&mut self) -> &mut T {
         unsafe { self.raw.as_mut() }
+    }
+}
+
+impl<T> Drop for MSBox<T> {
+    fn drop(&mut self) {
+        unsafe { ptr::drop_in_place(self.raw.as_ptr()); }
     }
 }
 

@@ -1,7 +1,7 @@
-#ifndef CORE_METASPACE_METASPACE_H_
-#define CORE_METASPACE_METASPACE_H_
+#ifndef METASPACE_METASPACE_H_
+#define METASPACE_METASPACE_H_
 
-#include "core/utils/global_defs.h"
+#include "utils/global_defs.h"
 
 typedef struct MSChunk MSChunk;
 struct MSChunk {
@@ -17,4 +17,4 @@ MSChunk* ms_alloc_small_chunk();
 MSChunk* ms_alloc_sized_chunk(size_t byte_size);
 void ms_free_chunk(MSChunk*);
 
-#endif /* CORE_METASPACE_METASPACE_H_ */
+#endif /* METASPACE_METASPACE_H_ */

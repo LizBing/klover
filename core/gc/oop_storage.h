@@ -1,8 +1,8 @@
-#ifndef CORE_GC_OOP_STORAGE_H_
-#define CORE_GC_OOP_STORAGE_H_
+#ifndef GC_OOP_STORAGE_H_
+#define GC_OOP_STORAGE_H_
 
-#include "core/gc/oop_closure.h"
-#include "core/obj_model/oop_hierarchy.h"
+#include "gc/oop_closure.h"
+#include "obj_model/oop_hierarchy.h"
 
 static const int STRONG_STORAGE_COUNT = 1;
 static const int WEAK_STORAGE_COUNT = 1;
@@ -22,4 +22,4 @@ bool strong_native_oops_iterate(OOPClosure*);
 bool weak_native_oops_iterate(OOPClosure*);
 bool all_native_oops_iterate(OOPClosure*);
 
-#endif /* CORE_GC_OOP_STORAGE_H_ */
+#endif /* GC_OOP_STORAGE_H_ */

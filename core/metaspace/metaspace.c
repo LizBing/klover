@@ -1,7 +1,7 @@
-#include "core/metaspace/metaspace.h"
-#include "core/memory/comp_space_defs.h"
-#include "core/memory/virt_space.h"
-#include "core/utils/global_defs.h"
+#include "metaspace/metaspace.h"
+#include "memory/comp_space_defs.h"
+#include "memory/virt_space.h"
+#include "utils/global_defs.h"
 
 #include <stdint.h>
 #include <stdlib.h>

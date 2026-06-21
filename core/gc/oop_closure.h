@@ -1,7 +1,7 @@
-#ifndef CORE_GC_OOP_CLOSURE_H_
-#define CORE_GC_OOP_CLOSURE_H_
+#ifndef GC_OOP_CLOSURE_H_
+#define GC_OOP_CLOSURE_H_
 
-#include "core/obj_model/oop_hierarchy.h"
+#include "obj_model/oop_hierarchy.h"
 
 typedef struct OOPClosure OOPClosure;
 struct OOPClosure {
@@ -9,4 +9,4 @@ struct OOPClosure {
     void* ctx;
 };
 
-#endif /* CORE_GC_OOP_CLOSURE_H_ */
+#endif /* GC_OOP_CLOSURE_H_ */

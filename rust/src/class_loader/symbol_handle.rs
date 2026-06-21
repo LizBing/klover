@@ -2,20 +2,27 @@ use std::ptr::NonNull;
 
 use crate::class_loader::symbol_table::Symbol;
 
+#[derive(Debug)]
 pub struct SymbolHandle {
-    pub(super) symbol: NonNull<Symbol>
+    pub(super) symbol: NonNull<Symbol>,
 }
 
 impl Clone for SymbolHandle {
     fn clone(&self) -> Self {
-        unsafe { self.symbol.as_ref().inc_ref_cnt(); }
-        Self { symbol: self.symbol }
+        unsafe {
+            self.symbol.as_ref().inc_ref_cnt();
+        }
+        Self {
+            symbol: self.symbol,
+        }
     }
 }
 
 impl Drop for SymbolHandle {
     fn drop(&mut self) {
-        unsafe { self.symbol.as_ref().dec_ref_cnt(); }
+        unsafe {
+            self.symbol.as_ref().dec_ref_cnt();
+        }
     }
 }
 

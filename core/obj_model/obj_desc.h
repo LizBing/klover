@@ -1,7 +1,7 @@
 #ifndef CORE_OOPS_OBJ_DESC_H_
 #define CORE_OOPS_OBJ_DESC_H_
 
-#include "core/utils/global_defs.h"
+#include "utils/global_defs.h"
 
 typedef struct ObjDesc ObjDesc;
 struct ObjDesc {
