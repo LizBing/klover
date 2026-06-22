@@ -1,5 +1,3 @@
-use crate::class_loader::{symbol_handle::SymbolHandle, symbol_table::SymbolTable};
-
 use super::{
     class_reader::ClassReader,
     parse_error::{ParseError, ParseResult},
@@ -57,11 +55,11 @@ pub enum ConstantPoolInfo {
     },
 
     Utf8Info {
-        handle: SymbolHandle,
+        utf8: String,
     },
 
     MethodHandleInfo {
-        ref_kind: ReferenceKind,
+        ref_kind: u8,
         ref_index: u16,
     },
 
@@ -139,10 +137,10 @@ impl ConstantPoolInfo {
                     Err(_) => return Err(ParseError::InvalidUtf8(Vec::from(raw))),
                 };
 
-                Self::Utf8Info { handle: SymbolTable::intern(utf8) }
+                Self::Utf8Info { utf8 }
             },
             15 => Self::MethodHandleInfo {
-                ref_kind: ReferenceKind::Kind(rd.read_u8()?),
+                ref_kind: rd.read_u8()?,
                 ref_index: rd.read_u16()?,
             },
             16 => Self::MethodTypeInfo {

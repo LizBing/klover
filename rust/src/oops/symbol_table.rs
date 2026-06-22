@@ -2,8 +2,6 @@ use std::{ptr::{NonNull, null_mut}, sync::atomic::{AtomicU32, Ordering}};
 
 use parking_lot::Mutex;
 
-use crate::class_loader::symbol_handle::SymbolHandle;
-
 pub(super) struct Symbol {
     next: *mut Symbol,
     ref_cnt: AtomicU32,
@@ -101,5 +99,39 @@ fn hash(n: &String) -> usize {
 impl SymbolTable {
     pub fn intern(n: String) -> SymbolHandle {
         BUCKETS[hash(&n)].intern(n)
+    }
+}
+
+#[derive(Debug)]
+pub struct SymbolHandle {
+    pub(super) symbol: NonNull<Symbol>,
+}
+
+impl Clone for SymbolHandle {
+    fn clone(&self) -> Self {
+        unsafe {
+            self.symbol.as_ref().inc_ref_cnt();
+        }
+        Self {
+            symbol: self.symbol,
+        }
+    }
+}
+
+impl Drop for SymbolHandle {
+    fn drop(&mut self) {
+        unsafe {
+            self.symbol.as_ref().dec_ref_cnt();
+        }
+    }
+}
+
+impl SymbolHandle {
+    pub fn equals(&self, n: &Self) -> bool {
+        self.symbol == n.symbol
+    }
+
+    pub fn utf8(&self) -> &String {
+        unsafe { self.symbol.as_ref().utf8() }
     }
 }

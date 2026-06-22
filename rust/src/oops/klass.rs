@@ -1,25 +1,9 @@
-use std::ptr::NonNull;
+use crate::oops::{array_klass::ArrayKlass, normal_klass::NormalKlass, prim_klass::PrimKlass};
 
-use crate::{class_loader::symbol_handle::SymbolHandle, class_parser::{acc_flags::AccFlags, class_file::ClassFile}};
-
-pub struct Klass {
-    name: SymbolHandle,
-    super_class: Option<NonNull<Klass>>,
-    acc_flags: AccFlags,
-    
-    instance_size: usize,
-
-    data: KlassData,
+pub enum Klass {
+    Normal(NormalKlass),
+    Primitive(PrimKlass),
+    Array(ArrayKlass)
 }
 
-enum KlassData {
-    Normal(NormalKlassData),
-    Primitive(PrimKlassData),
-    Array(ArrayKlassData)
-}
-
-struct NormalKlassData {}
-
-struct PrimKlassData {}
-
-struct ArrayKlassData {}
+impl Klass {}

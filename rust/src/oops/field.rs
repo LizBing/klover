@@ -1,2 +1,2 @@
 #[derive(Debug)]
-struct Field {}
+pub struct Field {}

@@ -1,16 +1,11 @@
-use crate::class_loader::symbol_handle::SymbolHandle;
-use crate::class_loader::symbol_table::SymbolTable;
 use crate::class_parser::attr_info::AttrInfo;
-use crate::class_parser::field_type::{FieldType, NonArrayFieldType};
 use crate::class_parser::{
-    acc_flags::AccFlags,
     class_reader::ClassReader,
     cp_info::ConstantPoolInfo,
     field_info::FieldInfo,
     method_info::MethodInfo,
     parse_error::{ParseError, ParseResult},
 };
-use crate::oops::oop_handle::NarrowOOP;
 
 const VALID_MAGIC: u32 = 0xCAFEBABE;
 
@@ -23,9 +18,9 @@ const VALID_MAGIC: u32 = 0xCAFEBABE;
 pub struct ClassFile {
     pub minor_version: u16,
     pub major_version: u16,
-    pub this_class: SymbolHandle,
-    pub super_class: Option<SymbolHandle>,
-    pub acc_flags: AccFlags,
+    pub this_class: u16,
+    pub super_index: u16,
+    pub acc_flags: u16,
 
     /// Raw constant pool, indexed from 1 per JVM spec.
     /// `cp[0]` is always `Unusable` as a placeholder;
@@ -33,11 +28,9 @@ pub struct ClassFile {
     pub constant_pool: Vec<ConstantPoolInfo>,
 
     /// Resolved interface names.
-    pub interfaces: Vec<SymbolHandle>,
+    pub interfaces: Vec<u16>,
 
     /// Parsed field metadata.
-    pub instance_size: usize,
-    pub ptr_fields_count: i32,
     pub fields: Vec<FieldInfo>,
     
     /// Parsed method metadata (including Code, if present).
@@ -47,31 +40,8 @@ pub struct ClassFile {
     pub attrs: Vec<AttrInfo>,
 }
 
-pub(super) fn resolve_symbol(index: u16, cp: &[ConstantPoolInfo]) -> ParseResult<SymbolHandle> {
-    match &cp[index as usize] {
-        ConstantPoolInfo::Utf8Info { handle } => Ok(handle.clone()),
-        _ => Err(ParseError::InvalidCPType)
-    }
-}
-
-fn resolve_class_symbol(index: u16, cp: &[ConstantPoolInfo]) -> ParseResult<SymbolHandle> {
-    match cp[index as usize] {
-        ConstantPoolInfo::ClassInfo { name_index } => resolve_symbol(name_index, cp),
-        _ => Err(ParseError::InvalidCPType)
-    }
-}
-
 fn verify_version(minor: u16, major: u16) -> bool {
     (major < 45 || major > 69) || (major >= 56 && (minor != 0 && minor != 65535))
-}
-
-pub(super) fn read_acc_flags(rd: &mut ClassReader) -> ParseResult<AccFlags> {
-    let raw = rd.read_u16()?;
-
-    match AccFlags::from_bits(raw) {
-        Some(x) => Ok(x),
-        None => Err(ParseError::InvalidAccFlags(raw)),
-    }
 }
 
 fn read_cp(rd: &mut ClassReader) -> ParseResult<Vec<ConstantPoolInfo>> {
@@ -100,12 +70,12 @@ fn read_cp(rd: &mut ClassReader) -> ParseResult<Vec<ConstantPoolInfo>> {
     Ok(cp)
 }
 
-fn read_interfaces(rd: &mut ClassReader, cp: &[ConstantPoolInfo]) -> ParseResult<Vec<SymbolHandle>> {
+fn read_interfaces(rd: &mut ClassReader) -> ParseResult<Vec<u16>> {
     // -- interfaces (resolve immediately) --
     let iface_count = rd.read_u16()?;
     let mut interfaces = Vec::with_capacity(iface_count as usize);
     for _ in 0..iface_count {
-        interfaces.push(resolve_class_symbol(rd.read_u16()?, &cp)?);
+        interfaces.push(rd.read_u16()?);
     }
 
     Ok(interfaces)
@@ -115,86 +85,21 @@ pub(super) fn read_attrs(rd: &mut ClassReader, cp: &[ConstantPoolInfo]) -> Parse
     let attrs_count = rd.read_u16()?;
     let mut attrs = Vec::with_capacity(attrs_count as _);
     for _ in 0..attrs_count {
-        let name = rd.read_u16()?;
-        let len = rd.read_u32()? as _;
-        let data = rd.read(len)?;
-        attrs.push(AttrInfo::read(name, data, cp)?);
+        attrs.push(AttrInfo::read(rd, cp)?);
     }
 
     Ok(attrs)
 }
 
-fn read_fields(rd: &mut ClassReader, cp: &[ConstantPoolInfo]) -> ParseResult<(usize, i32, Vec<FieldInfo>)> {
+fn read_fields(rd: &mut ClassReader, cp: &[ConstantPoolInfo]) -> ParseResult<Vec<FieldInfo>> {
     let fields_count = rd.read_u16()?;
     let mut fields = Vec::with_capacity(fields_count as _);
 
-    let mut ptr_fields = Vec::new();
-    let mut fields_of_8 = Vec::new();
-    let mut fields_of_4 = Vec::new();
-    let mut fields_of_2 = Vec::new();
-    let mut fields_of_1 = Vec::new();
-    
     for _ in 0..fields_count {
-        let field = FieldInfo::read(rd, cp)?;
-        match &field.desc {
-            FieldType::Array { elem, dimemsions } => {
-                ptr_fields.push(field);
-            }
-
-            FieldType::NonArray { ft } => match ft {
-                NonArrayFieldType::Boolean => fields_of_1.push(field),
-                NonArrayFieldType::Byte => fields_of_1.push(field),
-                NonArrayFieldType::Char => fields_of_2.push(field),
-                NonArrayFieldType::Class { name } => ptr_fields.push(field),
-                NonArrayFieldType::Double => fields_of_8.push(field),
-                NonArrayFieldType::Float => fields_of_4.push(field),
-                NonArrayFieldType::Int => fields_of_4.push(field),
-                NonArrayFieldType::Long => fields_of_8.push(field),
-                NonArrayFieldType::Short => fields_of_2.push(field),
-            }
-        }
+        fields.push(FieldInfo::read(rd, cp)?);
     }
 
-    let ptr_fields_count = ptr_fields.len();
-    let mut instance_size = 0;
-    
-    for n in &ptr_fields {
-        n.offs.set(instance_size).unwrap();
-        instance_size += size_of::<NarrowOOP>();
-    }
-    fields.append(&mut ptr_fields);
-
-    if ptr_fields_count % 2 != 0 {
-        instance_size += size_of::<NarrowOOP>()     // gap for alignment
-    }
-
-    for n in &fields_of_8 {
-        n.offs.set(instance_size).unwrap();
-        instance_size += 8;
-    }
-    fields.append(&mut fields_of_8);
-    
-    for n in &fields_of_4 {
-        n.offs.set(instance_size).unwrap();
-        instance_size += 4;
-    }
-    fields.append(&mut fields_of_4);
-    
-    for n in &fields_of_2 {
-        n.offs.set(instance_size).unwrap();
-        instance_size += 2;
-    }
-    fields.append(&mut fields_of_2);
-    
-    for n in &fields_of_1 {
-        n.offs.set(instance_size).unwrap();
-        instance_size += 1;
-    }
-    fields.append(&mut fields_of_1);
-
-    instance_size = (instance_size + size_of::<usize>() - 1) & !(size_of::<usize>() - 1);
-
-    Ok((instance_size, ptr_fields_count as _, fields))
+    Ok(fields)
 }
 
 fn read_methods(rd: &mut ClassReader, cp: &[ConstantPoolInfo]) -> ParseResult<Vec<MethodInfo>> {
@@ -231,20 +136,15 @@ impl ClassFile {
         let cp = read_cp(&mut rd)?;
 
         // -- access flags --
-        let acc_flags = read_acc_flags(&mut rd)?;
+        let acc_flags = rd.read_u16()?;
 
         // -- this class, super class (resolve immediately) --
-        let this_class = resolve_class_symbol(rd.read_u16()?, &cp)?;
+        let this_class = rd.read_u16()?;
         let super_index = rd.read_u16()?;
-        let super_class = if super_index == 0 {
-            None
-        } else {
-            Some(resolve_class_symbol(super_index, &cp)?)
-        };
 
-        let interfaces = read_interfaces(&mut rd, &cp)?;
+        let interfaces = read_interfaces(&mut rd)?;
 
-        let (instance_size, ptr_fields_count, fields) = read_fields(&mut rd, &cp)?;
+        let fields = read_fields(&mut rd, &cp)?;
         
         let methods = read_methods(&mut rd, &cp)?;
         
@@ -255,12 +155,10 @@ impl ClassFile {
             minor_version: minor,
             major_version: major,
             this_class,
-            super_class,
+            super_index,
             acc_flags,
             constant_pool: cp,
             interfaces,
-            instance_size,
-            ptr_fields_count,
             fields,
             methods,
             attrs,
