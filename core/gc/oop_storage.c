@@ -1,6 +1,7 @@
 #include "gc/oop_storage.h"
 
 #include <pthread.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -10,6 +11,11 @@
 
 #define SLOTS_PER_BLOCK    64u
 #define FREE_LIST_END      UINT32_MAX
+
+static void fatal(const char* msg) {
+    fprintf(stderr, "OopStorage: %s\n", msg);
+    abort();
+}
 
 /* -------------------------------------------------------------------------- */
 /*  OopBlock                                                                  */
@@ -81,7 +87,7 @@ static inline void write_link(oop_t* slot, uint32_t next) {
 static OopBlock* block_create(uint32_t slot_count) {
     size_t sz = sizeof(OopBlock) + (size_t)slot_count * sizeof(oop_t);
     OopBlock* blk = (OopBlock*)malloc(sz);
-    if (blk == NULL) return NULL;
+    if (blk == NULL) fatal("out of memory allocating oop block");
 
     blk->_next            = NULL;
     blk->_slot_count      = slot_count;
@@ -175,10 +181,9 @@ oop_t* alloc_oop_slot(int storage_id) {
         if (slot) goto done;
     }
 
-    /* 4. New block */
+    /* 4. New block — block_create aborts on OOM, never fails */
     {
         OopBlock* blk = block_create(SLOTS_PER_BLOCK);
-        if (blk == NULL) goto done;
 
         blk->_next   = s->_blocks;
         s->_blocks   = blk;
@@ -237,14 +242,15 @@ static bool storage_iterate(OOPStorage* s, OOPClosure* closure) {
         /* Collect free-list indices into a local array */
         uint32_t cap = 64, cnt = 0;
         uint32_t* free_idxs = (uint32_t*)malloc(cap * sizeof(uint32_t));
-        if (free_idxs == NULL) continue;
+        /* malloc failed → VM is dead anyway */
+        if (free_idxs == NULL) fatal("out of memory during iteration");
 
         uint32_t fi = blk->_free_head;
         while (fi != FREE_LIST_END) {
             if (cnt >= cap) {
                 cap *= 2;
                 uint32_t* tmp = (uint32_t*)realloc(free_idxs, cap * sizeof(uint32_t));
-                if (tmp == NULL) break;
+                if (tmp == NULL) fatal("out of memory during iteration");
                 free_idxs = tmp;
             }
             free_idxs[cnt++] = fi;

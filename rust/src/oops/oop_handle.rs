@@ -41,22 +41,16 @@ impl OOPHandle {
     /// Allocate a new slot from the given OopStorage.
     ///
     /// The slot is initially NULL.  Use `replace` to store an object reference.
-    /// Returns `None` on allocation failure (OOM).
-    pub fn new(storage_id: i32) -> Option<Self> {
+    ///
+    /// # Panics
+    ///
+    /// The underlying C allocator aborts the process on OOM, so this function
+    /// never returns in out-of-memory situations.
+    pub fn new(storage_id: i32) -> Self {
         let raw = unsafe { alloc_oop_slot(storage_id) };
-        NonNull::new(raw).map(|slot| Self { slot, storage_id })
-    }
-
-    /// Read the oop currently stored in the slot.
-    pub fn resolve(&self) -> OOP {
-        unsafe { *self.slot.as_ptr() }
-    }
-
-    /// Write a new oop value into the slot.
-    pub fn replace(&self, oop: OOP) {
-        unsafe {
-            *self.slot.as_ptr() = oop;
-        }
+        // alloc_oop_slot aborts on OOM, never returns NULL.
+        let slot = NonNull::new(raw).expect("alloc_oop_slot returned NULL");
+        Self { slot, storage_id }
     }
 }
 
@@ -65,3 +59,5 @@ impl Drop for OOPHandle {
         unsafe { free_oop_slot(self.storage_id, self.slot.as_ptr()) };
     }
 }
+
+pub const KLASS_OOP_STORAGE_ID: i32 = 0;
