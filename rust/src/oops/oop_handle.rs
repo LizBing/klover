@@ -16,6 +16,7 @@ pub(crate) type NarrowOOP = u32;
 /* -------------------------------------------------------------------------- */
 
 unsafe extern "C" {
+    pub fn init_oop_storages();
     fn alloc_oop_slot(storage_id: i32) -> *mut OOP;
     fn free_oop_slot(storage_id: i32, slot: *mut OOP);
 }
@@ -61,3 +62,4 @@ impl Drop for OOPHandle {
 }
 
 pub const KLASS_OOP_STORAGE_ID: i32 = 0;
+pub const CLD_MIRROR_STORAGE_ID: i32 = 1;

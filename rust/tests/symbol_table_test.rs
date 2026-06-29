@@ -1,4 +1,4 @@
-use rust::class_loader::symbol_table::SymbolTable;
+use rust::oops::symbol_table::SymbolTable;
 
 #[test]
 fn test_intern_same_string_returns_same_pointer() {

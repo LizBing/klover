@@ -1,7 +1,9 @@
 #[derive(Debug)]
 pub enum ResolveError {
     MismatchCPType,
-    InvalidDesc { raw: String }
+    MismatchAttrType,
+    InvalidDesc { raw: String },
+    UnknownRefKind { kind: u8 }
 }
 
 pub type ResolveResult<T> = Result<T, ResolveError>;

@@ -1,13 +1,13 @@
 use crate::class_parser::{class_file::read_attrs, class_reader::ClassReader, cp_info::ConstantPoolInfo, parse_error::{ParseError, ParseResult}};
 
-pub struct ExceptionTableEntry {
+pub struct ExceptionTableEntryInfo {
     pub start_pc: u16,
     pub end_pc: u16,
     pub handler_pc: u16,
     pub catch_type: u16,
 }
 
-impl ExceptionTableEntry {
+impl ExceptionTableEntryInfo {
     fn read(rd: &mut ClassReader) -> ParseResult<Self> {
         Ok(Self {
             start_pc: rd.read_u16()?,
@@ -22,7 +22,7 @@ pub struct CodeAttrInfo {
     pub max_stack: u16,
     pub max_locals: u16,
     pub code: Vec<u8>,
-    pub exception_table: Vec<ExceptionTableEntry>,
+    pub exception_table: Vec<ExceptionTableEntryInfo>,
     pub attrs: Vec<AttrInfo>
 }
 
@@ -37,7 +37,7 @@ impl CodeAttrInfo {
         let et_len = rd.read_u16()?;
         let mut exception_table = Vec::with_capacity(et_len as _);
         for _ in 0..et_len {
-            exception_table.push(ExceptionTableEntry::read(rd)?);
+            exception_table.push(ExceptionTableEntryInfo::read(rd)?);
         }
 
         Ok(Self {
@@ -54,15 +54,10 @@ pub enum AttrInfo {
     ConstantValue { cp_idx: u16 },
     
     Code { info: CodeAttrInfo },
-
-    Unrecognized {
-        name_idx: u16,
-        payload: Vec<u8>
-    }
 }
 
 impl AttrInfo {
-    pub fn read(rd: &mut ClassReader, cp: &[ConstantPoolInfo]) -> ParseResult<Self> {
+    pub fn read(rd: &mut ClassReader, cp: &[ConstantPoolInfo]) -> ParseResult<Option<Self>> {
         let name_idx = rd.read_u16()?;
         let len = rd.read_u32()?;
         let payload = rd.read(len as _)?;
@@ -76,10 +71,10 @@ impl AttrInfo {
         };
 
         match name.as_str() {
-            "ConstantValue" => Ok(Self::ConstantValue { cp_idx: pl_rd.read_u16()? }),
-            "Code" => Ok(Self::Code { info: CodeAttrInfo::read(&mut pl_rd, cp)? }),
+            "ConstantValue" => Ok(Some(Self::ConstantValue { cp_idx: pl_rd.read_u16()? })),
+            "Code" => Ok(Some(Self::Code { info: CodeAttrInfo::read(&mut pl_rd, cp)? })),
 
-            _ => Ok(Self::Unrecognized { name_idx, payload: payload.to_vec() })
+            _ => Ok(None)
         }
     }
 }

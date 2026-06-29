@@ -9,5 +9,4 @@ crate-type = ["staticlib", "rlib"]
 [dependencies]
 "bitflags" = "2.11.1"
 "byteorder" = "1"
-"once_cell" = "1.19"
 "parking_lot" = "0.12.5"

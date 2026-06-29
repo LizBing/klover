@@ -43,7 +43,7 @@ unsafe impl Send for MSAllocator {}
 unsafe impl Sync for MSAllocator {}
 
 impl MSAllocator {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         MSAllocator {
             chunks: Mutex::new(Vec::new()),
             cur_chunk: RwLock::new(None),
@@ -63,6 +63,10 @@ impl MSAllocator {
         } else {
             self.sized_alloc(size)
         }
+    }
+
+    pub fn calloc<T>(&self, elem_size: usize, count: usize) -> *mut T {
+        self.alloc(elem_size * count)
     }
 
     // ── bump-pointer allocation ──────────────────────────────────────

@@ -102,8 +102,9 @@ pub enum ReturnDesc {
 }
 
 pub struct MethodDesc {
-    ret_desc: ReturnDesc,
-    params_desc: Vec<FieldDesc>,
+    pub raw: SymbolHandle,
+    pub ret_desc: ReturnDesc,
+    pub params_desc: Vec<FieldDesc>,
 }
 
 impl MethodDesc {
@@ -147,6 +148,7 @@ impl MethodDesc {
         };
 
         Ok(MethodDesc {
+            raw: SymbolTable::intern(utf8.clone()),
             ret_desc,
             params_desc,
         })

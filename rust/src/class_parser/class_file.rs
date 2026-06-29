@@ -85,7 +85,9 @@ pub(super) fn read_attrs(rd: &mut ClassReader, cp: &[ConstantPoolInfo]) -> Parse
     let attrs_count = rd.read_u16()?;
     let mut attrs = Vec::with_capacity(attrs_count as _);
     for _ in 0..attrs_count {
-        attrs.push(AttrInfo::read(rd, cp)?);
+        if let Some(x) = AttrInfo::read(rd, cp)? {
+            attrs.push(x);
+        }
     }
 
     Ok(attrs)
