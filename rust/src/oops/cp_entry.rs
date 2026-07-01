@@ -231,7 +231,7 @@ pub struct ClassCPEntry {
     pub resolved: AtomicPtr<Klass>,
 }
 
-pub struct StringEntry {
+pub struct StringCPEntry {
     pub raw: SymbolHandle,
     pub resolved: OOPHandle,
 }
@@ -254,7 +254,7 @@ pub enum CPEntry {
     },
 
     StringConstant {
-        entry: StringEntry,
+        entry: StringCPEntry,
     },
 
     Integer {
@@ -305,7 +305,11 @@ pub enum CPEntry {
     },
 }
 
-fn resolve_class_symbol(idx: usize, cp: &mut [Option<CPEntry>], parsed_cp: &[ConstantPoolInfo]) -> ResolveResult<SymbolHandle> {
+fn resolve_class_symbol(
+    idx: usize,
+    cp: &mut [Option<CPEntry>],
+    parsed_cp: &[ConstantPoolInfo],
+) -> ResolveResult<SymbolHandle> {
     match &cp[idx] {
         Some(x) => match x {
             CPEntry::Class { entry } => Ok(entry.name.clone()),
@@ -316,13 +320,18 @@ fn resolve_class_symbol(idx: usize, cp: &mut [Option<CPEntry>], parsed_cp: &[Con
             ConstantPoolInfo::ClassInfo { name_index } => {
                 let name = resolve_symbol(*name_index as usize, cp, parsed_cp)?;
 
-                cp[idx] = Some(CPEntry::Class { entry: ClassCPEntry { name: name.clone(), resolved: AtomicPtr::new(null_mut()) } });
+                cp[idx] = Some(CPEntry::Class {
+                    entry: ClassCPEntry {
+                        name: name.clone(),
+                        resolved: AtomicPtr::new(null_mut()),
+                    },
+                });
 
                 Ok(name)
-            },
+            }
 
-            _ => Err(ResolveError::MismatchCPType)
-        }
+            _ => Err(ResolveError::MismatchCPType),
+        },
     }
 }
 
@@ -340,7 +349,7 @@ fn resolve_symbol(
 
         None => match &parsed_cp[idx] {
             ConstantPoolInfo::Utf8Info { utf8 } => {
-                let handle = SymbolTable::intern(utf8.clone());
+                let handle = SymbolTable::intern(utf8.as_str());
                 cp[idx] = Some(CPEntry::Utf8 {
                     handle: handle.clone(),
                 });
@@ -400,7 +409,7 @@ impl CPEntry {
             }
 
             ConstantPoolInfo::StringInfo { string_index } => Ok(Some(Self::StringConstant {
-                entry: StringEntry {
+                entry: StringCPEntry {
                     raw: resolve_symbol(*string_index as usize, cp, parsed_cp)?,
                     resolved: OOPHandle::new(KLASS_OOP_STORAGE_ID),
                 },

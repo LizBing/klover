@@ -27,8 +27,8 @@ pub enum FieldElemType {
 }
 
 pub struct FieldDesc {
-    dimensions: usize,
-    elem: FieldElemType,
+    pub dimensions: usize,
+    pub elem: FieldElemType,
 }
 
 impl FieldDesc {
@@ -52,7 +52,7 @@ impl FieldDesc {
 }
 
 impl FieldDesc {
-    pub fn from(utf8: &String) -> ResolveResult<Self> {
+    pub fn from(utf8: &str) -> ResolveResult<Self> {
         let bytes = utf8.as_bytes();
         let mut pos = 0;
 
@@ -64,7 +64,7 @@ impl FieldDesc {
         }
 
         if pos >= bytes.len() {
-            return Err(ResolveError::InvalidDesc { raw: utf8.clone() });
+            return Err(ResolveError::InvalidDesc { raw: utf8.into() });
         }
 
         let elem = match bytes[pos] {
@@ -82,14 +82,14 @@ impl FieldDesc {
                 let end = bytes[start..]
                     .iter()
                     .position(|&b| b == b';')
-                    .ok_or_else(|| ResolveError::InvalidDesc { raw: utf8.clone() })?;
+                    .ok_or_else(|| ResolveError::InvalidDesc { raw: utf8.into() })?;
                 let class_name = &utf8[start..start + end];
                 FieldElemType::Class {
-                    name: SymbolTable::intern(class_name.to_string()),
+                    name: SymbolTable::intern(class_name),
                     resolved: AtomicPtr::new(std::ptr::null_mut()),
                 }
             }
-            _ => return Err(ResolveError::InvalidDesc { raw: utf8.clone() }),
+            _ => return Err(ResolveError::InvalidDesc { raw: utf8.into() }),
         };
 
         Ok(FieldDesc { dimensions, elem })
@@ -108,18 +108,18 @@ pub struct MethodDesc {
 }
 
 impl MethodDesc {
-    pub fn from(utf8: &String) -> ResolveResult<Self> {
+    pub fn from(utf8: &str) -> ResolveResult<Self> {
         let bytes = utf8.as_bytes();
 
         if bytes.is_empty() || bytes[0] != b'(' {
-            return Err(ResolveError::InvalidDesc { raw: utf8.clone() });
+            return Err(ResolveError::InvalidDesc { raw: utf8.into() });
         }
 
         // Find the closing ')'.  close_paren_rel is the offset of ')' inside `bytes[1..]`.
         let close_paren_rel = bytes[1..]
             .iter()
             .position(|&b| b == b')')
-            .ok_or_else(|| ResolveError::InvalidDesc { raw: utf8.clone() })?;
+            .ok_or_else(|| ResolveError::InvalidDesc { raw: utf8.into() })?;
         // Absolute position of ')' in the full string.
         let close_paren_abs = close_paren_rel + 1;
 
@@ -137,7 +137,7 @@ impl MethodDesc {
         // Parse return descriptor
         let ret_start = close_paren_abs + 1; // skip ')'
         if ret_start >= utf8.len() {
-            return Err(ResolveError::InvalidDesc { raw: utf8.clone() });
+            return Err(ResolveError::InvalidDesc { raw: utf8.into() });
         }
 
         let ret_str = &utf8[ret_start..];
@@ -148,7 +148,7 @@ impl MethodDesc {
         };
 
         Ok(MethodDesc {
-            raw: SymbolTable::intern(utf8.clone()),
+            raw: SymbolTable::intern(utf8),
             ret_desc,
             params_desc,
         })

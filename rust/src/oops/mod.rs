@@ -1,7 +1,7 @@
 mod acc_flags;
 mod array_klass;
 pub mod attr;
-mod cp_entry;
+pub mod cp_entry;
 mod desc;
 mod field;
 pub mod klass;
@@ -9,5 +9,5 @@ pub mod method;
 pub mod normal_klass;
 pub mod oop_handle;
 mod prim_klass;
-mod resolve_error;
+pub mod resolve_error;
 pub mod symbol_table;

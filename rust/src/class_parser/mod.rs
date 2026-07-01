@@ -4,4 +4,4 @@ mod class_reader;
 pub mod cp_info;
 pub mod field_info;
 pub mod method_info;
-mod parse_error;
+pub mod parse_error;

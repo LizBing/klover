@@ -1,4 +1,4 @@
-use std::ptr::{NonNull, null_mut};
+use std::{marker::PhantomData, mem::MaybeUninit, ptr::{self, NonNull}};
 
 use crate::oops::{attr::CodeAttr, method::Method, normal_klass::NormalKlass};
 
@@ -6,7 +6,8 @@ pub type StackSlot = i32;
 pub type DStackSlot = i64;
 
 pub struct Frame {
-    pub ctx: Registers,
+    ctx: Registers,
+    
     pub klass: NonNull<NormalKlass>,
     pub method: NonNull<Method>
 }
@@ -17,26 +18,25 @@ impl Frame {
     }
 }
 
-pub struct Registers {
+pub(super) struct Registers {
+    __: PhantomData<()>,
+    
     pub bp: *mut Frame,
     pub sp: *mut StackSlot,
     pub pc: *const u8
 }
 
-impl Default for Registers {
-    fn default() -> Self {
-        Self {
-            bp: null_mut(),
-            sp: null_mut(),
-            pc: null_mut()
+impl Registers {
+    pub fn store(dst: &mut Self, src: &Self) {
+        unsafe {
+            ptr::copy(src, dst, 1);
         }
     }
 }
 
-#[inline]
-pub fn get_local<T: Copy>(regs: &Registers, idx: usize) -> T {
-    let locals_start = unsafe { (regs.bp as *const StackSlot).sub((*regs.bp).code().max_locals as _) };
-    let addr = unsafe { locals_start.add(idx) as *const T };
-
-    unsafe { *addr }
+pub struct Interpreter {
+    regs: Registers,
+    stack: Box<[MaybeUninit<u8>]>
 }
+
+impl Interpreter {}

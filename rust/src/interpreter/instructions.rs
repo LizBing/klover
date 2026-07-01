@@ -1,6 +1,6 @@
-use std::{mem, ops::Add, ptr};
+use std::{ops::Add, ptr};
 
-use crate::interpreter::interpreter::{DStackSlot, Registers, StackSlot, get_local};
+use crate::interpreter::interpreter::{DStackSlot, Registers, StackSlot};
 
 const fn slots_of<T>() -> usize {
     size_of::<T>() / size_of::<StackSlot>()
@@ -22,6 +22,14 @@ fn pop<T: Copy>(regs: &mut Registers) -> T {
     }
 }
 
+#[inline]
+pub fn get_local<T: Copy>(regs: &Registers, idx: usize) -> T {
+    let locals_start = unsafe { (regs.bp as *const StackSlot).sub((*regs.bp).code().max_locals as _) };
+    let addr = unsafe { locals_start.add(idx) as *const T };
+
+    unsafe { *addr }
+}
+
 fn nop(_: &mut Registers) { /* no op */ }
 
 fn local_load_n<const N: usize, T: Copy>(regs: &mut Registers) {
@@ -35,15 +43,10 @@ fn add<T: Copy + Add>(regs: &mut Registers) {
     push(regs, x + y);
 }
 
+
+
 fn type_return<T: Copy>(regs: &mut Registers) {
-    let res: T = pop(regs);
-
-    unsafe {
-        let cur_frame = &*regs.bp;
-        ptr::copy(&(*regs.bp).ctx, regs, 1);
-    }
-
-    push(regs, res);
+    unimplemented!()
 }
 
 pub type InsFnType = fn(&mut Registers);

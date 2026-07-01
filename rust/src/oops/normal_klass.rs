@@ -1,14 +1,15 @@
-use std::{mem::size_of, ptr::{self, NonNull}, slice};
+use std::{
+    mem::size_of,
+    ptr::{self, NonNull},
+    slice,
+};
 
 use crate::{
-    class_loader::{
-        cld::ClassLoaderData,
-        ms_box::{MSAllocator, MSBox},
-    },
+    class_loader::{cld::ClassLoaderData, ms_box::MSAllocator},
     class_parser::{class_file::ClassFile, cp_info::ConstantPoolInfo, field_info::FieldInfo},
     oops::{
         acc_flags::AccFlags,
-        cp_entry::{CPEntry, ClassCPEntry, get_utf8},
+        cp_entry::{CPEntry, ClassCPEntry},
         field::Field,
         method::Method,
         oop_handle::{KLASS_OOP_STORAGE_ID, NarrowOOP, OOPHandle},
@@ -85,7 +86,7 @@ impl Fields {
 
             // 0. Pointer fields (NarrowOOP).
             for f in buckets[0].iter_mut() {
-                f.offs = Some(offset);
+                f.set_offs(offset);
                 offset += ptr_size;
             }
             // Align after pointer fields to word boundary.
@@ -93,25 +94,25 @@ impl Fields {
 
             // 1. 8-byte fields.
             for f in buckets[1].iter_mut() {
-                f.offs = Some(offset);
+                f.set_offs(offset);
                 offset += 8;
             }
 
             // 2. 4-byte fields.
             for f in buckets[2].iter_mut() {
-                f.offs = Some(offset);
+                f.set_offs(offset);
                 offset += 4;
             }
 
             // 3. 2-byte fields.
             for f in buckets[3].iter_mut() {
-                f.offs = Some(offset);
+                f.set_offs(offset);
                 offset += 2;
             }
 
             // 4. 1-byte fields.
             for f in buckets[4].iter_mut() {
-                f.offs = Some(offset);
+                f.set_offs(offset);
                 offset += 1;
             }
 
@@ -157,26 +158,27 @@ impl Fields {
 }
 
 pub struct NormalKlass {
-    mirror: OOPHandle,
+    pub mirror: OOPHandle,
 
-    acc_flags: AccFlags,
-    name: SymbolHandle,
+    pub acc_flags: AccFlags,
+    pub name: SymbolHandle,
 
-    super_entry: Option<NonNull<ClassCPEntry>>,
-    super_klass: Option<NonNull<NormalKlass>>,
+    pub super_klass: Option<NonNull<NormalKlass>>,
 
-    cld: NonNull<ClassLoaderData>,
+    pub cld: NonNull<ClassLoaderData>,
 
     constant_pool: NonNull<[Option<CPEntry>]>,
+
     interfaces: NonNull<[NonNull<ClassCPEntry>]>,
-
     fields: Fields,
-
     methods: NonNull<[Method]>,
 }
 
 impl NormalKlass {
-    pub fn from(cf: ClassFile, cld: NonNull<ClassLoaderData>) -> ResolveResult<Self> {
+    pub fn from(
+        cf: ClassFile,
+        cld: NonNull<ClassLoaderData>,
+    ) -> ResolveResult<(Self, Option<NonNull<ClassCPEntry>>)> {
         let acc_flags = AccFlags::from_bits_truncate(cf.acc_flags);
         let msa = unsafe { &cld.as_ref().ms_allocator };
 
@@ -185,7 +187,9 @@ impl NormalKlass {
         let cp_mem = msa.calloc::<Option<CPEntry>>(size_of::<Option<CPEntry>>(), cp_len);
         let cp_slice = unsafe { slice::from_raw_parts_mut(cp_mem, cp_len) };
         for i in 0..cp_len {
-            unsafe { ptr::write(&mut cp_slice[i], None); }
+            unsafe {
+                ptr::write(&mut cp_slice[i], None);
+            }
         }
 
         // Slot 0 is Unusable (JVM CP is 1-indexed).
@@ -256,26 +260,32 @@ impl NormalKlass {
         }
         let methods = unsafe { NonNull::new_unchecked(methods_slice as *mut [Method]) };
 
-        Ok(Self {
-            mirror: OOPHandle::new(KLASS_OOP_STORAGE_ID),
-            acc_flags,
-            name,
+        Ok((
+            Self {
+                mirror: OOPHandle::new(KLASS_OOP_STORAGE_ID),
+                acc_flags,
+                name,
+                super_klass: None,
+                cld,
+                constant_pool,
+                interfaces,
+                fields,
+                methods,
+            },
             super_entry,
-            super_klass: None,
-            cld,
-            constant_pool,
-            interfaces,
-            fields,
-            methods,
-        })
+        ))
     }
 }
 
 impl NormalKlass {
-    pub fn find_method(&self, mname: &str, mdesc: &str) -> Option<NonNull<Method>> {
+    pub fn cp_get(&self, idx: usize) -> &CPEntry {
+        unsafe { self.constant_pool.as_ref()[idx].as_ref().unwrap_unchecked() }
+    }
+
+    pub fn find_method(&self, mname: &SymbolHandle, mdesc: &SymbolHandle) -> Option<&Method> {
         for n in unsafe { self.methods.as_ref() } {
-            if n.name.utf8() == mname && n.desc.raw.utf8() == mdesc {
-                return unsafe { Some(NonNull::new_unchecked(n as *const _ as *mut _)) }
+            if n.name.equals(mname) && n.desc.raw.equals(mdesc) {
+                return Some(n);
             }
         }
 

@@ -7,7 +7,7 @@ use crate::{
     class_loader::ms_box::MSAllocator,
     class_parser::attr_info::{CodeAttrInfo, ExceptionTableEntryInfo},
     oops::{
-        cp_entry::{CPEntry, ClassCPEntry, StringEntry},
+        cp_entry::{CPEntry, ClassCPEntry, StringCPEntry},
         resolve_error::{ResolveError, ResolveResult},
     },
 };
@@ -80,7 +80,7 @@ pub enum ConstantValueAttr {
     Float(f32),
     Long(i64),
     Double(f64),
-    String(NonNull<StringEntry>),
+    String(NonNull<StringCPEntry>),
 }
 
 impl ConstantValueAttr {
@@ -93,7 +93,7 @@ impl ConstantValueAttr {
             CPEntry::Long { value } => Ok(Self::Long(*value)),
             CPEntry::Double { value } => Ok(Self::Double(*value)),
             CPEntry::StringConstant { entry } => {
-                let ptr = entry as *const StringEntry as *mut StringEntry;
+                let ptr = entry as *const StringCPEntry as *mut StringCPEntry;
                 Ok(Self::String(unsafe { NonNull::new_unchecked(ptr) }))
             }
             _ => Err(ResolveError::MismatchCPType),
