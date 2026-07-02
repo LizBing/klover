@@ -6,6 +6,7 @@
 static const uintptr_t METASPACE_BASE = 1ul << 43;
 static const uintptr_t GCHEAP_BASE = 1ul << 44;
 static const size_t COMPSPACE_BYTE_SIZE = 32ul * G;
+static const size_t COMPSPACE_WORD_SIZE = COMPSPACE_BYTE_SIZE / sizeof(HeapWord);
 
 /*
  * With 8-byte alignment (sizeof(HeapWord) == 8) and a 32-bit compressed

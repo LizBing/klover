@@ -3,9 +3,11 @@
 
 #include "utils/global_defs.h"
 
+typedef struct Klass Klass;
+
 typedef struct ObjDesc ObjDesc;
 struct ObjDesc {
-  volatile uint64_t markword;
+  uint64_t _Atomic markword;
   HeapWord payload[0];
 };
 

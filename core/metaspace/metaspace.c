@@ -75,9 +75,7 @@ bool ms_init(void) {
         return false; /* already initialised */
     }
 
-    size_t word_size = COMPSPACE_BYTE_SIZE / sizeof(HeapWord);
-
-    VirtSpace* vs = create_virt_space(METASPACE_BASE, word_size, false);
+    VirtSpace* vs = create_virt_space(METASPACE_BASE, COMPSPACE_WORD_SIZE, false);
     if (vs == NULL) {
         return false;
     }
