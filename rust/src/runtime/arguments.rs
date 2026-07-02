@@ -2,11 +2,17 @@ use std::sync::OnceLock;
 
 #[derive(Debug)]
 pub struct Arguments {
-    pub boot_class_path: String,
+    pub bs_class_path: String,
 }
 
-pub static ARGUMENTS: OnceLock<Arguments> = OnceLock::new();
+static ARGUMENTS: OnceLock<Arguments> = OnceLock::new();
 
-pub fn init_arguments(args: Arguments) {
-    ARGUMENTS.set(args).unwrap()
+impl Arguments {
+    pub fn init(args: Arguments) {
+        ARGUMENTS.set(args).unwrap()
+    }
+    
+    pub fn get() -> &'static Arguments {
+        ARGUMENTS.get().unwrap()
+    }
 }

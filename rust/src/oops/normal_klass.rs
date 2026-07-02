@@ -151,7 +151,7 @@ pub struct NormalKlass {
     pub obj_layout: OnceCell<ObjLayout>,
 
     // Delegation: cld.load_class()
-    pub cld: NonNull<ClassLoaderData>,
+    pub cld: OnceCell<Option<NonNull<ClassLoaderData>>>,
 
     constant_pool: NonNull<[Option<CPEntry>]>,
 
@@ -163,10 +163,9 @@ pub struct NormalKlass {
 impl NormalKlass {
     pub fn from(
         cf: ClassFile,
-        cld: NonNull<ClassLoaderData>,
+        msa: &MSAllocator
     ) -> ResolveResult<Self> {
         let acc_flags = AccFlags::from_bits_truncate(cf.acc_flags);
-        let msa = unsafe { &cld.as_ref().ms_allocator };
 
         // 1. Allocate and resolve the constant pool in metaspace.
         let cp_len = cf.constant_pool.len();
@@ -254,7 +253,7 @@ impl NormalKlass {
                 super_entry: Mutex::new(super_entry),
                 super_klass: OnceCell::new(),
                 obj_layout: OnceCell::new(),
-                cld,
+                cld: OnceCell::new(),
                 constant_pool,
                 interfaces,
                 fields,

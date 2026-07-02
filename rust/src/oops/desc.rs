@@ -1,7 +1,6 @@
 use std::{mem::size_of, sync::atomic::AtomicPtr};
 
 use crate::{
-    class_loader::ms_box::MSBox,
     oops::{
         klass::Klass,
         oop_handle::NarrowOOP,
@@ -22,7 +21,7 @@ pub enum FieldElemType {
 
     Class {
         name: SymbolHandle,
-        resolved: AtomicPtr<MSBox<Klass>>,
+        resolved: AtomicPtr<Klass>,
     },
 }
 

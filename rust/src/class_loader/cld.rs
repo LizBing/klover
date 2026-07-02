@@ -1,6 +1,5 @@
-use std::{ops::Deref, ptr::NonNull, thread};
+use std::{ops::Deref, ptr::NonNull};
 
-use byteorder::LE;
 use dashmap::{DashMap, mapref::entry::Entry};
 
 use crate::{
@@ -24,10 +23,8 @@ pub struct ClassLoaderData {
     pub mirror: OOPHandle,
     pub debug_name: Option<String>,
 
-    class_path: Box<dyn ClassPath>,
     pub ms_allocator: MSAllocator,
     klasses: DashMap<SymbolHandle, MSBox<Klass>>,
-    // waiters: DashMap<SymbolHandle, Vec<thread::Thread>>,
 }
 
 unsafe impl Send for ClassLoaderData {}
@@ -42,15 +39,13 @@ impl Drop for ClassLoaderData {
 impl ClassLoaderData {
     // ── 构造 ───────────────────────────────────────────────────────────
 
-    pub fn new(debug_name: Option<String>, class_path: Box<dyn ClassPath>) -> NonNull<Self> {
+    pub fn new(debug_name: Option<String>) -> NonNull<Self> {
         let cld = Box::new(Self {
             next: std::ptr::null_mut(),
             mirror: OOPHandle::new(CLD_MIRROR_STORAGE_ID),
             debug_name,
-            class_path,
             ms_allocator: MSAllocator::new(),
             klasses: DashMap::new(),
-            // waiters: DashMap::new(),
         });
 
         let ptr: NonNull<Self> = Box::leak(cld).into();
@@ -81,6 +76,7 @@ impl ClassLoaderData {
 
             _ => return Err(LoadError::Resolve(ResolveError::MismatchCPType))
         };
+        // field desc
         let name = SymbolTable::intern(name_utf8.as_str());
 
         let entry = self.klasses.entry(name);
@@ -95,15 +91,25 @@ impl ClassLoaderData {
             Entry::Vacant(v) => v,
         };
 
-        let self_ptr = unsafe { NonNull::new_unchecked(self as *const _ as _) };
-        let klass = match NormalKlass::from(cf, self_ptr) {
+        let klass = match NormalKlass::from(cf, &self.ms_allocator) {
             Ok(x) => x,
             Err(e) => return Err(LoadError::Resolve(e)),
         };
+        let self_ptr = unsafe { NonNull::new_unchecked(self as *const _ as _) };
+        klass.cld.set(Some(self_ptr)).unwrap();
 
         let boxed = MSBox::new(&self.ms_allocator, Klass::Normal(klass));
         let r = vacant.insert(boxed);
 
         Ok(Self::klass_ptr(r.deref()))
+    }
+
+    pub fn find_loaded_class(&self, name: &str) -> Option<NonNull<Klass>> {
+        let sym = SymbolTable::intern(name);
+        
+        match self.klasses.get(&sym) {
+            Some(x) => Some(Self::klass_ptr(x.deref())),
+            None => None
+        }
     }
 }
