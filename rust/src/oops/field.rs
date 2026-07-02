@@ -1,5 +1,3 @@
-use std::cell::OnceCell;
-
 use crate::{
     class_parser::{attr_info::AttrInfo, field_info::FieldInfo},
     oops::{

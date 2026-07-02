@@ -9,6 +9,7 @@ pub enum LoadError {
     StillLoading(String),
     SuperNotNormal(String),
     LoadingFailed(String),
+    Duplicated { cld_name: Option<String>, class_name: String }
 }
 
 pub type LoadResult<T> = Result<T, LoadError>;

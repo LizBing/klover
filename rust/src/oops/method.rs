@@ -1,4 +1,4 @@
-use crate::{class_loader::ms_box::MSAllocator, class_parser::{attr_info::AttrInfo, method_info::MethodInfo}, oops::{acc_flags::AccFlags, attr::CodeAttr, cp_entry::{CPEntry, get_utf8}, desc::MethodDesc, normal_klass::NormalKlass, resolve_error::ResolveResult, symbol_table::SymbolHandle}};
+use crate::{class_loader::ms_box::MSAllocator, class_parser::{attr_info::AttrInfo, method_info::MethodInfo}, oops::{acc_flags::AccFlags, attr::CodeAttr, cp_entry::{CPEntry, get_utf8}, desc::MethodDesc, resolve_error::ResolveResult, symbol_table::SymbolHandle}};
 
 pub struct Method {
     pub acc_flags: AccFlags,

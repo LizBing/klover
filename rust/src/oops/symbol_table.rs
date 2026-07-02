@@ -152,6 +152,12 @@ impl Hash for SymbolHandle {
     }
 }
 
+impl From<&str> for SymbolHandle {
+    fn from(value: &str) -> Self {
+        SymbolTable::intern(value)
+    }
+}
+
 impl SymbolHandle {
     pub fn equals(&self, n: &Self) -> bool {
         self.symbol == n.symbol

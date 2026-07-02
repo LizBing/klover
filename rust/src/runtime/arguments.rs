@@ -1,8 +1,8 @@
-use std::sync::{LazyLock, OnceLock};
+use std::sync::OnceLock;
 
 #[derive(Debug)]
 pub struct Arguments {
-    pub boot_class_path: String
+    pub boot_class_path: String,
 }
 
 pub static ARGUMENTS: OnceLock<Arguments> = OnceLock::new();

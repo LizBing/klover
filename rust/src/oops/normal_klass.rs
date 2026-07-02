@@ -1,20 +1,12 @@
 use std::{
-    mem::size_of,
-    ptr::{self, NonNull},
-    slice,
+    cell::OnceCell, mem::size_of, ptr::{self, NonNull}, slice, sync::Mutex
 };
 
 use crate::{
     class_loader::{cld::ClassLoaderData, ms_box::MSAllocator},
     class_parser::{class_file::ClassFile, cp_info::ConstantPoolInfo, field_info::FieldInfo},
     oops::{
-        acc_flags::AccFlags,
-        cp_entry::{CPEntry, ClassCPEntry},
-        field::Field,
-        method::Method,
-        oop_handle::{KLASS_OOP_STORAGE_ID, NarrowOOP, OOPHandle},
-        resolve_error::{ResolveError, ResolveResult},
-        symbol_table::SymbolHandle,
+        acc_flags::AccFlags, cp_entry::{CPEntry, ClassCPEntry}, field::Field, method::Method, obj_layout::ObjLayout, oop_handle::{KLASS_OOP_STORAGE_ID, NarrowOOP, OOPHandle}, resolve_error::{ResolveError, ResolveResult}, symbol_table::SymbolHandle
     },
 };
 
@@ -32,12 +24,11 @@ fn allocate_slice_from_vec<T>(msa: &MSAllocator, vec: Vec<T>) -> NonNull<[T]> {
 struct Fields {
     static_ptr_count: usize,
     static_fields: NonNull<[Field]>,
-    static_payload: NonNull<u8>,
     static_payload_size: usize,
 
     ptr_count: usize,
     fields: NonNull<[Field]>,
-    part_size: usize,
+    size: usize,
 }
 
 impl Fields {
@@ -125,22 +116,13 @@ impl Fields {
         }
 
         // Static fields.
-        let (static_ordered, static_ptr_count, static_part_size) =
+        let (static_ordered, static_ptr_count, static_payload_size) =
             layout_group(&mut static_buckets, ptr_size, align);
 
         let static_fields = allocate_slice_from_vec(msa, static_ordered);
 
-        // Eagerly allocate static field storage (zero-filled).
-        let (static_payload, static_payload_size) = if static_part_size > 0 {
-            let mem = msa.alloc::<u8>(static_part_size);
-            unsafe { std::ptr::write_bytes(mem, 0, static_part_size) };
-            (unsafe { NonNull::new_unchecked(mem) }, static_part_size)
-        } else {
-            (NonNull::dangling(), 0)
-        };
-
         // Instance fields.
-        let (instance_ordered, ptr_count, part_size) =
+        let (instance_ordered, ptr_count, size) =
             layout_group(&mut instance_buckets, ptr_size, align);
 
         let fields = allocate_slice_from_vec(msa, instance_ordered);
@@ -148,11 +130,10 @@ impl Fields {
         Ok(Self {
             static_ptr_count,
             static_fields,
-            static_payload,
             static_payload_size,
             ptr_count,
             fields,
-            part_size,
+            size,
         })
     }
 }
@@ -163,8 +144,13 @@ pub struct NormalKlass {
     pub acc_flags: AccFlags,
     pub name: SymbolHandle,
 
-    pub super_klass: Option<NonNull<NormalKlass>>,
+    // This mutex protects the initialization of these two OnceCell.
+    // The linking and initialization of this class happens in the first "new" or the access of a static field.
+    super_entry: Mutex<Option<NonNull<ClassCPEntry>>>,
+    pub super_klass: OnceCell<Option<NonNull<NormalKlass>>>,
+    pub obj_layout: OnceCell<ObjLayout>,
 
+    // Delegation: cld.load_class()
     pub cld: NonNull<ClassLoaderData>,
 
     constant_pool: NonNull<[Option<CPEntry>]>,
@@ -178,7 +164,7 @@ impl NormalKlass {
     pub fn from(
         cf: ClassFile,
         cld: NonNull<ClassLoaderData>,
-    ) -> ResolveResult<(Self, Option<NonNull<ClassCPEntry>>)> {
+    ) -> ResolveResult<Self> {
         let acc_flags = AccFlags::from_bits_truncate(cf.acc_flags);
         let msa = unsafe { &cld.as_ref().ms_allocator };
 
@@ -260,21 +246,24 @@ impl NormalKlass {
         }
         let methods = unsafe { NonNull::new_unchecked(methods_slice as *mut [Method]) };
 
-        Ok((
+        Ok(
             Self {
                 mirror: OOPHandle::new(KLASS_OOP_STORAGE_ID),
                 acc_flags,
                 name,
-                super_klass: None,
+                super_entry: Mutex::new(super_entry),
+                super_klass: OnceCell::new(),
+                obj_layout: OnceCell::new(),
                 cld,
                 constant_pool,
                 interfaces,
                 fields,
                 methods,
-            },
-            super_entry,
-        ))
+            }
+        )
     }
+
+    pub fn init(&self) {}
 }
 
 impl NormalKlass {
