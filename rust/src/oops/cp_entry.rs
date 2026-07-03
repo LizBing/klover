@@ -166,7 +166,7 @@ fn resolve_method_handle_entry<T>(
         _ => return Err(ResolveError::MismatchCPType),
     };
 
-    Ok(entry.into())
+    unsafe { Ok((&*entry).into()) }
 }
 
 impl MethodHandleEntry {

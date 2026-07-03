@@ -1,10 +1,7 @@
-use std::{
-    ptr::{self, NonNull},
-    slice,
-};
+use std::ptr;
 
 use crate::{
-    class_loader::ms_api::{MSAllocator, MSRef},
+    class_loader::ms_api::{MSAllocator, MSBox, MSRef},
     class_parser::attr_info::{CodeAttrInfo, ExceptionTableEntryInfo},
     oops::{
         cp_entry::{CPEntry, ClassCPEntry, StringCPEntry}, normal_klass::cp_slice_get, resolve_error::{ResolveError, ResolveResult}
@@ -20,18 +17,16 @@ pub struct ExceptionTableEntry {
 
 impl ExceptionTableEntry {
     fn from(info: &ExceptionTableEntryInfo, cp: &[Option<CPEntry>]) -> ResolveResult<Self> {
-        let ct = unsafe {
-            match cp_slice_get(cp, info.catch_type as usize) {
-                CPEntry::Class { entry } => entry,
-                _ => return Err(ResolveError::MismatchCPType),
-            }
+        let ct = match cp_slice_get(cp, info.catch_type as usize) {
+            CPEntry::Class(entry) => entry,
+            _ => return Err(ResolveError::MismatchCPType),
         };
 
         Ok(Self {
             start_pc: info.start_pc,
             end_pc: info.end_pc,
             handler_pc: info.handler_pc,
-            catch_type: ct,
+            catch_type: ct.into(),
         })
     }
 }
@@ -39,8 +34,8 @@ impl ExceptionTableEntry {
 pub struct CodeAttr {
     pub max_stack: u16,
     pub max_locals: u16,
-    pub code: NonNull<[u8]>,
-    pub exception_table: NonNull<[ExceptionTableEntry]>,
+    pub code: MSBox<[u8]>,
+    pub exception_table: MSBox<[ExceptionTableEntry]>,
 }
 
 impl CodeAttr {
@@ -50,13 +45,13 @@ impl CodeAttr {
             let mem = msa.alloc(len);
             ptr::copy(info.code.as_ptr(), mem, len);
 
-            NonNull::new_unchecked(slice::from_raw_parts_mut(mem, len))
+            MSBox::from_raw(ptr::slice_from_raw_parts_mut(mem, len))
         };
 
-        let et = unsafe {
+        let mut et = unsafe {
             let len = info.exception_table.len();
             let mem = msa.calloc(size_of::<ExceptionTableEntry>(), len);
-            slice::from_raw_parts_mut(mem, len)
+            MSBox::from_raw(ptr::slice_from_raw_parts_mut(mem, len))
         };
 
         let mut i = 0;
@@ -69,7 +64,7 @@ impl CodeAttr {
             max_stack: info.max_stack,
             max_locals: info.max_locals,
             code,
-            exception_table: et.into(),
+            exception_table: et,
         })
     }
 }
@@ -79,7 +74,7 @@ pub enum ConstantValueAttr {
     Float(f32),
     Long(i64),
     Double(f64),
-    String(NonNull<StringCPEntry>),
+    String(MSRef<StringCPEntry>),
 }
 
 impl ConstantValueAttr {
@@ -87,14 +82,12 @@ impl ConstantValueAttr {
         let entry = unsafe { cp[cp_idx].as_ref().unwrap_unchecked() };
 
         match entry {
-            CPEntry::Integer { value } => Ok(Self::Integer(*value)),
-            CPEntry::Float { value } => Ok(Self::Float(*value)),
-            CPEntry::Long { value } => Ok(Self::Long(*value)),
-            CPEntry::Double { value } => Ok(Self::Double(*value)),
-            CPEntry::StringConstant { entry } => {
-                let ptr = entry as *const StringCPEntry as *mut StringCPEntry;
-                Ok(Self::String(unsafe { NonNull::new_unchecked(ptr) }))
-            }
+            CPEntry::Integer(value) => Ok(Self::Integer(*value)),
+            CPEntry::Float(value) => Ok(Self::Float(*value)),
+            CPEntry::Long(value) => Ok(Self::Long(*value)),
+            CPEntry::Double(value) => Ok(Self::Double(*value)),
+            CPEntry::StringConstant(entry) => Ok(Self::String(entry.into())),
+            
             _ => Err(ResolveError::MismatchCPType),
         }
     }

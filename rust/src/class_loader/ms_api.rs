@@ -1,4 +1,4 @@
-use std::ops::{Deref, DerefMut};
+use std::ops::{self, Deref, DerefMut};
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::ptr;
@@ -213,11 +213,11 @@ impl Default for MSAllocator {
 /// Individual deallocations are not supported (bump-allocator
 /// semantics); memory is reclaimed when the underlying chunks are
 /// destroyed together with the allocator.
-pub struct MSBox<T> {
+pub struct MSBox<T: ?Sized> {
     raw: NonNull<T>,
 }
 
-impl<T> MSBox<T> {
+impl<T: Sized> MSBox<T> {
     /// Allocate memory through `allocator` and move `value` into it.
     pub fn new(allocator: &MSAllocator, value: T) -> Self {
         let size = std::mem::size_of::<T>();
@@ -227,15 +227,17 @@ impl<T> MSBox<T> {
             raw: unsafe { NonNull::new_unchecked(ptr) },
         }
     }
+}
 
-    pub fn from_raw(raw: *mut T) -> Self {
+impl<T: ?Sized> MSBox<T> {
+    pub unsafe fn from_raw(raw: *mut T) -> Self {
         Self {
             raw: NonNull::new(raw).unwrap()
         }
     }
 }
 
-impl<T> std::ops::Deref for MSBox<T> {
+impl<T: ?Sized> Deref for MSBox<T> {
     type Target = T;
 
     fn deref(&self) -> &T {
@@ -243,13 +245,13 @@ impl<T> std::ops::Deref for MSBox<T> {
     }
 }
 
-impl<T> std::ops::DerefMut for MSBox<T> {
+impl<T: ?Sized> DerefMut for MSBox<T> {
     fn deref_mut(&mut self) -> &mut T {
         unsafe { self.raw.as_mut() }
     }
 }
 
-impl<T> Drop for MSBox<T> {
+impl<T: ?Sized> Drop for MSBox<T> {
     fn drop(&mut self) {
         unsafe {
             ptr::drop_in_place(self.raw.as_ptr());
@@ -279,11 +281,11 @@ impl<T> From<&T> for MSRef<T> {
     }
 }
 
-impl<T> From<*const T> for MSRef<T> {
-    fn from(value: *const T) -> Self {
-        unsafe { (&*value).into() }
-    }
-}
+// impl<T> From<*const T> for MSRef<T> {
+//     fn from(value: *const T) -> Self {
+//         unsafe { (&*value).into() }
+//     }
+// }
 
 impl<T> Deref for MSRef<T> {
     type Target = T;
