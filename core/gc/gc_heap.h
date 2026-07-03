@@ -8,6 +8,6 @@
 bool gcheap_init(size_t xmx);
 
 // Returning NULL means OOM.
-oop_t gcheap_alloc(Klass*, size_t word_size);
+objptr_t gcheap_alloc(Klass*, size_t word_size);
 
 #endif /* GC_GC_HEAP_H_ */

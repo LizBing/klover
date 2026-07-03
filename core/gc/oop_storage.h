@@ -15,8 +15,8 @@ static const int CLD_MIRROR_STORAGE = WEAK_STORAGE_START + 0;
 
 void init_oop_storages();
 
-oop_t* alloc_oop_slot(int storage_id);
-void free_oop_slot(int storage_id, oop_t*);
+objptr_t* alloc_oop_slot(int storage_id);
+void free_oop_slot(int storage_id, objptr_t*);
 
 bool strong_native_oops_iterate(OOPClosure*);
 bool weak_native_oops_iterate(OOPClosure*);

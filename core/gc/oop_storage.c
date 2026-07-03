@@ -44,7 +44,7 @@ struct OopBlock {
     uint32_t  _allocated_count; /* currently live (allocated minus released)   */
     uint32_t  _free_head;       /* FREE_LIST_END if empty                      */
     uint32_t  _next_unused;     /* bump-index for never-allocated slots        */
-    oop_t     _slots[];         /* flexible array member                       */
+    objptr_t     _slots[];         /* flexible array member                       */
 };
 
 /* -------------------------------------------------------------------------- */
@@ -70,13 +70,13 @@ static OOPStorage storages[ALL_STORAGE_COUNT];
 /*  Internal helpers                                                          */
 /* -------------------------------------------------------------------------- */
 
-static inline uint32_t read_link(oop_t* slot) {
+static inline uint32_t read_link(objptr_t* slot) {
     uint32_t v;
     memcpy(&v, slot, sizeof(v));
     return v;
 }
 
-static inline void write_link(oop_t* slot, uint32_t next) {
+static inline void write_link(objptr_t* slot, uint32_t next) {
     memcpy(slot, &next, sizeof(next));
 }
 
@@ -85,7 +85,7 @@ static inline void write_link(oop_t* slot, uint32_t next) {
 /* -------------------------------------------------------------------------- */
 
 static OopBlock* block_create(uint32_t slot_count) {
-    size_t sz = sizeof(OopBlock) + (size_t)slot_count * sizeof(oop_t);
+    size_t sz = sizeof(OopBlock) + (size_t)slot_count * sizeof(objptr_t);
     OopBlock* blk = (OopBlock*)malloc(sz);
     if (blk == NULL) fatal("out of memory allocating oop block");
 
@@ -94,13 +94,13 @@ static OopBlock* block_create(uint32_t slot_count) {
     blk->_allocated_count = 0;
     blk->_free_head       = FREE_LIST_END;
     blk->_next_unused     = 0;
-    memset(blk->_slots, 0, (size_t)slot_count * sizeof(oop_t));
+    memset(blk->_slots, 0, (size_t)slot_count * sizeof(objptr_t));
     return blk;
 }
 
 static void block_destroy(OopBlock* blk) { free(blk); }
 
-static OopBlock* block_of_slot(const OOPStorage* s, oop_t* slot) {
+static OopBlock* block_of_slot(const OOPStorage* s, objptr_t* slot) {
     for (OopBlock* b = s->_blocks; b; b = b->_next) {
         if (slot >= b->_slots && slot < b->_slots + b->_slot_count) return b;
     }
@@ -112,11 +112,11 @@ static OopBlock* block_of_slot(const OOPStorage* s, oop_t* slot) {
 /* -------------------------------------------------------------------------- */
 
 /** Pop the head of a block's free list.  Returns NULL if empty. */
-static oop_t* block_alloc_free(OopBlock* blk) {
+static objptr_t* block_alloc_free(OopBlock* blk) {
     if (blk->_free_head == FREE_LIST_END) return NULL;
 
     uint32_t idx       = blk->_free_head;
-    oop_t*   raw_slot  = (oop_t*)&blk->_slots[idx];
+    objptr_t*   raw_slot  = (objptr_t*)&blk->_slots[idx];
     blk->_free_head    = read_link(raw_slot);
     blk->_allocated_count++;
     *raw_slot = NULL;  /* clear the slot for the caller */
@@ -124,7 +124,7 @@ static oop_t* block_alloc_free(OopBlock* blk) {
 }
 
 /** Take the next never-allocated slot.  Returns NULL if full. */
-static oop_t* block_alloc_unused(OopBlock* blk) {
+static objptr_t* block_alloc_unused(OopBlock* blk) {
     if (blk->_next_unused >= blk->_slot_count) return NULL;
 
     uint32_t idx = blk->_next_unused++;
@@ -152,7 +152,7 @@ void init_oop_storages(void) {
 
 /* -------------------------------------------------------------------------- */
 
-oop_t* alloc_oop_slot(int storage_id) {
+objptr_t* alloc_oop_slot(int storage_id) {
     if (storage_id < 0 || storage_id >= ALL_STORAGE_COUNT) return NULL;
 
     OOPStorage* s = &storages[storage_id];
@@ -160,7 +160,7 @@ oop_t* alloc_oop_slot(int storage_id) {
 
     pthread_mutex_lock(&s->_mutex);
 
-    oop_t* slot = NULL;
+    objptr_t* slot = NULL;
 
     /* 1. Free list — active block */
     if (s->_active) {
@@ -200,7 +200,7 @@ done:
 
 /* -------------------------------------------------------------------------- */
 
-void free_oop_slot(int storage_id, oop_t* slot) {
+void free_oop_slot(int storage_id, objptr_t* slot) {
     if (storage_id < 0 || storage_id >= ALL_STORAGE_COUNT) return;
     if (slot == NULL) return;
 
@@ -217,7 +217,7 @@ void free_oop_slot(int storage_id, oop_t* slot) {
     /* Push onto free list.
      * Clear the oop first, then write the link so it survives. */
     *slot = NULL;
-    oop_t* raw_slot = (oop_t*)&blk->_slots[idx];
+    objptr_t* raw_slot = (objptr_t*)&blk->_slots[idx];
     write_link(raw_slot, blk->_free_head);
     blk->_free_head = idx;
 
@@ -254,7 +254,7 @@ static bool storage_iterate(OOPStorage* s, OOPClosure* closure) {
                 free_idxs = tmp;
             }
             free_idxs[cnt++] = fi;
-            oop_t* raw = (oop_t*)&blk->_slots[fi];
+            objptr_t* raw = (objptr_t*)&blk->_slots[fi];
             fi = read_link(raw);
         }
 

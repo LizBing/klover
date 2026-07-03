@@ -32,15 +32,15 @@ TEST(alloc_from_uninitialized)
 TEST(alloc_single_slot)
 {
     init_oop_storages();
-    oop_t* slot = alloc_oop_slot(WEAK_STORAGE_START);
+    objptr_t* slot = alloc_oop_slot(WEAK_STORAGE_START);
     ASSERT_NOT_NULL(slot, "alloc returned NULL");
 
     /* Slot should be zeroed */
-    ASSERT_EQ(*slot, (oop_t)NULL, "slot not zeroed");
+    ASSERT_EQ(*slot, (objptr_t)NULL, "slot not zeroed");
 
     /* Write and read back */
-    *slot = (oop_t)0xDEADBEEFCAFEull;
-    ASSERT_EQ(*slot, (oop_t)0xDEADBEEFCAFEull, "readback mismatch");
+    *slot = (objptr_t)0xDEADBEEFCAFEull;
+    ASSERT_EQ(*slot, (objptr_t)0xDEADBEEFCAFEull, "readback mismatch");
 
     free_oop_slot(WEAK_STORAGE_START, slot);
 }
@@ -48,12 +48,12 @@ TEST(alloc_single_slot)
 TEST(alloc_multiple_sequential)
 {
     init_oop_storages();
-    oop_t* slots[10];
+    objptr_t* slots[10];
 
     for (int i = 0; i < 10; i++) {
         slots[i] = alloc_oop_slot(WEAK_STORAGE_START);
         ASSERT_NOT_NULL(slots[i], "alloc failed");
-        *slots[i] = (oop_t)(uintptr_t)(100 + i);
+        *slots[i] = (objptr_t)(uintptr_t)(100 + i);
     }
 
     /* Slots should be consecutive */
@@ -69,14 +69,14 @@ TEST(alloc_multiple_sequential)
 TEST(alloc_slots_independent)
 {
     init_oop_storages();
-    oop_t* a = alloc_oop_slot(WEAK_STORAGE_START);
-    oop_t* b = alloc_oop_slot(WEAK_STORAGE_START);
+    objptr_t* a = alloc_oop_slot(WEAK_STORAGE_START);
+    objptr_t* b = alloc_oop_slot(WEAK_STORAGE_START);
     ASSERT_NOT_NULL(a, "a"); ASSERT_NOT_NULL(b, "b");
 
-    *a = (oop_t)0xAAAA;
-    *b = (oop_t)0xBBBB;
-    ASSERT_EQ(*a, (oop_t)0xAAAA, "a corrupted");
-    ASSERT_EQ(*b, (oop_t)0xBBBB, "b corrupted");
+    *a = (objptr_t)0xAAAA;
+    *b = (objptr_t)0xBBBB;
+    ASSERT_EQ(*a, (objptr_t)0xAAAA, "a corrupted");
+    ASSERT_EQ(*b, (objptr_t)0xBBBB, "b corrupted");
 
     free_oop_slot(WEAK_STORAGE_START, a);
     free_oop_slot(WEAK_STORAGE_START, b);
@@ -89,15 +89,15 @@ TEST(alloc_slots_independent)
 TEST(release_then_reuse)
 {
     init_oop_storages();
-    oop_t* a = alloc_oop_slot(WEAK_STORAGE_START);
-    oop_t* b = alloc_oop_slot(WEAK_STORAGE_START);
-    oop_t* c = alloc_oop_slot(WEAK_STORAGE_START);
+    objptr_t* a = alloc_oop_slot(WEAK_STORAGE_START);
+    objptr_t* b = alloc_oop_slot(WEAK_STORAGE_START);
+    objptr_t* c = alloc_oop_slot(WEAK_STORAGE_START);
     ASSERT_NOT_NULL(a, "a"); ASSERT_NOT_NULL(b, "b"); ASSERT_NOT_NULL(c, "c");
 
     free_oop_slot(WEAK_STORAGE_START, b);
 
     /* Next alloc should reuse b's slot */
-    oop_t* d = alloc_oop_slot(WEAK_STORAGE_START);
+    objptr_t* d = alloc_oop_slot(WEAK_STORAGE_START);
     ASSERT_EQ(d, b, "should reuse freed slot");
 
     free_oop_slot(WEAK_STORAGE_START, a);
@@ -108,7 +108,7 @@ TEST(release_then_reuse)
 TEST(release_external_slot)
 {
     init_oop_storages();
-    oop_t fake;
+    objptr_t fake;
     /* Passing a slot not owned by storage — should not crash */
     free_oop_slot(WEAK_STORAGE_START, &fake);
 }
@@ -129,7 +129,7 @@ typedef struct {
     int     cap;
 } CollectCtx;
 
-static bool collect_fn(oop_t* slot, void* vctx) {
+static bool collect_fn(objptr_t* slot, void* vctx) {
     CollectCtx* c = (CollectCtx*)vctx;
     if (c->count >= c->cap) return true;
     c->slots[c->count++] = (void*)slot;
@@ -151,15 +151,15 @@ TEST(iterate_empty_before_alloc)
 TEST(iterate_all_live)
 {
     init_oop_storages();
-    oop_t* allocated[10];
+    objptr_t* allocated[10];
 
     for (int i = 0; i < 10; i++) {
         allocated[i] = alloc_oop_slot(WEAK_STORAGE_START);
         ASSERT_NOT_NULL(allocated[i], "alloc failed");
-        *allocated[i] = (oop_t)(uintptr_t)(i + 1);
+        *allocated[i] = (objptr_t)(uintptr_t)(i + 1);
     }
 
-    oop_t* found[20];
+    objptr_t* found[20];
     CollectCtx ctx = { (void**)found, 0, 20 };
     OOPClosure closure = { collect_fn, &ctx };
     bool ok = weak_native_oops_iterate(&closure);
@@ -169,7 +169,7 @@ TEST(iterate_all_live)
     for (int i = 0; i < 10; i++) {
         bool present = false;
         for (int j = 0; j < ctx.count; j++) {
-            if ((oop_t*)found[j] == allocated[i]) { present = true; break; }
+            if ((objptr_t*)found[j] == allocated[i]) { present = true; break; }
         }
         ASSERT_TRUE(present, "allocated slot missing");
     }
@@ -182,21 +182,21 @@ TEST(iterate_all_live)
 TEST(iterate_skips_released)
 {
     init_oop_storages();
-    oop_t* a = alloc_oop_slot(WEAK_STORAGE_START);
-    oop_t* b = alloc_oop_slot(WEAK_STORAGE_START);
-    oop_t* c = alloc_oop_slot(WEAK_STORAGE_START);
+    objptr_t* a = alloc_oop_slot(WEAK_STORAGE_START);
+    objptr_t* b = alloc_oop_slot(WEAK_STORAGE_START);
+    objptr_t* c = alloc_oop_slot(WEAK_STORAGE_START);
     (void)a; (void)c;
 
     free_oop_slot(WEAK_STORAGE_START, b);
 
-    oop_t* found[20];
+    objptr_t* found[20];
     CollectCtx ctx = { (void**)found, 0, 20 };
     OOPClosure closure = { collect_fn, &ctx };
     weak_native_oops_iterate(&closure);
 
     ASSERT_EQ(ctx.count, 2, "should iterate 2 live slots");
     for (int j = 0; j < ctx.count; j++) {
-        ASSERT_TRUE((oop_t*)found[j] != b, "released slot should be skipped");
+        ASSERT_TRUE((objptr_t*)found[j] != b, "released slot should be skipped");
     }
 
     free_oop_slot(WEAK_STORAGE_START, a);
@@ -206,7 +206,7 @@ TEST(iterate_skips_released)
 /* ---- early-stop helper ---- */
 typedef struct { int count; int limit; } StopCtx;
 
-static bool stop_fn(oop_t* slot, void* vctx) {
+static bool stop_fn(objptr_t* slot, void* vctx) {
     (void)slot;
     StopCtx* c = (StopCtx*)vctx;
     c->count++;
@@ -217,9 +217,9 @@ TEST(iterate_early_stop)
 {
     init_oop_storages();
     for (int i = 0; i < 30; i++) {
-        oop_t* s = alloc_oop_slot(WEAK_STORAGE_START);
+        objptr_t* s = alloc_oop_slot(WEAK_STORAGE_START);
         ASSERT_NOT_NULL(s, "alloc");
-        *s = (oop_t)(uintptr_t)i;
+        *s = (objptr_t)(uintptr_t)i;
     }
 
     StopCtx sc = { 0, 7 };

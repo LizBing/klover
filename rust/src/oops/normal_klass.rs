@@ -24,7 +24,7 @@ use crate::{
         cp_entry::{CPEntry, ClassCPEntry},
         field::Field, klass::Klass,
         method::Method,
-        oop_handle::{KLASS_OOP_STORAGE_ID, NarrowOOP, OOPHandle},
+        oop_handle::{KLASS_OOP_STORAGE_ID, NObjPtr, OOPHandle},
         resolve_error::{ResolveError, ResolveResult},
         symbol_table::SymbolHandle
     },
@@ -58,7 +58,7 @@ impl Fields {
         msa: &MSAllocator,
     ) -> ResolveResult<Self> {
         let align = size_of::<usize>();
-        let ptr_size = size_of::<NarrowOOP>();
+        let ptr_size = size_of::<NObjPtr>();
 
         // Size bucket: 0 = pointer (NarrowOOP), 1 = 8B, 2 = 4B, 3 = 2B, 4 = 1B.
         let bucket = |f: &Field| -> usize {

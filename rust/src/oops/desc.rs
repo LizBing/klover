@@ -3,7 +3,7 @@ use std::{mem::size_of, sync::{OnceLock, atomic::AtomicPtr}};
 use crate::{
     class_loader::ms_api::MSRef, oops::{
         klass::Klass,
-        oop_handle::NarrowOOP,
+        oop_handle::NObjPtr,
         resolve_error::{ResolveError, ResolveResult},
         symbol_table::{SymbolHandle, SymbolTable},
     }
@@ -35,7 +35,7 @@ pub struct FieldDesc {
 impl FieldDesc {
     pub fn byte_size(&self) -> usize {
         if self.dimensions != 0 {
-            return size_of::<NarrowOOP>();
+            return size_of::<NObjPtr>();
         }
 
         match self.elem {
@@ -47,7 +47,7 @@ impl FieldDesc {
             FieldElemType::Int => size_of::<i32>(),
             FieldElemType::Long => size_of::<i64>(),
             FieldElemType::Short => size_of::<i16>(),
-            FieldElemType::Class { .. } => size_of::<NarrowOOP>(),
+            FieldElemType::Class { .. } => size_of::<NObjPtr>(),
         }
     }
 }

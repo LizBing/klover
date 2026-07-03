@@ -5,7 +5,7 @@
 
 typedef struct OOPClosure OOPClosure;
 struct OOPClosure {
-    bool(*func)(oop_t*, void* ctx);
+    bool(*func)(objptr_t*, void* ctx);
     void* ctx;
 };
 

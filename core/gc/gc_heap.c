@@ -21,7 +21,7 @@ bool gcheap_init(size_t xmx) {
     return true;
 }
 
-oop_t gcheap_alloc(Klass* klass_ptr, size_t word_size) {
+objptr_t gcheap_alloc(Klass* klass_ptr, size_t word_size) {
     HeapWord* cur_top = atomic_load_explicit(&BUMPING_TOP, memory_order_acquire);
     HeapWord* new_top = NULL;
 
@@ -34,7 +34,7 @@ oop_t gcheap_alloc(Klass* klass_ptr, size_t word_size) {
         }
     }
 
-    oop_t obj = (oop_t)cur_top;
+    objptr_t obj = (objptr_t)cur_top;
 
     obj->markword = mw_default(comp_ptr_encode(METASPACE_BASE, klass_ptr));
     

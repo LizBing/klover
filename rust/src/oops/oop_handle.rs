@@ -8,8 +8,8 @@ pub(crate) struct ObjDesc {
     pub(crate) payload: [u8; 0],
 }
 
-pub(crate) type OOP = *mut ObjDesc;
-pub(crate) type NarrowOOP = u32;
+pub(crate) type ObjPtr = *mut ObjDesc;
+pub(crate) type NObjPtr = u32;
 
 /* -------------------------------------------------------------------------- */
 /*  FFI to libjvm (core/gc/oop_storage.c)                                     */
@@ -17,8 +17,8 @@ pub(crate) type NarrowOOP = u32;
 
 unsafe extern "C" {
     pub fn init_oop_storages();
-    fn alloc_oop_slot(storage_id: i32) -> *mut OOP;
-    fn free_oop_slot(storage_id: i32, slot: *mut OOP);
+    fn alloc_oop_slot(storage_id: i32) -> *mut ObjPtr;
+    fn free_oop_slot(storage_id: i32, slot: *mut ObjPtr);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -35,7 +35,7 @@ unsafe extern "C" {
 
 #[derive(Debug)]
 pub struct OOPHandle {
-    slot: NonNull<OOP>,
+    slot: NonNull<ObjPtr>,
     storage_id: i32,
 }
 

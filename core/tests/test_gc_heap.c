@@ -24,7 +24,7 @@ TEST(init_basic)
 
 TEST(alloc_single)
 {
-    oop_t obj = gcheap_alloc((Klass*)(METASPACE_BASE + 64), 16);
+    objptr_t obj = gcheap_alloc((Klass*)(METASPACE_BASE + 64), 16);
     ASSERT_NOT_NULL(obj, "gcheap_alloc returned NULL");
 }
 
@@ -40,7 +40,7 @@ TEST(alloc_markword_klass_roundtrip)
      * the 32-bit compressed pointer range.
      */
     Klass* k = (Klass*)(METASPACE_BASE + 128);
-    oop_t obj = gcheap_alloc(k, 16);
+    objptr_t obj = gcheap_alloc(k, 16);
     ASSERT_NOT_NULL(obj, "gcheap_alloc returned NULL");
 
     comp_ptr_t kcomp = mw_read_klass_comp_ptr(obj->markword);
@@ -57,7 +57,7 @@ TEST(alloc_non_null_klass)
      * klass should be non-zero, because klass != NULL means the object
      * has a real type.
      */
-    oop_t obj = gcheap_alloc((Klass*)0x1000, 16);
+    objptr_t obj = gcheap_alloc((Klass*)0x1000, 16);
     ASSERT_NOT_NULL(obj, "gcheap_alloc returned NULL");
 
     comp_ptr_t kcomp = mw_read_klass_comp_ptr(obj->markword);
@@ -69,8 +69,8 @@ TEST(alloc_non_null_klass)
 
 TEST(alloc_increasing_addresses)
 {
-    oop_t a = gcheap_alloc((Klass*)(METASPACE_BASE + 256), 32);
-    oop_t b = gcheap_alloc((Klass*)(METASPACE_BASE + 256), 32);
+    objptr_t a = gcheap_alloc((Klass*)(METASPACE_BASE + 256), 32);
+    objptr_t b = gcheap_alloc((Klass*)(METASPACE_BASE + 256), 32);
     ASSERT_NOT_NULL(a, "alloc a returned NULL");
     ASSERT_NOT_NULL(b, "alloc b returned NULL");
 
@@ -81,8 +81,8 @@ TEST(alloc_increasing_addresses)
 TEST(alloc_non_overlapping)
 {
     size_t ws = 64;
-    oop_t a = gcheap_alloc((Klass*)(METASPACE_BASE + 256), ws);
-    oop_t b = gcheap_alloc((Klass*)(METASPACE_BASE + 256), ws);
+    objptr_t a = gcheap_alloc((Klass*)(METASPACE_BASE + 256), ws);
+    objptr_t b = gcheap_alloc((Klass*)(METASPACE_BASE + 256), ws);
     ASSERT_NOT_NULL(a, "alloc a returned NULL");
     ASSERT_NOT_NULL(b, "alloc b returned NULL");
 
@@ -93,7 +93,7 @@ TEST(alloc_non_overlapping)
 
 TEST(alloc_many_sequential)
 {
-    oop_t objs[100];
+    objptr_t objs[100];
     for (int i = 0; i < 100; i++) {
         objs[i] = gcheap_alloc((Klass*)(METASPACE_BASE + 512), 8);
         ASSERT_NOT_NULL(objs[i], "alloc in loop returned NULL");
@@ -113,7 +113,7 @@ TEST(alloc_oom_huge)
      * Request far more words than the heap committed size can provide.
      * Use 10 Giga-words (80 GB) against a 4 MB heap -> must return NULL.
      */
-    oop_t obj = gcheap_alloc((Klass*)(METASPACE_BASE), (size_t)10 * G);
+    objptr_t obj = gcheap_alloc((Klass*)(METASPACE_BASE), (size_t)10 * G);
     ASSERT_NULL(obj, "huge allocation should return NULL (OOM)");
 }
 
@@ -121,7 +121,7 @@ TEST(alloc_oom_huge)
 
 TEST(alloc_memory_writable)
 {
-    oop_t obj = gcheap_alloc((Klass*)(METASPACE_BASE + 256), 16);
+    objptr_t obj = gcheap_alloc((Klass*)(METASPACE_BASE + 256), 16);
     ASSERT_NOT_NULL(obj, "gcheap_alloc returned NULL");
 
     /*
@@ -147,10 +147,10 @@ TEST(alloc_memory_writable)
 TEST(alloc_varying_sizes)
 {
     size_t sizes[] = { 1, 2, 4, 8, 13, 64, 128, 256, 1024 };
-    oop_t prev  = NULL;
+    objptr_t prev  = NULL;
 
     for (int i = 0; i < 9; i++) {
-        oop_t obj = gcheap_alloc((Klass*)(METASPACE_BASE + 1024), sizes[i]);
+        objptr_t obj = gcheap_alloc((Klass*)(METASPACE_BASE + 1024), sizes[i]);
         ASSERT_NOT_NULL(obj, "varying-size alloc returned NULL");
 
         if (prev != NULL) {
@@ -170,7 +170,7 @@ TEST(alloc_markword_lock_value)
      * A freshly allocated object should have LOCKVALUE_NONE (0x01)
      * encoded in the lock bits of its markword.
      */
-    oop_t obj = gcheap_alloc((Klass*)(METASPACE_BASE + 64), 16);
+    objptr_t obj = gcheap_alloc((Klass*)(METASPACE_BASE + 64), 16);
     ASSERT_NOT_NULL(obj, "gcheap_alloc returned NULL");
 
     int lv = mw_read_lock_value(obj->markword);

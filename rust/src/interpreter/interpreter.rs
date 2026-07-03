@@ -1,6 +1,7 @@
 use std::{marker::PhantomData, ptr::NonNull};
 
 use crate::oops::desc::FieldDesc;
+use crate::oops::oop_handle::ObjPtr;
 use crate::oops::{attr::CodeAttr, method::Method, normal_klass::NormalKlass, oop_handle::ObjDesc};
 use crate::oops::acc_flags::AccFlags;
 
@@ -18,7 +19,7 @@ pub enum Flow {
     Return(Option<ReturnValue>),
     /// `athrow`。  暂时未启用（阶段 5）。
     #[allow(dead_code)]
-    Throw(NonNull<ObjDesc>),
+    Throw(ObjPtr),
 }
 
 /// 方法返回值。

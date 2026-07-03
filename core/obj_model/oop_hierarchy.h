@@ -5,7 +5,7 @@
 #include "obj_model/obj_desc.h"
 
 // Ordinary Object Pointer
-typedef ObjDesc* oop_t;
-typedef comp_ptr_t noop_t;
+typedef ObjDesc* objptr_t;
+typedef comp_ptr_t nobjptr_t;
 
 #endif /* OBJ_MODEL_OOP_HIERARCHY_H_ */
