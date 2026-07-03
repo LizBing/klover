@@ -276,6 +276,25 @@ impl Interpreter {
         }
     }
 
+    /// 压入一个 long / double（2 槽）。  约定：高 32 位在低地址。
+    #[inline]
+    pub(super) fn push_long(&mut self, v: DStackSlot) {
+        let hi = (v >> 32) as i32;
+        let lo = v as i32;
+        self.push_slot(hi); // 先入低地址 → 高 32 位
+        self.push_slot(lo); // 后入高地址 → 低 32 位
+    }
+
+    /// 弹出一个 long / double（2 槽）。  约定：高 32 位在低地址。
+    #[inline]
+    pub(super) fn pop_long(&mut self) -> DStackSlot {
+        // 先弹 lo（高地址）再弹 hi（低地址）。
+        // 注意：lo 是低 32 位，转 i64 前必须先走 u32，避免符号扩展污染高位。
+        let lo = self.pop_slot() as u32;
+        let hi = self.pop_slot() as u32;
+        (((hi as u64) << 32) | (lo as u64)) as i64
+    }
+
     /// 从字节码读取 1 个 u8 操作数并推进 pc。
     #[inline]
     pub(super) fn read_u8(&mut self) -> u8 {

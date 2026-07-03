@@ -5,9 +5,9 @@
 //!
 //! 阶段 (a) 仅实现纯算术静态方法需要的指令；其余槽位为 `nop` 占位。
 
-use crate::interpreter::interpreter::{
-    DStackSlot, Flow, Interpreter, Registers, ReturnValue, StackSlot,
-};
+#![allow(clippy::erasing_op)]
+
+use crate::interpreter::interpreter::{DStackSlot, Flow, Interpreter, ReturnValue, StackSlot};
 use crate::oops::cp_entry::CPEntry;
 
 pub type InsFnType = fn(&mut Interpreter) -> Flow;
@@ -35,6 +35,27 @@ fn store_local(interp: &mut Interpreter, idx: usize) -> Flow {
     let v = interp.pop_slot();
     unsafe {
         *interp.regs().bp.add(idx) = v;
+    }
+    Flow::Continue
+}
+
+// long / double 在局部变量区同样占 2 槽，布局与栈一致：高 32 位在低地址。
+#[inline]
+fn load_local_long(interp: &mut Interpreter, idx: usize) -> Flow {
+    let hi = unsafe { *interp.regs().bp.add(idx) };
+    let lo = unsafe { *interp.regs().bp.add(idx + 1) };
+    interp.push_slot(hi);
+    interp.push_slot(lo);
+    Flow::Continue
+}
+
+#[inline]
+fn store_local_long(interp: &mut Interpreter, idx: usize) -> Flow {
+    let lo = interp.pop_slot();
+    let hi = interp.pop_slot();
+    unsafe {
+        *interp.regs().bp.add(idx) = hi;
+        *interp.regs().bp.add(idx + 1) = lo;
     }
     Flow::Continue
 }
@@ -80,6 +101,13 @@ fn init_instruction_table() -> [InsFnType; INSTRUCTION_COUNT] {
     t[0x1c] = iload_2;
     t[0x1d] = iload_3;
 
+    // ── lload 系列 ───────────────────────────────────────────────────
+    t[0x16] = lload;
+    t[0x1e] = lload_0;
+    t[0x1f] = lload_1;
+    t[0x20] = lload_2;
+    t[0x21] = lload_3;
+
     // ── istore 系列 ──────────────────────────────────────────────────
     t[0x36] = istore;
     t[0x3b] = istore_0;
@@ -87,12 +115,51 @@ fn init_instruction_table() -> [InsFnType; INSTRUCTION_COUNT] {
     t[0x3d] = istore_2;
     t[0x3e] = istore_3;
 
-    // ── int 算术（本阶段最小集）─────────────────────────────────────
+    // ── lstore 系列 ──────────────────────────────────────────────────
+    t[0x37] = lstore;
+    t[0x3f] = lstore_0;
+    t[0x40] = lstore_1;
+    t[0x41] = lstore_2;
+    t[0x42] = lstore_3;
+
+    // ── 常量 push（long / ldc / ldc2_w）──────────────────────────────
+    t[0x09] = lconst_0;
+    t[0x0a] = lconst_1;
+    t[0x12] = ldc;
+    t[0x14] = ldc2_w;
+
+    // ── int 算术 / 位运算 ────────────────────────────────────────────
     t[0x60] = iadd;
+    t[0x64] = isub;
+    t[0x68] = imul;
+    t[0x6c] = idiv;
+    t[0x70] = irem;
+    t[0x74] = ineg;
+    t[0x78] = ishl;
+    t[0x7a] = ishr;
+    t[0x7c] = iushr;
+    t[0x7e] = iand;
+    t[0x80] = ior;
+    t[0x82] = ixor;
     t[0x84] = iinc;
+
+    // ── long 算术 / 位运算 ───────────────────────────────────────────
+    t[0x61] = ladd;
+    t[0x65] = lsub;
+    t[0x69] = lmul;
+    t[0x6d] = ldiv;
+    t[0x71] = lrem;
+    t[0x75] = lneg;
+    t[0x79] = lshl;
+    t[0x7b] = lshr;
+    t[0x7d] = lushr;
+    t[0x7f] = land_;
+    t[0x81] = lor_;
+    t[0x83] = lxor_;
 
     // ── 返回 ────────────────────────────────────────────────────────
     t[0xac] = ireturn;
+    t[0xad] = lreturn;
     t[0xb1] = return_void;
 
     t
@@ -218,4 +285,248 @@ fn ireturn(interp: &mut Interpreter) -> Flow {
 
 fn return_void(interp: &mut Interpreter) -> Flow {
     Flow::Return(None)
+}
+
+// ── 阶段 2：long / ldc / 算术 handler ──────────────────────────────────
+
+fn lconst_0(interp: &mut Interpreter) -> Flow {
+    interp.push_long(0);
+    Flow::Continue
+}
+
+fn lconst_1(interp: &mut Interpreter) -> Flow {
+    interp.push_long(1);
+    Flow::Continue
+}
+
+/// `ldc`：1 字节索引。  本阶段仅处理 int；float / String 留到阶段 3。
+fn ldc(interp: &mut Interpreter) -> Flow {
+    let idx = interp.read_u8() as usize;
+    let cp = unsafe { (*interp.regs().klass).cp_get(idx) };
+    match cp {
+        CPEntry::Integer(v) => interp.push_slot(*v),
+        _ => unimplemented!("ldc non-int entry at {}", idx),
+    }
+    Flow::Continue
+}
+
+/// `ldc2_w`：2 字节索引，加载 long / double。
+fn ldc2_w(interp: &mut Interpreter) -> Flow {
+    let idx = interp.read_u16() as usize;
+    let cp = unsafe { (*interp.regs().klass).cp_get(idx) };
+    match cp {
+        CPEntry::Long(v) => interp.push_long(*v),
+        _ => unimplemented!("ldc2_w non-long entry at {}", idx),
+    }
+    Flow::Continue
+}
+
+// ── lload / lstore handler ─────────────────────────────────────────────
+
+fn lload(interp: &mut Interpreter) -> Flow {
+    let idx = interp.read_u8() as usize;
+    load_local_long(interp, idx)
+}
+
+fn lload_0(interp: &mut Interpreter) -> Flow {
+    load_local_long(interp, 0)
+}
+fn lload_1(interp: &mut Interpreter) -> Flow {
+    load_local_long(interp, 1)
+}
+fn lload_2(interp: &mut Interpreter) -> Flow {
+    load_local_long(interp, 2)
+}
+fn lload_3(interp: &mut Interpreter) -> Flow {
+    load_local_long(interp, 3)
+}
+
+fn lstore(interp: &mut Interpreter) -> Flow {
+    let idx = interp.read_u8() as usize;
+    store_local_long(interp, idx)
+}
+
+fn lstore_0(interp: &mut Interpreter) -> Flow {
+    store_local_long(interp, 0)
+}
+fn lstore_1(interp: &mut Interpreter) -> Flow {
+    store_local_long(interp, 1)
+}
+fn lstore_2(interp: &mut Interpreter) -> Flow {
+    store_local_long(interp, 2)
+}
+fn lstore_3(interp: &mut Interpreter) -> Flow {
+    store_local_long(interp, 3)
+}
+
+// ── int 算术 / 位运算 handler ─────────────────────────────────────────
+
+fn isub(interp: &mut Interpreter) -> Flow {
+    let b = interp.pop_slot();
+    let a = interp.pop_slot();
+    interp.push_slot(a.wrapping_sub(b));
+    Flow::Continue
+}
+
+fn imul(interp: &mut Interpreter) -> Flow {
+    let b = interp.pop_slot();
+    let a = interp.pop_slot();
+    interp.push_slot(a.wrapping_mul(b));
+    Flow::Continue
+}
+
+fn idiv(interp: &mut Interpreter) -> Flow {
+    let b = interp.pop_slot();
+    let a = interp.pop_slot();
+    interp.push_slot(a.wrapping_div(b));
+    Flow::Continue
+}
+
+fn irem(interp: &mut Interpreter) -> Flow {
+    let b = interp.pop_slot();
+    let a = interp.pop_slot();
+    interp.push_slot(a.wrapping_rem(b));
+    Flow::Continue
+}
+
+fn ineg(interp: &mut Interpreter) -> Flow {
+    let a = interp.pop_slot();
+    interp.push_slot(a.wrapping_neg());
+    Flow::Continue
+}
+
+fn ishl(interp: &mut Interpreter) -> Flow {
+    let b = interp.pop_slot();
+    let a = interp.pop_slot();
+    interp.push_slot(a.wrapping_shl((b & 0x1f) as u32));
+    Flow::Continue
+}
+
+fn ishr(interp: &mut Interpreter) -> Flow {
+    let b = interp.pop_slot();
+    let a = interp.pop_slot();
+    interp.push_slot(a.wrapping_shr((b & 0x1f) as u32));
+    Flow::Continue
+}
+
+fn iushr(interp: &mut Interpreter) -> Flow {
+    let b = interp.pop_slot();
+    let a = interp.pop_slot();
+    interp.push_slot(((a as u32).wrapping_shr((b & 0x1f) as u32)) as i32);
+    Flow::Continue
+}
+
+fn iand(interp: &mut Interpreter) -> Flow {
+    let b = interp.pop_slot();
+    let a = interp.pop_slot();
+    interp.push_slot(a & b);
+    Flow::Continue
+}
+
+fn ior(interp: &mut Interpreter) -> Flow {
+    let b = interp.pop_slot();
+    let a = interp.pop_slot();
+    interp.push_slot(a | b);
+    Flow::Continue
+}
+
+fn ixor(interp: &mut Interpreter) -> Flow {
+    let b = interp.pop_slot();
+    let a = interp.pop_slot();
+    interp.push_slot(a ^ b);
+    Flow::Continue
+}
+
+// ── long 算术 / 位运算 handler ─────────────────────────────────────────
+//
+// long 移位仅取 int 的低 6 位（0x3f），其余二元运算采用标准 Rust 语义。
+
+fn ladd(interp: &mut Interpreter) -> Flow {
+    let b = interp.pop_long();
+    let a = interp.pop_long();
+    interp.push_long(a.wrapping_add(b));
+    Flow::Continue
+}
+
+fn lsub(interp: &mut Interpreter) -> Flow {
+    let b = interp.pop_long();
+    let a = interp.pop_long();
+    interp.push_long(a.wrapping_sub(b));
+    Flow::Continue
+}
+
+fn lmul(interp: &mut Interpreter) -> Flow {
+    let b = interp.pop_long();
+    let a = interp.pop_long();
+    interp.push_long(a.wrapping_mul(b));
+    Flow::Continue
+}
+
+fn ldiv(interp: &mut Interpreter) -> Flow {
+    let b = interp.pop_long();
+    let a = interp.pop_long();
+    interp.push_long(a.wrapping_div(b));
+    Flow::Continue
+}
+
+fn lrem(interp: &mut Interpreter) -> Flow {
+    let b = interp.pop_long();
+    let a = interp.pop_long();
+    interp.push_long(a.wrapping_rem(b));
+    Flow::Continue
+}
+
+fn lneg(interp: &mut Interpreter) -> Flow {
+    let a = interp.pop_long();
+    interp.push_long(a.wrapping_neg());
+    Flow::Continue
+}
+
+fn lshl(interp: &mut Interpreter) -> Flow {
+    let b = interp.pop_slot() as u32 & 0x3f;
+    let a = interp.pop_long();
+    interp.push_long(a.wrapping_shl(b));
+    Flow::Continue
+}
+
+fn lshr(interp: &mut Interpreter) -> Flow {
+    let b = interp.pop_slot() as u32 & 0x3f;
+    let a = interp.pop_long();
+    interp.push_long(a.wrapping_shr(b));
+    Flow::Continue
+}
+
+fn lushr(interp: &mut Interpreter) -> Flow {
+    let b = interp.pop_slot() as u32 & 0x3f;
+    let a = interp.pop_long();
+    interp.push_long(((a as u64).wrapping_shr(b)) as i64);
+    Flow::Continue
+}
+
+fn land_(interp: &mut Interpreter) -> Flow {
+    let b = interp.pop_long();
+    let a = interp.pop_long();
+    interp.push_long(a & b);
+    Flow::Continue
+}
+
+fn lor_(interp: &mut Interpreter) -> Flow {
+    let b = interp.pop_long();
+    let a = interp.pop_long();
+    interp.push_long(a | b);
+    Flow::Continue
+}
+
+fn lxor_(interp: &mut Interpreter) -> Flow {
+    let b = interp.pop_long();
+    let a = interp.pop_long();
+    interp.push_long(a ^ b);
+    Flow::Continue
+}
+
+// ── long 返回 handler ─────────────────────────────────────────────────
+
+fn lreturn(interp: &mut Interpreter) -> Flow {
+    let v = interp.pop_long();
+    Flow::Return(Some(ReturnValue::Long(v)))
 }
