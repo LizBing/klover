@@ -33,6 +33,7 @@ unsafe extern "C" {
 /*                        (oop_t = ObjDesc*)                                  */
 /* -------------------------------------------------------------------------- */
 
+#[derive(Debug)]
 pub struct OOPHandle {
     slot: NonNull<OOP>,
     storage_id: i32,

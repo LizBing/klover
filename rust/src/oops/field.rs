@@ -1,3 +1,5 @@
+use std::cell::OnceCell;
+
 use crate::{
     class_parser::{attr_info::AttrInfo, field_info::FieldInfo},
     oops::{
@@ -10,11 +12,12 @@ use crate::{
     },
 };
 
+#[derive(Debug)]
 pub struct Field {
     pub acc_flags: AccFlags,
     pub name: SymbolHandle,
     pub desc: FieldDesc,
-    offs: Option<usize>,
+    offs: OnceCell<usize>,
 
     pub constant_value: Option<ConstantValueAttr>,
 }
@@ -40,18 +43,18 @@ impl Field {
             acc_flags,
             name,
             desc,
-            offs: None,
+            offs: OnceCell::new(),
             constant_value,
         })
     }
 
     pub(super) fn set_offs(&mut self, n: usize) {
-        self.offs = Some(n)
+        self.offs.set(n).unwrap()
     }
 }
 
 impl Field {
     pub fn offs(&self) -> usize {
-        unsafe { self.offs.unwrap_unchecked() }
+        unsafe { *self.offs.get().unwrap_unchecked() }
     }
 }

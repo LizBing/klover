@@ -4,7 +4,7 @@ use dashmap::{DashMap, mapref::entry::Entry};
 
 use crate::{
     class_loader::{
-        cld_map, load_error::{LoadError, LoadResult}, ms_api::{MSAllocator, MSBox}
+        cld_map, load_error::{LoadError, LoadResult}, ms_api::{MSAllocator, MSBox, MSRef}
     },
     class_parser::{class_file::ClassFile, cp_info::ConstantPoolInfo},
     oops::{
@@ -98,9 +98,10 @@ impl ClassLoaderData {
         match super_entry {
             Some(x) => {
                 let super_klass = self.load_class(x.name.utf8())?;
-                x.resolved.store(super_klass.as_ptr(), Ordering::Relaxed);
-                let super_ptr = unsafe { NonNull::new_unchecked(super_klass.as_ref().as_normal().unwrap() as *const NormalKlass as *mut NormalKlass) };
-                normal.set_super(Some(super_ptr));
+                x.resolved.set(super_klass.clone()).unwrap();
+                
+                let super_normal = super_klass.as_normal().unwrap();
+                normal.set_super(Some(super_normal.into()));
             },
 
             None => return Err(LoadError::NoSuper { class_name: name_utf8 })
@@ -123,7 +124,7 @@ impl ClassLoaderData {
 
 impl ClassLoaderData {
     // invoke self.mirror.loadClass()
-    pub fn load_class(&self, name: &str) -> LoadResult<NonNull<Klass>> {
+    pub fn load_class(&self, name: &str) -> LoadResult<MSRef<Klass>> {
         unimplemented!()
     }
 }

@@ -213,6 +213,7 @@ impl Default for MSAllocator {
 /// Individual deallocations are not supported (bump-allocator
 /// semantics); memory is reclaimed when the underlying chunks are
 /// destroyed together with the allocator.
+#[derive(Debug)]
 pub struct MSBox<T: ?Sized> {
     raw: NonNull<T>,
 }
@@ -265,6 +266,7 @@ unsafe impl<T: Send> Send for MSBox<T> {}
 unsafe impl<T: Sync> Sync for MSBox<T> {}
 
 // Safety: guaranteed by developer.
+#[derive(Debug)]
 pub struct MSRef<T> {
     raw: NonNull<T>
 }
@@ -278,6 +280,12 @@ impl<T> From<&MSBox<T>> for MSRef<T> {
 impl<T> From<&T> for MSRef<T> {
     fn from(value: &T) -> Self {
         unsafe { Self { raw: NonNull::new_unchecked(value as *const T as *mut T) } }
+    }
+}
+
+impl<T> Clone for MSRef<T> {
+    fn clone(&self) -> Self {
+        Self { raw: self.raw }
     }
 }
 

@@ -1,14 +1,15 @@
-use std::{mem::size_of, sync::atomic::AtomicPtr};
+use std::{mem::size_of, sync::{OnceLock, atomic::AtomicPtr}};
 
 use crate::{
-    oops::{
+    class_loader::ms_api::MSRef, oops::{
         klass::Klass,
         oop_handle::NarrowOOP,
         resolve_error::{ResolveError, ResolveResult},
         symbol_table::{SymbolHandle, SymbolTable},
-    },
+    }
 };
 
+#[derive(Debug)]
 pub enum FieldElemType {
     Boolean,
     Byte,
@@ -21,10 +22,11 @@ pub enum FieldElemType {
 
     Class {
         name: SymbolHandle,
-        resolved: AtomicPtr<Klass>,
+        resolved: OnceLock<MSRef<Klass>>,
     },
 }
 
+#[derive(Debug)]
 pub struct FieldDesc {
     pub dimensions: usize,
     pub elem: FieldElemType,
@@ -85,7 +87,7 @@ impl FieldDesc {
                 let class_name = &utf8[start..start + end];
                 FieldElemType::Class {
                     name: SymbolTable::intern(class_name),
-                    resolved: AtomicPtr::new(std::ptr::null_mut()),
+                    resolved: OnceLock::new(),
                 }
             }
             _ => return Err(ResolveError::InvalidDesc { raw: utf8.into() }),
@@ -95,11 +97,13 @@ impl FieldDesc {
     }
 }
 
+#[derive(Debug)]
 pub enum ReturnDesc {
     Void,
     Type(FieldDesc),
 }
 
+#[derive(Debug)]
 pub struct MethodDesc {
     pub raw: SymbolHandle,
     pub ret_desc: ReturnDesc,

@@ -1,7 +1,7 @@
 use std::{
     cell::OnceCell,
     mem::size_of,
-    ops::DerefMut,
+    ops::{Deref, DerefMut},
     ptr::{self, NonNull},
     slice,
     sync::atomic::Ordering
@@ -11,7 +11,7 @@ use crate::{
     class_loader::{
         bootstrap_cld::BootstrapCLD,
         cld::ClassLoaderData,
-        ms_api::{MSAllocator, MSBox}
+        ms_api::{MSAllocator, MSBox, MSRef}
     },
     class_parser::{
         class_file::ClassFile,
@@ -30,24 +30,24 @@ use crate::{
     },
 };
 
-/// Copy a `Vec<T>` into metaspace memory and return a `NonNull<[T]>` slice.
-fn allocate_slice_from_vec<T>(msa: &MSAllocator, vec: Vec<T>) -> NonNull<[T]> {
+fn allocate_slice_from_vec<T>(msa: &MSAllocator, vec: Vec<T>) -> MSBox<[T]> {
     let len = vec.len();
     let mem = msa.calloc::<T>(size_of::<T>(), len);
     let slice = unsafe { slice::from_raw_parts_mut(mem, len) };
     for (i, item) in vec.into_iter().enumerate() {
         unsafe { slice.as_mut_ptr().add(i).write(item) };
     }
-    unsafe { NonNull::new_unchecked(slice as *mut [T]) }
+    unsafe { MSBox::from_raw(slice) }
 }
 
+#[derive(Debug)]
 struct Fields {
     static_ptr_count: usize,
-    static_fields: NonNull<[Field]>,
+    static_fields: MSBox<[Field]>,
     static_payload_size: usize,
 
     ptr_count: usize,
-    fields: NonNull<[Field]>,
+    fields: MSBox<[Field]>,
     size: usize,
 }
 
@@ -158,25 +158,26 @@ impl Fields {
     }
 }
 
+#[derive(Debug)]
 pub struct NormalKlass {
     pub mirror: OOPHandle,
 
     pub acc_flags: AccFlags,
-    // pub name: SymbolHandle,
 
-    pub this_klass: NonNull<ClassCPEntry>,
-    super_klass: OnceCell<Option<NonNull<NormalKlass>>>, // resolve in cld callsite
+    pub this_klass: MSRef<ClassCPEntry>,
+    super_klass: OnceCell<Option<MSRef<NormalKlass>>>, // resolve in cld callsite
     
+    // Points rust memory space.
     pub cld: Option<NonNull<ClassLoaderData>>,
 
-    constant_pool: NonNull<[Option<CPEntry>]>,
+    constant_pool: MSBox<[Option<CPEntry>]>,
 
-    interfaces: NonNull<[NonNull<ClassCPEntry>]>,
+    interfaces: MSBox<[MSRef<ClassCPEntry>]>,
     fields: Fields,
-    methods: NonNull<[Method]>,
+    methods: MSBox<[Method]>,
 }
 
-fn build_cp<'a>(parsed_cp: &[ConstantPoolInfo], msa: &MSAllocator) -> ResolveResult<&'a [Option<CPEntry>]> {
+fn build_cp<'a>(parsed_cp: &[ConstantPoolInfo], msa: &MSAllocator) -> ResolveResult<MSBox<[Option<CPEntry>]>> {
     let cp_len = parsed_cp.len();
     let cp_mem = msa.calloc::<Option<CPEntry>>(size_of::<Option<CPEntry>>(), cp_len);
     let cp_slice = unsafe { slice::from_raw_parts_mut(cp_mem, cp_len) };
@@ -196,32 +197,30 @@ fn build_cp<'a>(parsed_cp: &[ConstantPoolInfo], msa: &MSAllocator) -> ResolveRes
         }
     }
     
-    Ok(cp_slice)
+    unsafe { Ok(MSBox::from_raw(cp_slice)) }
 }
 
 pub fn cp_slice_get(cp_slice: &[Option<CPEntry>], idx: usize) -> &CPEntry {
     unsafe { cp_slice[idx].as_ref().unwrap_unchecked() }
 }
 
-fn build_interfaces(parsed_ifaces: &[u16], cp_slice: &[Option<CPEntry>], msa: &MSAllocator) -> ResolveResult<NonNull<[NonNull<ClassCPEntry>]>> {
+fn build_interfaces(parsed_ifaces: &[u16], cp_slice: &[Option<CPEntry>], msa: &MSAllocator) -> ResolveResult<MSBox<[MSRef<ClassCPEntry>]>> {
     let iface_len = parsed_ifaces.len();
     let iface_mem =
-        msa.calloc::<NonNull<ClassCPEntry>>(size_of::<NonNull<ClassCPEntry>>(), iface_len);
+        msa.calloc::<MSRef<ClassCPEntry>>(size_of::<MSRef<ClassCPEntry>>(), iface_len);
     let iface_slice = unsafe { slice::from_raw_parts_mut(iface_mem, iface_len) };
 
     for (i, idx) in parsed_ifaces.iter().enumerate() {
         iface_slice[i] = match cp_slice_get(cp_slice, *idx as usize) {
-            CPEntry::Class { entry } => unsafe {
-                NonNull::new_unchecked(entry as *const ClassCPEntry as *mut ClassCPEntry)
-            },
+            CPEntry::Class(entry) => entry.into(),
             _ => return Err(ResolveError::MismatchCPType),
         };
     }
 
-    unsafe { Ok(NonNull::new_unchecked(iface_slice as *mut [NonNull<ClassCPEntry>])) }
+    unsafe { Ok(MSBox::from_raw(iface_slice)) }
 }
 
-fn build_methods(parsed_methods: &[MethodInfo], cp_slice: &[Option<CPEntry>], msa: &MSAllocator) -> ResolveResult<NonNull<[Method]>> {
+fn build_methods(parsed_methods: &[MethodInfo], cp_slice: &[Option<CPEntry>], msa: &MSAllocator) -> ResolveResult<MSBox<[Method]>> {
     let methods_len = parsed_methods.len();
     let methods_mem = msa.calloc::<Method>(size_of::<Method>(), methods_len);
     let methods_slice = unsafe { slice::from_raw_parts_mut(methods_mem, methods_len) };
@@ -232,14 +231,14 @@ fn build_methods(parsed_methods: &[MethodInfo], cp_slice: &[Option<CPEntry>], ms
         }
     }
     
-    unsafe { Ok(NonNull::new_unchecked(methods_slice as *mut [Method])) }
+    unsafe { Ok(MSBox::from_raw(methods_slice)) }
 }
 
 impl NormalKlass {
-    pub fn build<'a>(
+    pub fn build(
         cf: ClassFile,
         cld: Option<&ClassLoaderData>
-    ) -> ResolveResult<(MSBox<Klass>, Option<&'a ClassCPEntry>)> {
+    ) -> ResolveResult<(MSBox<Klass>, Option<MSRef<ClassCPEntry>>)> {
         let msa = match cld {
             Some(x) => &x.ms_allocator,
             None => BootstrapCLD::bs_msa()
@@ -247,30 +246,29 @@ impl NormalKlass {
         
         let acc_flags = AccFlags::from_bits_truncate(cf.acc_flags);
 
-        let cp_slice = build_cp(&cf.constant_pool, msa)?;
-        let cp = unsafe { NonNull::new_unchecked(cp_slice as *const _ as *mut _) };
+        let cp = build_cp(&cf.constant_pool, msa)?;
 
-        let this_entry = match cp_slice_get(cp_slice, cf.this_class as usize) {
-            CPEntry::Class { entry } => entry,
+        let this_entry: MSRef<ClassCPEntry> = match cp_slice_get(&cp, cf.this_class as usize) {
+            CPEntry::Class(entry) => entry.into(),
             _ => return Err(ResolveError::MismatchCPType)
         };
         
         let super_entry = if cf.super_index == 0 {
             None
         } else {
-            Some(match cp_slice_get(cp_slice, cf.super_index as usize) {
-                CPEntry::Class { entry } => entry,
+            Some(match cp_slice_get(&cp, cf.super_index as usize) {
+                CPEntry::Class(entry) => entry,
                 _ => return Err(ResolveError::MismatchCPType)
-            })
+            }.into())
         };
 
-        let interfaces = build_interfaces(&cf.interfaces, cp_slice, msa)?;
+        let interfaces = build_interfaces(&cf.interfaces, &cp, msa)?;
 
         // 5. Build fields.
-        let fields = Fields::build(&cf.fields, cp_slice, msa)?;
+        let fields = Fields::build(&cf.fields, &cp, msa)?;
 
         // 6. Build methods.
-        let methods = build_methods(&cf.methods, cp_slice, msa)?;
+        let methods = build_methods(&cf.methods, &cp, msa)?;
 
         let cld_ptr = match cld {
             Some(x) => unsafe { Some(NonNull::new_unchecked(x as *const _ as *mut _)) },
@@ -280,7 +278,7 @@ impl NormalKlass {
         let klass = Self {
             mirror: OOPHandle::new(KLASS_OOP_STORAGE_ID),
             acc_flags,
-            this_klass: unsafe { NonNull::new_unchecked(this_entry as *const _ as *mut _) },
+            this_klass: this_entry.clone(),
             super_klass: OnceCell::new(),
             cld: cld_ptr,
             constant_pool: cp,
@@ -289,14 +287,14 @@ impl NormalKlass {
             methods
         };
 
-        let mut boxed = MSBox::new(msa, Klass::Normal(klass));
-        this_entry.resolved.store(boxed.deref_mut(), Ordering::Relaxed);
+        let boxed = MSBox::new(msa, Klass::Normal(klass));
+        this_entry.resolved.set((&boxed).into());
 
         Ok((boxed, super_entry))
     }
 
     // callsite: cld
-    pub fn set_super(&self, s: Option<NonNull<NormalKlass>>) {
+    pub fn set_super(&self, s: Option<MSRef<NormalKlass>>) {
         self.super_klass.set(s).unwrap()
     }
 }
@@ -307,7 +305,7 @@ impl NormalKlass {
     }
 
     pub fn find_method(&self, mname: &SymbolHandle, mdesc: &SymbolHandle) -> Option<&Method> {
-        for n in unsafe { self.methods.as_ref() } {
+        for n in self.methods.as_ref() {
             if n.name.equals(mname) && n.desc.raw.equals(mdesc) {
                 return Some(n);
             }
@@ -317,9 +315,8 @@ impl NormalKlass {
     }
 
     pub fn get_super(&self) -> Option<&NormalKlass> {
-        let ptr = self.super_klass.get().unwrap();
-        match ptr {
-            Some(x) => unsafe { Some(x.as_ref()) },
+        match self.super_klass.get().unwrap() {
+            Some(x) => Some(x.deref()),
             None => None
         }
     }

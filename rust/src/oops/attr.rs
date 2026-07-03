@@ -8,6 +8,7 @@ use crate::{
     },
 };
 
+#[derive(Debug)]
 pub struct ExceptionTableEntry {
     start_pc: u16,
     end_pc: u16,
@@ -31,6 +32,7 @@ impl ExceptionTableEntry {
     }
 }
 
+#[derive(Debug)]
 pub struct CodeAttr {
     pub max_stack: u16,
     pub max_locals: u16,
@@ -69,6 +71,7 @@ impl CodeAttr {
     }
 }
 
+#[derive(Debug)]
 pub enum ConstantValueAttr {
     Integer(i32),
     Float(f32),

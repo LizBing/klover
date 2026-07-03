@@ -6,6 +6,7 @@ use crate::{
     }
 };
 
+#[derive(Debug)]
 pub struct CPRefEntry<T> {
     class_name: SymbolHandle,
     name: SymbolHandle,
@@ -107,6 +108,7 @@ impl<T> CPRefEntry<T> {
     }
 }
 
+#[derive(Debug)]
 pub enum MethodHandleEntry {
     RefGetField(MSRef<CPRefEntry<Field>>),
     RefGetStatic(MSRef<CPRefEntry<Field>>),
@@ -219,16 +221,19 @@ impl MethodHandleEntry {
     }
 }
 
+#[derive(Debug)]
 pub struct ClassCPEntry {
     pub name: SymbolHandle,
     pub resolved: OnceLock<MSRef<Klass>>,
 }
 
+#[derive(Debug)]
 pub struct StringCPEntry {
     pub raw: SymbolHandle,
     pub resolved: OOPHandle,
 }
 
+#[derive(Debug)]
 pub enum CPEntry {
     Class(ClassCPEntry),
 

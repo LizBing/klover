@@ -1,7 +1,7 @@
 use std::{
     ops::Deref,
     ptr::NonNull,
-    sync::{LazyLock, OnceLock, atomic::Ordering},
+    sync::{LazyLock, OnceLock},
 };
 
 use dashmap::{DashMap, Entry};
@@ -10,7 +10,7 @@ use crate::{
     class_loader::{
         class_path::ClassPath,
         load_error::{LoadError, LoadResult},
-        ms_api::{MSAllocator, MSBox},
+        ms_api::{MSAllocator, MSBox, MSRef},
     },
     class_parser::class_file::ClassFile,
     oops::{
@@ -61,7 +61,7 @@ impl BootstrapCLD {
 }
 
 impl BootstrapCLD {
-    pub fn find_class(name: &str) -> LoadResult<NonNull<Klass>> {
+    pub fn find_class(name: &str) -> LoadResult<MSRef<Klass>> {
         if let Some(x) = name.chars().next() {
             if x == '[' {
                 return Self::find_array_klass(name);
@@ -75,7 +75,7 @@ impl BootstrapCLD {
         Self::find_normal_klass(name)
     }
 
-    fn find_prim_klass(name: &str) -> Option<NonNull<Klass>> {
+    fn find_prim_klass(name: &str) -> Option<MSRef<Klass>> {
         let boxed = match name {
             "boolean" => BSCLD.boolean_klass.get_or_init(|| {
                 MSBox::new(
@@ -129,20 +129,16 @@ impl BootstrapCLD {
             _ => return None,
         };
 
-        unsafe { Some(NonNull::new_unchecked(boxed.deref() as *const Klass as _)) }
+        Some(boxed.into())
     }
 
-    fn find_array_klass(name: &str) -> LoadResult<NonNull<Klass>> {
+    fn find_array_klass(name: &str) -> LoadResult<MSRef<Klass>> {
         let sym = SymbolTable::intern(name);
         let entry = BSCLD.klasses.entry(sym);
 
         let vacant = match entry {
             Entry::Occupied(x) => {
-                return unsafe {
-                    Ok(NonNull::new_unchecked(
-                        x.get().deref() as *const Klass as *mut Klass
-                    ))
-                };
+                return Ok(x.get().into())
             }
             Entry::Vacant(v) => v,
         };
@@ -159,26 +155,19 @@ impl BootstrapCLD {
         };
 
         let boxed = MSBox::new(&BSCLD.msa, Klass::Array(klass));
-        let r = vacant.insert(boxed);
+        let res = (&boxed).into();
+        vacant.insert(boxed);
 
-        return unsafe {
-            Ok(NonNull::new_unchecked(
-                r.deref().deref() as *const Klass as *mut Klass
-            ))
-        };
+        Ok(res)
     }
 
-    fn find_normal_klass(name: &str) -> LoadResult<NonNull<Klass>> {
+    fn find_normal_klass(name: &str) -> LoadResult<MSRef<Klass>> {
         let sym = SymbolTable::intern(name);
         let entry = BSCLD.klasses.entry(sym);
 
         let vacant = match entry {
             Entry::Occupied(x) => {
-                return unsafe {
-                    Ok(NonNull::new_unchecked(
-                        x.get().deref() as *const Klass as *mut Klass
-                    ))
-                };
+                return Ok(x.get().into());
             }
             Entry::Vacant(v) => v,
         };
@@ -202,24 +191,17 @@ impl BootstrapCLD {
         match super_entry {
             Some(x) => {
                 let super_klass = Self::find_normal_klass(x.name.utf8())?;
-                x.resolved.store(super_klass.as_ptr(), Ordering::Relaxed);
-                let super_ptr = unsafe {
-                    NonNull::new_unchecked(super_klass.as_ref().as_normal().unwrap()
-                        as *const NormalKlass
-                        as *mut NormalKlass)
-                };
-                normal.set_super(Some(super_ptr));
+                x.resolved.set(super_klass.clone());
+                let super_normal = super_klass.as_normal().unwrap();
+                normal.set_super(Some(super_normal.into()));
             }
 
             None => normal.set_super(None),
         }
 
-        let r = vacant.insert(klass);
+        let res = (&klass).into();
+        vacant.insert(klass);
 
-        return unsafe {
-            Ok(NonNull::new_unchecked(
-                r.deref().deref() as *const Klass as *mut Klass
-            ))
-        };
+        Ok(res)
     }
 }
