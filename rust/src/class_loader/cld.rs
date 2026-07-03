@@ -4,10 +4,7 @@ use dashmap::{DashMap, mapref::entry::Entry};
 
 use crate::{
     class_loader::{
-        class_path::ClassPath,
-        cld_map,
-        load_error::{LoadError, LoadResult},
-        ms_box::{MSAllocator, MSBox},
+        bootstrap_cld::BootstrapCLD, class_path::ClassPath, cld_map, load_error::{LoadError, LoadResult}, ms_box::{MSAllocator, MSBox}
     },
     class_parser::{class_file::ClassFile, cp_info::ConstantPoolInfo},
     oops::{
@@ -54,6 +51,7 @@ impl ClassLoaderData {
         ptr
     }
 }
+
 impl ClassLoaderData {
     /// 从 `&MSBox<Klass>` 通过 Deref 获取 `NonNull<Klass>`，不转移所有权。
     fn klass_ptr(mb: &MSBox<Klass>) -> NonNull<Klass> {
@@ -110,6 +108,17 @@ impl ClassLoaderData {
         match self.klasses.get(&sym) {
             Some(x) => Some(Self::klass_ptr(x.deref())),
             None => None
+        }
+    }
+}
+
+impl ClassLoaderData {
+    pub fn load_class(cld: Option<&Self>, name: &str) -> LoadResult<NonNull<Klass>> {
+        match cld {
+            // invoke cld.mirror.loadClass()
+            Some(_) => Err(LoadError::NotFound(name.into())),
+            
+            None => BootstrapCLD::find_class(name)
         }
     }
 }

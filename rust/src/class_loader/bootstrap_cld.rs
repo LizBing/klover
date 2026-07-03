@@ -37,6 +37,12 @@ static BSCLD: BootstrapCLD = BootstrapCLD {
 };
 
 impl BootstrapCLD {
+    pub fn bs_msa() -> &'static MSAllocator {
+        &BSCLD.msa
+    }
+}
+
+impl BootstrapCLD {
     pub fn find_class(name: &str) -> LoadResult<NonNull<Klass>> {
         if let Some(x) = name.chars().next() {
             if x == '[' {

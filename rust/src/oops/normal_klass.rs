@@ -1,10 +1,10 @@
 use std::{
-    cell::OnceCell, mem::size_of, ptr::{self, NonNull}, slice, sync::Mutex
+    boxed, cell::OnceCell, mem::size_of, ptr::{self, NonNull}, slice, sync::Mutex
 };
 
 use crate::{
-    class_loader::{cld::ClassLoaderData, ms_box::MSAllocator},
-    class_parser::{class_file::ClassFile, cp_info::ConstantPoolInfo, field_info::FieldInfo},
+    class_loader::{bootstrap_cld::BootstrapCLD, cld::ClassLoaderData, ms_box::{MSAllocator, MSBox}},
+    class_parser::{class_file::ClassFile, cp_info::ConstantPoolInfo, field_info::FieldInfo, method_info::MethodInfo},
     oops::{
         acc_flags::AccFlags, cp_entry::{CPEntry, ClassCPEntry}, field::Field, method::Method, obj_layout::ObjLayout, oop_handle::{KLASS_OOP_STORAGE_ID, NarrowOOP, OOPHandle}, resolve_error::{ResolveError, ResolveResult}, symbol_table::SymbolHandle
     },
@@ -142,16 +142,12 @@ pub struct NormalKlass {
     pub mirror: OOPHandle,
 
     pub acc_flags: AccFlags,
-    pub name: SymbolHandle,
+    // pub name: SymbolHandle,
 
-    // This mutex protects the initialization of these two OnceCell.
-    // The linking and initialization of this class happens in the first "new" or the access of a static field.
-    super_entry: Mutex<Option<NonNull<ClassCPEntry>>>,
-    pub super_klass: OnceCell<Option<NonNull<NormalKlass>>>,
-    pub obj_layout: OnceCell<ObjLayout>,
-
-    // Delegation: cld.load_class()
-    pub cld: OnceCell<Option<NonNull<ClassLoaderData>>>,
+    pub this_klass: NonNull<ClassCPEntry>,
+    super_klass: OnceCell<Option<NonNull<NormalKlass>>>, // resolve in cld callsite
+    
+    cld: Option<NonNull<ClassLoaderData>>,
 
     constant_pool: NonNull<[Option<CPEntry>]>,
 
@@ -160,111 +156,130 @@ pub struct NormalKlass {
     methods: NonNull<[Method]>,
 }
 
-impl NormalKlass {
-    pub fn from(
-        cf: ClassFile,
-        msa: &MSAllocator
-    ) -> ResolveResult<Self> {
-        let acc_flags = AccFlags::from_bits_truncate(cf.acc_flags);
-
-        // 1. Allocate and resolve the constant pool in metaspace.
-        let cp_len = cf.constant_pool.len();
-        let cp_mem = msa.calloc::<Option<CPEntry>>(size_of::<Option<CPEntry>>(), cp_len);
-        let cp_slice = unsafe { slice::from_raw_parts_mut(cp_mem, cp_len) };
-        for i in 0..cp_len {
-            unsafe {
-                ptr::write(&mut cp_slice[i], None);
-            }
+fn build_cp<'a>(parsed_cp: &[ConstantPoolInfo], msa: &MSAllocator) -> ResolveResult<&'a [Option<CPEntry>]> {
+    let cp_len = parsed_cp.len();
+    let cp_mem = msa.calloc::<Option<CPEntry>>(size_of::<Option<CPEntry>>(), cp_len);
+    let cp_slice = unsafe { slice::from_raw_parts_mut(cp_mem, cp_len) };
+    for i in 0..cp_len {
+        unsafe {
+            ptr::write(&mut cp_slice[i], None);
         }
+    }
 
-        // Slot 0 is Unusable (JVM CP is 1-indexed).
-        for i in 1..cp_len {
-            if matches!(&cf.constant_pool[i], ConstantPoolInfo::Unusable) {
-                continue;
-            }
-            if let Some(entry) = CPEntry::from(i, cp_slice, &cf.constant_pool)? {
-                cp_slice[i] = Some(entry);
-            }
+    // Slot 0 is Unusable (JVM CP is 1-indexed).
+    for i in 1..cp_len {
+        if matches!(parsed_cp[i], ConstantPoolInfo::Unusable) {
+            continue;
         }
-        let constant_pool = unsafe { NonNull::new_unchecked(cp_slice as *mut [Option<CPEntry>]) };
+        if let Some(entry) = CPEntry::from(i, cp_slice, parsed_cp)? {
+            cp_slice[i] = Some(entry);
+        }
+    }
+    
+    Ok(cp_slice)
+}
 
-        // 2. Extract this class's name from its own Class entry.
-        let name = match &cp_slice[cf.this_class as usize] {
-            Some(CPEntry::Class { entry }) => entry.name.clone(),
+fn cp_slice_get(cp_slice: &[Option<CPEntry>], idx: usize) -> &CPEntry {
+    unsafe { cp_slice[idx].as_ref().unwrap_unchecked() }
+}
+
+fn build_interfaces(parsed_ifaces: &[u16], cp_slice: &[Option<CPEntry>], msa: &MSAllocator) -> ResolveResult<NonNull<[NonNull<ClassCPEntry>]>> {
+    let iface_len = parsed_ifaces.len();
+    let iface_mem =
+        msa.calloc::<NonNull<ClassCPEntry>>(size_of::<NonNull<ClassCPEntry>>(), iface_len);
+    let iface_slice = unsafe { slice::from_raw_parts_mut(iface_mem, iface_len) };
+
+    for (i, idx) in parsed_ifaces.iter().enumerate() {
+        iface_slice[i] = match cp_slice_get(cp_slice, *idx as usize) {
+            CPEntry::Class { entry } => unsafe {
+                NonNull::new_unchecked(entry as *const ClassCPEntry as *mut ClassCPEntry)
+            },
             _ => return Err(ResolveError::MismatchCPType),
         };
+    }
 
-        // 3. Super class entry.
-        let super_entry;
-        if cf.super_index == 0 {
-            super_entry = None
+    unsafe { Ok(NonNull::new_unchecked(iface_slice as *mut [NonNull<ClassCPEntry>])) }
+}
+
+fn build_methods(parsed_methods: &[MethodInfo], cp_slice: &[Option<CPEntry>], msa: &MSAllocator) -> ResolveResult<NonNull<[Method]>> {
+    let methods_len = parsed_methods.len();
+    let methods_mem = msa.calloc::<Method>(size_of::<Method>(), methods_len);
+    let methods_slice = unsafe { slice::from_raw_parts_mut(methods_mem, methods_len) };
+
+    for (i, info) in parsed_methods.iter().enumerate() {
+        unsafe {
+            ptr::write(&mut methods_slice[i], Method::from(info, cp_slice, msa)?);
+        }
+    }
+    
+    unsafe { Ok(NonNull::new_unchecked(methods_slice as *mut [Method])) }
+}
+
+impl NormalKlass {
+    pub fn build<'a>(
+        cf: ClassFile,
+        cld: Option<&ClassLoaderData>
+    ) -> ResolveResult<(MSBox<Self>, Option<&'a ClassCPEntry>)> {
+        let msa = match cld {
+            Some(x) => &x.ms_allocator,
+            None => BootstrapCLD::bs_msa()
+        };
+        
+        let acc_flags = AccFlags::from_bits_truncate(cf.acc_flags);
+
+        let cp_slice = build_cp(&cf.constant_pool, msa)?;
+        let cp = unsafe { NonNull::new_unchecked(cp_slice as *const _ as *mut _) };
+
+        let this_entry = match cp_slice_get(cp_slice, cf.this_class as usize) {
+            CPEntry::Class { entry } => entry,
+            _ => return Err(ResolveError::MismatchCPType)
+        };
+        
+        let super_entry = if cf.super_index == 0 {
+            None
         } else {
-            match unsafe {
-                cp_slice[cf.super_index as usize]
-                    .as_ref()
-                    .unwrap_unchecked()
-            } {
-                CPEntry::Class { entry } => {
-                    super_entry =
-                        unsafe { Some(NonNull::new_unchecked(entry as *const _ as *mut _)) }
-                }
+            Some(match cp_slice_get(cp_slice, cf.super_index as usize) {
+                CPEntry::Class { entry } => entry,
+                _ => return Err(ResolveError::MismatchCPType)
+            })
+        };
 
-                _ => return Err(ResolveError::MismatchCPType),
-            }
-        }
-
-        // 4. Resolve interface Class entries into pointers.
-        let iface_len = cf.interfaces.len();
-        let iface_mem =
-            msa.calloc::<NonNull<ClassCPEntry>>(size_of::<NonNull<ClassCPEntry>>(), iface_len);
-        let iface_slice = unsafe { slice::from_raw_parts_mut(iface_mem, iface_len) };
-
-        for (i, idx) in cf.interfaces.iter().enumerate() {
-            iface_slice[i] = match &cp_slice[*idx as usize] {
-                Some(CPEntry::Class { entry }) => unsafe {
-                    NonNull::new_unchecked(entry as *const ClassCPEntry as *mut ClassCPEntry)
-                },
-                _ => return Err(ResolveError::MismatchCPType),
-            };
-        }
-        let interfaces =
-            unsafe { NonNull::new_unchecked(iface_slice as *mut [NonNull<ClassCPEntry>]) };
+        let interfaces = build_interfaces(&cf.interfaces, cp_slice, msa)?;
 
         // 5. Build fields.
         let fields = Fields::build(&cf.fields, cp_slice, msa)?;
 
         // 6. Build methods.
-        let methods_len = cf.methods.len();
-        let methods_mem = msa.calloc::<Method>(size_of::<Method>(), methods_len);
-        let methods_slice = unsafe { slice::from_raw_parts_mut(methods_mem, methods_len) };
+        let methods = build_methods(&cf.methods, cp_slice, msa)?;
 
-        for (i, info) in cf.methods.iter().enumerate() {
-            unsafe {
-                ptr::write(&mut methods_slice[i], Method::from(info, cp_slice, msa)?);
-            }
-        }
-        let methods = unsafe { NonNull::new_unchecked(methods_slice as *mut [Method]) };
+        let cld_ptr = match cld {
+            Some(x) => unsafe { Some(NonNull::new_unchecked(x as *const _ as *mut _)) },
+            None => None
+        };
+        
+        let klass = Self {
+            mirror: OOPHandle::new(KLASS_OOP_STORAGE_ID),
+            acc_flags,
+            this_klass: unsafe { NonNull::new_unchecked(this_entry as *const _ as *mut _) },
+            super_klass: OnceCell::new(),
+            cld: cld_ptr,
+            constant_pool: cp,
+            interfaces,
+            fields,
+            methods
+        };
 
-        Ok(
-            Self {
-                mirror: OOPHandle::new(KLASS_OOP_STORAGE_ID),
-                acc_flags,
-                name,
-                super_entry: Mutex::new(super_entry),
-                super_klass: OnceCell::new(),
-                obj_layout: OnceCell::new(),
-                cld: OnceCell::new(),
-                constant_pool,
-                interfaces,
-                fields,
-                methods,
-            }
-        )
+        let boxed = MSBox::new(msa, klass);
+
+        Ok((boxed, super_entry))
     }
 
-    pub fn init(&self) {}
+    // callsite: cld
+    pub fn set_super(&self, s: Option<NonNull<NormalKlass>>) {
+        self.super_klass.set(s).unwrap()
+    }
 }
-
+    
 impl NormalKlass {
     pub fn cp_get(&self, idx: usize) -> &CPEntry {
         unsafe { self.constant_pool.as_ref()[idx].as_ref().unwrap_unchecked() }
@@ -278,5 +293,13 @@ impl NormalKlass {
         }
 
         None
+    }
+
+    pub fn get_super(&self) -> Option<&NormalKlass> {
+        let ptr = self.super_klass.get().unwrap();
+        match ptr {
+            Some(x) => unsafe { Some(x.as_ref()) },
+            None => None
+        }
     }
 }
