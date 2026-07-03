@@ -31,7 +31,8 @@ pub enum ReturnValue {
     Long(i64),
     Float(f32),
     Double(f64),
-    Ref(ObjPtr),
+    /// 引用返回值，以 narrow ptr（u32）形式存放，与栈槽语义一致。
+    Ref(u32),
 }
 
 // ── 栈帧 ──────────────────────────────────────────────────────────────
@@ -135,27 +136,34 @@ impl Interpreter {
         }
     }
 
-    /// 调用一个 `ACC_STATIC` 方法。
+    /// 调用一个已解析的方法（static 或 instance 皆可）。
     ///
     /// `args` 按槽给出（long / double 占两槽，高 32 位在低地址），顺序与方法描述符一致。
-    pub fn invoke_static(
+    /// 实例方法需在 `args[0]` 传入 `this`（narrow ptr）。
+    ///
+    /// 本方法是帧建立 / 寄存器切换 / run_loop 的唯一实现点。
+    /// `invoke_static` 与指令 handler (`invokespecial` / `invokevirtual`) 都调它。
+    fn invoke_resolved(
         &mut self,
         klass: &NormalKlass,
         method: &Method,
         args: &[StackSlot],
     ) -> InvokeResult {
-        if !method.acc_flags.contains(AccFlags::ACC_STATIC) {
-            return Err(InvokeError::NotStatic);
-        }
         let code = method.code.as_ref().ok_or(InvokeError::NoCode)?;
         let max_locals = code.max_locals as usize;
         let max_stack = code.max_stack as usize;
 
         // 局部变量区：实参 + 编译器补充的额外局部变量槽。
         let arg_slot_count = Self::arg_slot_count(&method);
-        if args.len() != arg_slot_count {
+        // 实例方法隐含一个 this 参数。
+        let expected = if method.acc_flags.contains(AccFlags::ACC_STATIC) {
+            arg_slot_count
+        } else {
+            arg_slot_count + 1
+        };
+        if args.len() != expected {
             return Err(InvokeError::ArgCountMismatch {
-                expected: arg_slot_count,
+                expected,
                 actual: args.len(),
             });
         }
@@ -175,16 +183,16 @@ impl Interpreter {
             return Err(InvokeError::StackOverflow);
         }
 
-        // 1. 写入实参到 locals[0..arg_slot_count)，剩余槽清零。
+        // 1. 写入实参到 locals[0..args.len())，剩余槽清零。
         let locals = &mut self.stack[base..base + max_locals];
         for (i, a) in args.iter().enumerate() {
             locals[i] = *a;
         }
-        for slot in locals[arg_slot_count..].iter_mut() {
+        for slot in locals[args.len()..].iter_mut() {
             *slot = 0;
         }
 
-        // 2. 设置 sp：空栈时指向 expr 区末尾的"下一个槽"（push 时 sp-=1 再写）。
+        // 2. 设置 sp。
         let stack_ptr = self.stack.as_mut_ptr();
         let expr_base = base + max_locals;
         let sp = unsafe { stack_ptr.add(expr_base + max_stack) };
@@ -215,10 +223,49 @@ impl Interpreter {
         self.frames.pop();
 
         match flow {
-            Flow::Continue => Ok(None), // 不应发生：方法以 return 结尾
+            Flow::Continue => Ok(None),
             Flow::Return(v) => Ok(v),
-            Flow::Throw(_) => Ok(None), // TODO 阶段 5：异常
+            Flow::Throw(_) => Ok(None),
         }
+    }
+
+    /// 调用一个 `ACC_STATIC` 方法。
+    ///
+    /// `args` 按槽给出（long / double 占两槽，高 32 位在低地址），顺序与方法描述符一致。
+    pub fn invoke_static(
+        &mut self,
+        klass: &NormalKlass,
+        method: &Method,
+        args: &[StackSlot],
+    ) -> InvokeResult {
+        if !method.acc_flags.contains(AccFlags::ACC_STATIC) {
+            return Err(InvokeError::NotStatic);
+        }
+        self.invoke_resolved(klass, method, args)
+    }
+
+    /// 调用一个实例方法（已解析出目标方法）。
+    ///
+    /// `args[0]` 必须是 `this`（narrow ptr），其后为方法参数。
+    /// 供 `invokespecial` / `invokevirtual` handler 使用。
+    pub(super) fn invoke_instance(
+        &mut self,
+        klass: &NormalKlass,
+        method: &Method,
+        args: &[StackSlot],
+    ) -> InvokeResult {
+        self.invoke_resolved(klass, method, args)
+    }
+
+    /// 计算实例方法的实参 slot 数（含 this）。
+    /// static 方法的实参 slot 数（不含 this）由 `arg_slot_count` 提供。
+    pub(super) fn instance_arg_slot_count(method: &Method) -> usize {
+        Self::arg_slot_count(method) + 1
+    }
+
+    /// static 方法的实参 slot 数（不含 this）。
+    pub(super) fn static_arg_slot_count(method: &Method) -> usize {
+        Self::arg_slot_count(method)
     }
 
     /// 计算静态方法的实参 slot 数（long / double 算 2）。

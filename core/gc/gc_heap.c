@@ -16,8 +16,11 @@ bool gcheap_init(size_t xmx) {
         return false;
     }
     vs_expand(VS, xmx / sizeof(HeapWord), false);
-    
-    BUMPING_TOP = VS->start;
+
+    /* Skip the first word so that the first allocation never lands at offset 0
+     * – offset 0 is the NULL sentinel for compressed pointers.
+     * See comp_space_defs.h: "Zero-sentinel null preservation". */
+    BUMPING_TOP = VS->start + 1;
 
     return true;
 }

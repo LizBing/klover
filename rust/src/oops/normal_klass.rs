@@ -502,17 +502,17 @@ impl NormalKlass {
         None
     }
 
-    /// 沿继承链查找字段（name + raw_desc 同时匹配）。
+    /// 沿继承链查找字段（name + descriptor 同时匹配）。
     /// 返回的字段同时覆盖 instance 与 static，调用方按 acc_flags 区分。
     pub fn find_field(&self, fname: &SymbolHandle, fdesc: &SymbolHandle) -> Option<&Field> {
         let f = self.fields();
         for field in f.instance_fields.as_ref() {
-            if field.name.equals(fname) && field.raw_desc.equals(fdesc) {
+            if field.name.equals(fname) && field.desc.raw.equals(fdesc) {
                 return Some(field);
             }
         }
         for field in f.static_fields.as_ref() {
-            if field.name.equals(fname) && field.raw_desc.equals(fdesc) {
+            if field.name.equals(fname) && field.desc.raw.equals(fdesc) {
                 return Some(field);
             }
         }

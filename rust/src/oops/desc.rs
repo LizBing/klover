@@ -1,12 +1,16 @@
-use std::{mem::size_of, sync::{OnceLock, atomic::AtomicPtr}};
+use std::{
+    mem::size_of,
+    sync::{OnceLock, atomic::AtomicPtr},
+};
 
 use crate::{
-    class_loader::ms_api::MSRef, oops::{
+    class_loader::ms_api::MSRef,
+    oops::{
         klass::Klass,
         oop_handle::NObjPtr,
         resolve_error::{ResolveError, ResolveResult},
         symbol_table::{SymbolHandle, SymbolTable},
-    }
+    },
 };
 
 #[derive(Debug)]
@@ -28,6 +32,9 @@ pub enum FieldElemType {
 
 #[derive(Debug)]
 pub struct FieldDesc {
+    /// 原始描述符字符串（如 `I` / `Ljava/lang/String;` / `[I`），
+    /// intern 后可直接指针比较，供 `find_field` 使用。
+    pub raw: SymbolHandle,
     pub dimensions: usize,
     pub elem: FieldElemType,
 }
@@ -93,7 +100,11 @@ impl FieldDesc {
             _ => return Err(ResolveError::InvalidDesc { raw: utf8.into() }),
         };
 
-        Ok(FieldDesc { dimensions, elem })
+        Ok(FieldDesc {
+            raw: SymbolTable::intern(utf8),
+            dimensions,
+            elem,
+        })
     }
 }
 

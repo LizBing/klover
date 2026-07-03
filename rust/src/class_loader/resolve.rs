@@ -9,7 +9,7 @@
 use crate::{
     class_loader::{bootstrap_cld::BootstrapCLD, ms_api::MSRef},
     oops::{
-        cp_entry::CPRefEntry,
+        cp_entry::{CPRefEntry, ClassCPEntry},
         field::Field,
         klass::Klass,
         method::Method,
@@ -25,13 +25,29 @@ use crate::{
 ///
 /// 返回的 `MSRef<Klass>` 内部是裸指针，deref 即可拿到 `&Klass`。
 /// 生命周期与 metaspace 内的 Klass 绑定（永久存活）。
-fn load_class_by_caller(caller: &NormalKlass, name: &str) -> ResolveResult<MSRef<Klass>> {
+pub fn load_class_by_caller(caller: &NormalKlass, name: &str) -> ResolveResult<MSRef<Klass>> {
     let klass_ref = match caller.cld {
         Some(cld) => unsafe { (*cld.as_ptr()).load_class(name) },
         None => BootstrapCLD::find_class(name),
     }
     .map_err(|_| ResolveError::ClassNotFound)?;
     Ok(klass_ref)
+}
+
+/// 解析 CP 的 Class 引用（`new` / `checkcast` / `instanceof` / `anewarray` 等使用）。
+///
+/// 用 caller 的 ClassLoader 加载目标类，并缓存到 `ClassCPEntry.resolved`。
+/// 返回 `MSRef<Klass>`。
+pub fn resolve_class_ref(
+    caller: &NormalKlass,
+    entry: &ClassCPEntry,
+) -> ResolveResult<MSRef<Klass>> {
+    if let Some(r) = entry.resolved.get() {
+        return Ok(r.clone());
+    }
+    let klass_ref = load_class_by_caller(caller, entry.name.utf8())?;
+    let _ = entry.resolved.set(klass_ref.clone());
+    Ok(entry.resolved.get().unwrap().clone())
 }
 
 /// 解析方法引用（含 InterfaceMethodRef）。

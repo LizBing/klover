@@ -29,6 +29,10 @@ fn init_runtime(bs_class_path: &str) {
             init_oop_storages();
             assert!(ms_init(), "ms_init failed");
         }
+        // 初始化 Java 堆（64MB 足够测试用）。
+        unsafe {
+            klover::gc_binding::gc_binding::init_heap(64 * 1024 * 1024);
+        }
         Arguments::init(Arguments {
             bs_class_path: bs_class_path.to_string(),
         });
@@ -312,6 +316,155 @@ fn wide_inc5() {
     match ret {
         Some(ReturnValue::Int(v)) => assert_eq!(v, 2147483647),
         other => panic!("expected Int(2147483647), got {:?}", other),
+    }
+}
+
+// ── 阶段 4：对象分配与构造 ─────────────────────────────────────────────
+
+/// `ObjTest.allocOnly()`：new + dup + invokespecial <init> + return 0。
+/// 验证对象分配 + 构造器空跑不崩。
+#[test]
+fn obj_alloc_only() {
+    let classes = concat!(env!("CARGO_MANIFEST_DIR"), "/../test_data/classes");
+    init_runtime(classes);
+
+    let klass = BootstrapCLD::find_class("ObjTest").expect("load ObjTest");
+    let normal = klass.as_normal().expect("ObjTest is not Normal");
+    let method = find_static_method(normal, "allocOnly", "()I");
+
+    let mut interp = Interpreter::new(4096);
+    let ret = interp
+        .invoke_static(normal, method, &[])
+        .expect("invoke_static");
+    match ret {
+        Some(ReturnValue::Int(v)) => assert_eq!(v, 0),
+        other => panic!("expected Int(0), got {:?}", other),
+    }
+}
+
+/// `ObjTest.setAndGetX()`：new + invokespecial + getfield。
+/// 构造器内部 putfield x=7, y=9，然后 getfield x 返回 7。
+#[test]
+fn obj_set_and_get_x() {
+    let classes = concat!(env!("CARGO_MANIFEST_DIR"), "/../test_data/classes");
+    init_runtime(classes);
+
+    let klass = BootstrapCLD::find_class("ObjTest").expect("load ObjTest");
+    let normal = klass.as_normal().expect("ObjTest is not Normal");
+    let method = find_static_method(normal, "setAndGetX", "()I");
+
+    let mut interp = Interpreter::new(4096);
+    let ret = interp
+        .invoke_static(normal, method, &[])
+        .expect("invoke_static");
+    match ret {
+        Some(ReturnValue::Int(v)) => assert_eq!(v, 7),
+        other => panic!("expected Int(7), got {:?}", other),
+    }
+}
+
+/// `ObjTest.createAndSum(3, 4)`：
+/// 完整链路：new + dup + invokespecial <init> + invokevirtual sum。
+/// <init> 用 putfield 写 x=3, y=4；sum 用 getfield 读 x+y 返回 7。
+#[test]
+fn obj_create_and_sum() {
+    let classes = concat!(env!("CARGO_MANIFEST_DIR"), "/../test_data/classes");
+    init_runtime(classes);
+
+    let klass = BootstrapCLD::find_class("ObjTest").expect("load ObjTest");
+    let normal = klass.as_normal().expect("ObjTest is not Normal");
+    let method = find_static_method(normal, "createAndSum", "(II)I");
+
+    let mut interp = Interpreter::new(4096);
+    let ret = interp
+        .invoke_static(normal, method, &[3, 4])
+        .expect("invoke_static");
+    match ret {
+        Some(ReturnValue::Int(v)) => assert_eq!(v, 7),
+        other => panic!("expected Int(7), got {:?}", other),
+    }
+}
+
+/// `ObjTest.getStaticTest()`：从字节码触发 invokestatic 路径。
+#[test]
+fn obj_invokestatic_from_bytecode() {
+    let classes = concat!(env!("CARGO_MANIFEST_DIR"), "/../test_data/classes");
+    init_runtime(classes);
+
+    let klass = BootstrapCLD::find_class("ObjTest").expect("load ObjTest");
+    let normal = klass.as_normal().expect("ObjTest is not Normal");
+    let method = find_static_method(normal, "getStaticTest", "()I");
+
+    let mut interp = Interpreter::new(4096);
+    let ret = interp
+        .invoke_static(normal, method, &[])
+        .expect("invoke_static");
+    match ret {
+        Some(ReturnValue::Int(v)) => assert_eq!(v, 42),
+        other => panic!("expected Int(42), got {:?}", other),
+    }
+}
+
+// ── 数组指令测试 ───────────────────────────────────────────────────────
+
+/// `ObjTest.newArrayTest()`：newarray + iastore + iaload + arraylength。
+#[test]
+fn array_new_int() {
+    let classes = concat!(env!("CARGO_MANIFEST_DIR"), "/../test_data/classes");
+    init_runtime(classes);
+
+    let klass = BootstrapCLD::find_class("ObjTest").expect("load ObjTest");
+    let normal = klass.as_normal().expect("ObjTest is not Normal");
+    let method = find_static_method(normal, "newArrayTest", "()I");
+
+    let mut interp = Interpreter::new(4096);
+    let ret = interp
+        .invoke_static(normal, method, &[])
+        .expect("invoke_static");
+    match ret {
+        Some(ReturnValue::Int(v)) => assert_eq!(v, 35), // 10 + 20 + 5
+        other => panic!("expected Int(35), got {:?}", other),
+    }
+}
+
+/// `ObjTest.refArrayTest()`：anewarray + aastore + aaload + invokevirtual。
+#[test]
+fn array_ref() {
+    let classes = concat!(env!("CARGO_MANIFEST_DIR"), "/../test_data/classes");
+    init_runtime(classes);
+
+    let klass = BootstrapCLD::find_class("ObjTest").expect("load ObjTest");
+    let normal = klass.as_normal().expect("ObjTest is not Normal");
+    let method = find_static_method(normal, "refArrayTest", "()I");
+
+    let mut interp = Interpreter::new(4096);
+    let ret = interp
+        .invoke_static(normal, method, &[])
+        .expect("invoke_static");
+    match ret {
+        Some(ReturnValue::Int(v)) => assert_eq!(v, 18), // (3+4) + (5+6)
+        other => panic!("expected Int(18), got {:?}", other),
+    }
+}
+
+/// `ObjTest.mixedArrayTest()`：byte/char/long 数组的 bastore/castore/lastore
+/// 和对应 aload 的符号/零扩展。
+#[test]
+fn array_mixed() {
+    let classes = concat!(env!("CARGO_MANIFEST_DIR"), "/../test_data/classes");
+    init_runtime(classes);
+
+    let klass = BootstrapCLD::find_class("ObjTest").expect("load ObjTest");
+    let normal = klass.as_normal().expect("ObjTest is not Normal");
+    let method = find_static_method(normal, "mixedArrayTest", "()I");
+
+    let mut interp = Interpreter::new(4096);
+    let ret = interp
+        .invoke_static(normal, method, &[])
+        .expect("invoke_static");
+    match ret {
+        Some(ReturnValue::Int(v)) => assert_eq!(v, 1410065638),
+        other => panic!("expected Int(1410065638), got {:?}", other),
     }
 }
 

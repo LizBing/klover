@@ -7,8 +7,19 @@
 
 #![allow(clippy::erasing_op)]
 
-use crate::interpreter::interpreter::{DStackSlot, Flow, Interpreter, ReturnValue, StackSlot};
-use crate::oops::cp_entry::CPEntry;
+use crate::class_loader::resolve::{resolve_class_ref, resolve_method_ref};
+use crate::gc_binding::{
+    gc_binding::alloc_object,
+    oop_codec::{decode_oop, encode_oop, klass_from_markword},
+};
+use crate::interpreter::interpreter::{Flow, Interpreter, ReturnValue, StackSlot};
+use crate::oops::{
+    cp_entry::{CPEntry, CPRefEntry, ClassCPEntry},
+    field::Field,
+    klass::Klass,
+    method::Method,
+    normal_klass::NormalKlass,
+};
 
 pub type InsFnType = fn(&mut Interpreter) -> Flow;
 
@@ -291,6 +302,52 @@ fn init_instruction_table() -> [InsFnType; INSTRUCTION_COUNT] {
     t[0xaa] = tableswitch;
     t[0xab] = lookupswitch;
     t[0xc8] = goto_w;
+
+    // ── 栈操作 ─────────────────────────────────────────────────────
+    t[0x57] = pop;
+    t[0x58] = pop2;
+    t[0x59] = dup;
+    t[0x5a] = dup_x1;
+    t[0x5b] = dup_x2;
+    t[0x5c] = dup2;
+    t[0x5d] = dup2_x1;
+    t[0x5e] = dup2_x2;
+    t[0x5f] = swap;
+
+    // ── 对象分配 ───────────────────────────────────────────────────
+    t[0xbb] = new;
+    t[0xbc] = newarray;
+    t[0xbd] = anewarray;
+    t[0xbe] = arraylength;
+
+    // ── 方法调用 ───────────────────────────────────────────────────
+    t[0xb6] = invokevirtual;
+    t[0xb7] = invokespecial;
+    t[0xb8] = invokestatic_handler;
+
+    // ── 字段访问 ───────────────────────────────────────────────────
+    t[0xb2] = getstatic;
+    t[0xb3] = putstatic;
+    t[0xb4] = getfield;
+    t[0xb5] = putfield;
+
+    // ── 数组读写 ───────────────────────────────────────────────────
+    t[0x2e] = iaload;
+    t[0x2f] = laload;
+    t[0x30] = faload;
+    t[0x31] = daload;
+    t[0x32] = aaload;
+    t[0x33] = baload;
+    t[0x34] = caload;
+    t[0x35] = saload;
+    t[0x4f] = iastore;
+    t[0x50] = lastore;
+    t[0x51] = fastore;
+    t[0x52] = dastore;
+    t[0x53] = aastore;
+    t[0x54] = bastore;
+    t[0x55] = castore;
+    t[0x56] = sastore;
 
     // ── 返回 ────────────────────────────────────────────────────────
     t[0xac] = ireturn;
@@ -1194,4 +1251,769 @@ fn freturn(interp: &mut Interpreter) -> Flow {
 fn dreturn(interp: &mut Interpreter) -> Flow {
     let v = pop_f64(interp);
     Flow::Return(Some(ReturnValue::Double(v)))
+}
+
+// ── 阶段 4：对象分配 + 栈操作 handler ───────────────────────────────────
+
+/// `new`：分配一个新对象，压入其引用（narrow ptr）。
+///
+/// 仅支持普通类（NormalKlass）；数组、接口在阶段 4 后续步骤实现。
+fn new(interp: &mut Interpreter) -> Flow {
+    let idx = interp.read_u16() as usize;
+    let caller = unsafe { &*interp.regs().klass };
+    let class_entry: &ClassCPEntry = match caller.cp_get(idx) {
+        CPEntry::Class(e) => e,
+        _ => panic!("new: CP[{}] is not a Class", idx),
+    };
+    let klass_ref = resolve_class_ref(caller, class_entry).expect("new: failed to resolve class");
+    let normal = klass_ref.as_normal().expect("new: not a NormalKlass");
+
+    // 分配对象。
+    let byte_size = normal.obj_layout.byte_size;
+    let klass_ptr: *const Klass = &*klass_ref as *const Klass;
+    let obj_ptr = alloc_object(klass_ptr, byte_size);
+    let narrow = encode_oop(obj_ptr);
+    interp.push_slot(narrow as i32);
+    Flow::Continue
+}
+
+// ── 栈操作 handler ────────────────────────────────────────────────────
+
+/// `pop`：弹出 1 个栈槽（cat-1 类型）。
+fn pop(interp: &mut Interpreter) -> Flow {
+    interp.pop_slot();
+    Flow::Continue
+}
+
+/// `pop2`：弹出 2 个栈槽（cat-2 类型，或两个 cat-1）。
+fn pop2(interp: &mut Interpreter) -> Flow {
+    interp.pop_slot();
+    interp.pop_slot();
+    Flow::Continue
+}
+
+/// `dup`：复制栈顶 1 个槽。
+fn dup(interp: &mut Interpreter) -> Flow {
+    let v = interp.pop_slot();
+    interp.push_slot(v);
+    interp.push_slot(v);
+    Flow::Continue
+}
+
+/// `dup_x1`：复制栈顶 1 个槽，插入到栈顶第二个之下。
+/// 栈：..., v2, v1 → ..., v1, v2, v1
+fn dup_x1(interp: &mut Interpreter) -> Flow {
+    let v1 = interp.pop_slot();
+    let v2 = interp.pop_slot();
+    interp.push_slot(v1);
+    interp.push_slot(v2);
+    interp.push_slot(v1);
+    Flow::Continue
+}
+
+/// `dup_x2`：复制栈顶 1 个槽，插入到栈顶第三个之下（cat-1 形式）。
+/// 栈：..., v3, v2, v1 → ..., v1, v3, v2, v1
+fn dup_x2(interp: &mut Interpreter) -> Flow {
+    let v1 = interp.pop_slot();
+    let v2 = interp.pop_slot();
+    let v3 = interp.pop_slot();
+    interp.push_slot(v1);
+    interp.push_slot(v3);
+    interp.push_slot(v2);
+    interp.push_slot(v1);
+    Flow::Continue
+}
+
+/// `dup2`：复制栈顶 2 个槽（cat-2 形式，或两个 cat-1）。
+/// 栈：..., v2, v1 → ..., v2, v1, v2, v1
+fn dup2(interp: &mut Interpreter) -> Flow {
+    let v1 = interp.pop_slot();
+    let v2 = interp.pop_slot();
+    interp.push_slot(v2);
+    interp.push_slot(v1);
+    interp.push_slot(v2);
+    interp.push_slot(v1);
+    Flow::Continue
+}
+
+/// `dup2_x1`：复制栈顶 2 个槽，插入到栈顶第二个之下。
+/// 栈：..., v2, v1 → ..., v1, v2, v1
+fn dup2_x1(interp: &mut Interpreter) -> Flow {
+    let v1 = interp.pop_slot();
+    let v2 = interp.pop_slot();
+    interp.push_slot(v1);
+    interp.push_slot(v2);
+    interp.push_slot(v1);
+    Flow::Continue
+}
+
+/// `dup2_x2`：复制栈顶 2 个槽，插入到栈顶第四个之下。
+/// 栈：..., v4, v3, v2, v1 → ..., v2, v1, v4, v3, v2, v1
+fn dup2_x2(interp: &mut Interpreter) -> Flow {
+    let v1 = interp.pop_slot();
+    let v2 = interp.pop_slot();
+    let v3 = interp.pop_slot();
+    let v4 = interp.pop_slot();
+    interp.push_slot(v2);
+    interp.push_slot(v1);
+    interp.push_slot(v4);
+    interp.push_slot(v3);
+    interp.push_slot(v2);
+    interp.push_slot(v1);
+    Flow::Continue
+}
+
+/// `swap`：交换栈顶两个槽。
+/// 栈：..., v2, v1 → ..., v1, v2
+fn swap(interp: &mut Interpreter) -> Flow {
+    let v1 = interp.pop_slot();
+    let v2 = interp.pop_slot();
+    interp.push_slot(v1);
+    interp.push_slot(v2);
+    Flow::Continue
+}
+
+// ── 方法调用 handler ──────────────────────────────────────────────────
+//
+// invokestatic / invokespecial / invokevirtual / invokeinterface 共用以下模式：
+//   1. 读 CP u16 索引
+//   2. resolve 出目标方法（以及目标类）
+//   3. 从栈顶收集实参（含 this）
+//   4. 调 invoke_instance / invoke_static
+
+/// 收集实例方法的实参（含 this）。
+///
+/// 参数从栈顶倒序 pop，结果按顺序返回（args[0] = this）。
+fn collect_instance_args(interp: &mut Interpreter, method: &Method) -> Vec<StackSlot> {
+    let n = Interpreter::instance_arg_slot_count(method);
+    let mut args = Vec::with_capacity(n);
+    for _ in 0..n {
+        args.push(interp.pop_slot());
+    }
+    args.reverse();
+    args
+}
+
+/// `invokespecial`：调用构造器 / private / super.method（不做虚派发）。
+///
+/// 用 `resolve_method_ref` 解析（沿继承链向上找第一个匹配），
+/// 然后用解析出的“声明类”调用。
+fn invokespecial(interp: &mut Interpreter) -> Flow {
+    let idx = interp.read_u16() as usize;
+    let caller = unsafe { &*interp.regs().klass };
+    let method_ref: &CPRefEntry<Method> = match caller.cp_get(idx) {
+        CPEntry::MethodRef(e) => e,
+        _ => panic!("invokespecial: CP[{}] is not a MethodRef", idx),
+    };
+    let method_msref =
+        resolve_method_ref(caller, method_ref).expect("invokespecial: failed to resolve method");
+    let method: &Method = &method_msref;
+
+    // 目标类 = 声明方法所在的类。resolve_method_ref 不返回声明类，
+    // 我们从 MethodRef 的 class_name 加载它。
+    // 更简单的做法：在解析时返回 (类, 方法)，但当前接口只返回方法。
+    // 这里重新走 load_class 拿声明类（已缓存，开销低）。
+    let target_klass =
+        crate::class_loader::resolve::load_class_by_caller(caller, method_ref.class_name().utf8())
+            .expect("invokespecial: failed to load target class");
+    let target_normal = target_klass
+        .as_normal()
+        .expect("invokespecial: target not Normal");
+
+    let args = collect_instance_args(interp, method);
+    let ret = interp
+        .invoke_instance(target_normal, method, &args)
+        .expect("invokespecial: invocation failed");
+    push_return_value(interp, ret);
+    Flow::Continue
+}
+
+/// 把方法返回值压回当前栈（void 方法不压）。
+fn push_return_value(interp: &mut Interpreter, ret: Option<ReturnValue>) {
+    match ret {
+        Some(ReturnValue::Int(v)) => interp.push_slot(v),
+        Some(ReturnValue::Long(v)) => interp.push_long(v),
+        Some(ReturnValue::Float(v)) => push_f32(interp, v),
+        Some(ReturnValue::Double(v)) => push_f64(interp, v),
+        Some(ReturnValue::Ref(nptr)) => interp.push_slot(nptr as i32),
+        None => {}
+    }
+}
+
+// ── 字段访问 handler ──────────────────────────────────────────────────
+//
+// instance 字段：相对对象 markword 的偏移；通过 narrow ptr 解码访问。
+// static 字段：相对 static_storage 的偏移；直接访问 metaspace 内存。
+//
+// 读写在 payload 字节区上按 FieldDesc 的 byte_size 进行（1/2/4/8）。
+// 引用字段以 narrow ptr 形式存取（栈槽 / 字段槽都是 u32）。
+
+/// 从 `base + offs` 读 `size` 字节，扩展为 i64 返回。
+///
+/// 引用字段（size == 4 且是 reference 类型）应在外层特殊处理，不走这里。
+unsafe fn read_payload(base: *const u8, offs: usize, size: usize) -> i64 {
+    let p = base.add(offs);
+    match size {
+        1 => *(p as *const i8) as i64,
+        2 => (*(p as *const u16) as i32) as i64,
+        4 => (*(p as *const u32) as i32) as i64,
+        8 => *(p as *const i64),
+        _ => unreachable!("invalid field size {}", size),
+    }
+}
+
+/// 向 `base + offs` 写 `size` 字节，从 i64 截断。
+unsafe fn write_payload(base: *mut u8, offs: usize, size: usize, value: i64) {
+    let p = base.add(offs);
+    match size {
+        1 => *(p as *mut i8) = value as i8,
+        2 => *(p as *mut u16) = value as u16,
+        4 => *(p as *mut u32) = value as u32,
+        8 => *(p as *mut i64) = value,
+        _ => unreachable!("invalid field size {}", size),
+    }
+}
+
+/// 字段是否是引用类型（对象 / 数组）。
+fn is_reference_field(f: &Field) -> bool {
+    f.desc.dimensions > 0 || matches!(f.desc.elem, crate::oops::desc::FieldElemType::Class { .. })
+}
+
+/// 获取声明类的 static_storage 起始指针。
+///
+/// 由于 resolve_field_ref 只返回 Field，不返回声明类，这里沿继承链
+/// 查找哪个类持有该 field 的 static_storage。
+fn static_storage_base(caller: &NormalKlass, field: &Field) -> *mut u8 {
+    let mut cur: Option<&NormalKlass> = Some(caller);
+    while let Some(k) = cur {
+        let f = k.fields();
+        let storage_ptr = f.static_storage.as_ref().as_ptr() as *mut u8;
+        for sf in f.static_fields.as_ref() {
+            if std::ptr::eq(sf as *const Field, field as *const Field) {
+                return storage_ptr;
+            }
+        }
+        cur = k.get_super();
+    }
+    unreachable!("static field not found in inheritance chain")
+}
+
+/// `getstatic`：读 static 字段。
+fn getstatic(interp: &mut Interpreter) -> Flow {
+    let idx = interp.read_u16() as usize;
+    let caller = unsafe { &*interp.regs().klass };
+    let field_ref = match caller.cp_get(idx) {
+        CPEntry::FieldRef(e) => e,
+        _ => panic!("getstatic: CP[{}] is not a FieldRef", idx),
+    };
+    let field_msref = crate::class_loader::resolve::resolve_field_ref(caller, field_ref)
+        .expect("getstatic: resolve failed");
+    let field: &Field = &field_msref;
+    assert!(
+        field
+            .acc_flags
+            .contains(crate::oops::acc_flags::AccFlags::ACC_STATIC)
+    );
+
+    let base = static_storage_base(caller, field);
+    let offs = field.offs();
+    if is_reference_field(field) {
+        let nptr = unsafe { read_payload(base, offs, 4) } as u32;
+        interp.push_slot(nptr as i32);
+    } else {
+        let size = field.desc.byte_size();
+        let v = unsafe { read_payload(base, offs, size) };
+        if size == 8 {
+            interp.push_long(v);
+        } else {
+            interp.push_slot(v as i32);
+        }
+    }
+    Flow::Continue
+}
+
+/// `putstatic`：写 static 字段。
+fn putstatic(interp: &mut Interpreter) -> Flow {
+    let idx = interp.read_u16() as usize;
+    let caller = unsafe { &*interp.regs().klass };
+    let field_ref = match caller.cp_get(idx) {
+        CPEntry::FieldRef(e) => e,
+        _ => panic!("putstatic: CP[{}] is not a FieldRef", idx),
+    };
+    let field_msref = crate::class_loader::resolve::resolve_field_ref(caller, field_ref)
+        .expect("putstatic: resolve failed");
+    let field: &Field = &field_msref;
+    assert!(
+        field
+            .acc_flags
+            .contains(crate::oops::acc_flags::AccFlags::ACC_STATIC)
+    );
+
+    let base = static_storage_base(caller, field);
+    let offs = field.offs();
+    let size = field.desc.byte_size();
+    if is_reference_field(field) {
+        let nptr = interp.pop_slot() as u32;
+        unsafe { write_payload(base, offs, 4, nptr as i64) };
+    } else if size == 8 {
+        let v = interp.pop_long();
+        unsafe { write_payload(base, offs, 8, v) };
+    } else {
+        let v = interp.pop_slot() as i64;
+        unsafe { write_payload(base, offs, size, v) };
+    }
+    Flow::Continue
+}
+
+/// `getfield`：读 instance 字段。
+fn getfield(interp: &mut Interpreter) -> Flow {
+    let idx = interp.read_u16() as usize;
+    let caller = unsafe { &*interp.regs().klass };
+    let field_ref = match caller.cp_get(idx) {
+        CPEntry::FieldRef(e) => e,
+        _ => panic!("getfield: CP[{}] is not a FieldRef", idx),
+    };
+    let field_msref = crate::class_loader::resolve::resolve_field_ref(caller, field_ref)
+        .expect("getfield: resolve failed");
+    let field: &Field = &field_msref;
+    assert!(
+        !field
+            .acc_flags
+            .contains(crate::oops::acc_flags::AccFlags::ACC_STATIC)
+    );
+
+    let this_nptr = interp.pop_slot() as u32;
+    assert!(this_nptr != 0, "getfield on null");
+    let obj_ptr = decode_oop(this_nptr);
+    let base = obj_ptr as *const u8;
+    let offs = field.offs();
+    if is_reference_field(field) {
+        let nptr = unsafe { read_payload(base, offs, 4) } as u32;
+        interp.push_slot(nptr as i32);
+    } else {
+        let size = field.desc.byte_size();
+        let v = unsafe { read_payload(base, offs, size) };
+        if size == 8 {
+            interp.push_long(v);
+        } else {
+            interp.push_slot(v as i32);
+        }
+    }
+    Flow::Continue
+}
+
+/// `putfield`：写 instance 字段。
+fn putfield(interp: &mut Interpreter) -> Flow {
+    let idx = interp.read_u16() as usize;
+    let caller = unsafe { &*interp.regs().klass };
+    let field_ref = match caller.cp_get(idx) {
+        CPEntry::FieldRef(e) => e,
+        _ => panic!("putfield: CP[{}] is not a FieldRef", idx),
+    };
+    let field_msref = crate::class_loader::resolve::resolve_field_ref(caller, field_ref)
+        .expect("putfield: resolve failed");
+    let field: &Field = &field_msref;
+    assert!(
+        !field
+            .acc_flags
+            .contains(crate::oops::acc_flags::AccFlags::ACC_STATIC)
+    );
+
+    let size = field.desc.byte_size();
+    let offs = field.offs();
+    if is_reference_field(field) {
+        let v = interp.pop_slot() as i64;
+        let this_nptr = interp.pop_slot() as u32;
+        assert!(this_nptr != 0, "putfield on null");
+        let obj_ptr = decode_oop(this_nptr);
+        let base = obj_ptr as *mut u8;
+        unsafe { write_payload(base, offs, 4, v) };
+    } else if size == 8 {
+        let v = interp.pop_long();
+        let this_nptr = interp.pop_slot() as u32;
+        assert!(this_nptr != 0, "putfield on null");
+        let obj_ptr = decode_oop(this_nptr);
+        let base = obj_ptr as *mut u8;
+        unsafe { write_payload(base, offs, 8, v) };
+    } else {
+        let v = interp.pop_slot() as i64;
+        let this_nptr = interp.pop_slot() as u32;
+        assert!(this_nptr != 0, "putfield on null");
+        let obj_ptr = decode_oop(this_nptr);
+        let base = obj_ptr as *mut u8;
+        unsafe { write_payload(base, offs, size, v) };
+    }
+    Flow::Continue
+}
+
+// ── invokestatic / invokevirtual handler ────────────────────────────────
+
+/// `invokestatic`：调用静态方法（从字节码 CP 索引触发）。
+fn invokestatic_handler(interp: &mut Interpreter) -> Flow {
+    let idx = interp.read_u16() as usize;
+    let caller = unsafe { &*interp.regs().klass };
+    let method_ref = match caller.cp_get(idx) {
+        CPEntry::MethodRef(e) => e,
+        _ => panic!("invokestatic: CP[{}] is not a MethodRef", idx),
+    };
+    let method_msref =
+        resolve_method_ref(caller, method_ref).expect("invokestatic: resolve failed");
+    let method: &Method = &method_msref;
+
+    // static 方法的实参不含 this。
+    let n = Interpreter::static_arg_slot_count(method);
+    let mut args = Vec::with_capacity(n);
+    for _ in 0..n {
+        args.push(interp.pop_slot());
+    }
+    args.reverse();
+
+    // 目标类 = 声明方法所在的类。
+    let target_klass =
+        crate::class_loader::resolve::load_class_by_caller(caller, method_ref.class_name().utf8())
+            .expect("invokestatic: load target class failed");
+    let target_normal = target_klass
+        .as_normal()
+        .expect("invokestatic: target not Normal");
+
+    let ret = interp
+        .invoke_static(target_normal, method, &args)
+        .expect("invokestatic: invocation failed");
+    push_return_value(interp, ret);
+    Flow::Continue
+}
+
+/// `invokevirtual`：虚方法派发。
+///
+/// 根据 this 的运行时类型查找方法（线性查找，沿继承链向上）。
+fn invokevirtual(interp: &mut Interpreter) -> Flow {
+    let idx = interp.read_u16() as usize;
+    let caller = unsafe { &*interp.regs().klass };
+    let method_ref = match caller.cp_get(idx) {
+        CPEntry::MethodRef(e) => e,
+        _ => panic!("invokevirtual: CP[{}] is not a MethodRef", idx),
+    };
+
+    // 先解析一次拿到 method 的描述符信息（用于实参 slot 计数）。
+    // 这里解析出的方法只用于获取 name+desc 和参数布局，实际派发按运行时类型。
+    let resolved_msref =
+        resolve_method_ref(caller, method_ref).expect("invokevirtual: resolve failed");
+    let resolved: &Method = &resolved_msref;
+    let mname = resolved.name.clone();
+    let mdesc = resolved.desc.raw.clone();
+
+    // 收集实参（含 this）。栈顶是最后一个参数，下面是 this。
+    let n = Interpreter::instance_arg_slot_count(resolved);
+    let mut args = Vec::with_capacity(n);
+    for _ in 0..n {
+        args.push(interp.pop_slot());
+    }
+    args.reverse();
+    let this_nptr = args[0] as u32;
+    assert!(this_nptr != 0, "invokevirtual on null");
+
+    // 从对象 markword 解出运行时 klass。
+    let obj_ptr = decode_oop(this_nptr);
+    let markword = unsafe { (*obj_ptr).markword };
+    let klass_ref = unsafe { klass_from_markword(markword) };
+    let runtime_klass: &NormalKlass = match &*klass_ref {
+        Klass::Normal(n) => n,
+        _ => panic!("invokevirtual: object klass is not Normal"),
+    };
+
+    // 在运行时 klass 上线性查找方法。
+    let mut cur: Option<&NormalKlass> = Some(runtime_klass);
+    let target: &Method = loop {
+        if let Some(k) = cur {
+            if let Some(m) = k.find_method(&mname, &mdesc) {
+                break m;
+            }
+            cur = k.get_super();
+        } else {
+            panic!("invokevirtual: method not found in runtime type");
+        }
+    };
+
+    let ret = interp
+        .invoke_instance(runtime_klass, target, &args)
+        .expect("invokevirtual: invocation failed");
+    push_return_value(interp, ret);
+    Flow::Continue
+}
+
+// ── 数组指令 handler ──────────────────────────────────────────────────
+//
+// 数组对象布局：markword(8) + length(4) + padding(4) + elements...
+// 元素起始固定 ARRAY_DATA_OFFSET = 16。
+
+use crate::class_loader::{bootstrap_cld::BootstrapCLD, resolve::load_class_by_caller};
+use crate::oops::array_klass::{ARRAY_DATA_OFFSET, ARRAY_LENGTH_OFFSET};
+
+/// 分配数组对象。  返回 narrow ptr。
+///
+/// `klass_ref` 必须是 ArrayKlass。`count` 必须 >= 0。
+fn alloc_array(klass_ref: &crate::class_loader::ms_api::MSRef<Klass>, count: i32) -> u32 {
+    let array_klass = klass_ref
+        .as_array()
+        .expect("alloc_array: not an ArrayKlass");
+    let elem_size = array_klass.element_size();
+    let byte_size = crate::oops::array_klass::ARRAY_HEADER_BYTES + ((count as usize) * elem_size);
+    // 对齐到 8 字节。
+    let byte_size = (byte_size + 7) & !7;
+    let klass_ptr: *const Klass = klass_ref as *const _ as *const Klass;
+    // 上面取引用的指针不安全；改用 deref 拿到内部 NonNull。
+    // 这里用另一个办法：从 MSRef 的 deref 取地址。
+    let obj_ptr = {
+        // 先拿到内部 raw 指针。
+        let k: &Klass = klass_ref;
+        alloc_object(k as *const Klass, byte_size)
+    };
+    // 写 length。
+    unsafe {
+        let length_ptr = (obj_ptr as *mut u8).add(ARRAY_LENGTH_OFFSET) as *mut i32;
+        *length_ptr = count;
+    }
+    encode_oop(obj_ptr)
+}
+
+/// 读数组长度字段。
+unsafe fn read_array_length(obj_ptr: crate::oops::oop_handle::ObjPtr) -> i32 {
+    let p = (obj_ptr as *const u8).add(ARRAY_LENGTH_OFFSET) as *const i32;
+    unsafe { *p }
+}
+
+/// `newarray`：创建基本类型数组。
+fn newarray(interp: &mut Interpreter) -> Flow {
+    let atype = interp.read_u8();
+    let name = match atype {
+        4 => "[Z",
+        5 => "[C",
+        6 => "[F",
+        7 => "[D",
+        8 => "[B",
+        9 => "[S",
+        10 => "[I",
+        11 => "[J",
+        _ => panic!("newarray: invalid atype {}", atype),
+    };
+    let count = interp.pop_slot();
+    assert!(count >= 0, "newarray: negative array size {}", count);
+
+    let caller = unsafe { &*interp.regs().klass };
+    let klass_ref = match caller.cld {
+        Some(cld) => {
+            unsafe { (*cld.as_ptr()).load_class(name) }.expect("newarray: load array klass")
+        }
+        None => BootstrapCLD::find_class(name).expect("newarray: load array klass"),
+    };
+    let nptr = alloc_array(&klass_ref, count);
+    interp.push_slot(nptr as i32);
+    Flow::Continue
+}
+
+/// `anewarray`：创建引用类型数组。
+fn anewarray(interp: &mut Interpreter) -> Flow {
+    let idx = interp.read_u16() as usize;
+    let count = interp.pop_slot();
+    assert!(count >= 0, "anewarray: negative array size {}", count);
+
+    let caller = unsafe { &*interp.regs().klass };
+    // 先解析元素类。
+    let elem_entry = match caller.cp_get(idx) {
+        CPEntry::Class(e) => e,
+        _ => panic!("anewarray: CP[{}] is not a Class", idx),
+    };
+    let _elem_klass = resolve_class_ref(caller, elem_entry).expect("anewarray: resolve elem class");
+
+    // 数组内部名 = [L + 元素名 + ;
+    let elem_name = elem_entry.name.utf8();
+    // 元素名本身已经是内部形式（例如 java/lang/String 或 [I）。
+    // 对于引用类型元素，数组名 = "[" + 元素描述符。
+    // 元素描述符：类是 L...;，数组是本身。
+    let array_name = if elem_name.starts_with('[') {
+        format!("[{}", elem_name)
+    } else {
+        format!("[L{};", elem_name)
+    };
+
+    let klass_ref = match caller.cld {
+        Some(cld) => unsafe { (*cld.as_ptr()).load_class(&array_name) }.expect("anewarray: load"),
+        None => BootstrapCLD::find_class(&array_name).expect("anewarray: load"),
+    };
+    let nptr = alloc_array(&klass_ref, count);
+    interp.push_slot(nptr as i32);
+    Flow::Continue
+}
+
+/// `arraylength`：读数组长度。
+fn arraylength(interp: &mut Interpreter) -> Flow {
+    let nptr = interp.pop_slot() as u32;
+    assert!(nptr != 0, "arraylength on null");
+    let obj_ptr = decode_oop(nptr);
+    let len = unsafe { read_array_length(obj_ptr) };
+    interp.push_slot(len);
+    Flow::Continue
+}
+
+// ── *aload / *astore helper ──────────────────────────────────────────
+//
+// 所有 8 种 aload 共用逻辑，只是元素大小和符号/零扩展不同。
+// 所有 8 种 astore 共用逻辑，只是元素大小不同。
+// 用具体的 handler 函数（而非完全参数化）来处理扩展语义。
+
+/// 从栈顶弹出 index 和 array ref，返回 (obj_ptr, index, length)。
+fn pop_array_index(interp: &mut Interpreter) -> (crate::oops::oop_handle::ObjPtr, i32, i32) {
+    let index = interp.pop_slot();
+    let nptr = interp.pop_slot() as u32;
+    assert!(nptr != 0, "array access on null");
+    let obj_ptr = decode_oop(nptr);
+    let length = unsafe { read_array_length(obj_ptr) };
+    // TODO 阶段 5：ArrayIndexOutOfBoundsException
+    assert!(
+        index >= 0 && index < length,
+        "array index out of bounds: index={}, length={}",
+        index,
+        length
+    );
+    (obj_ptr, index, length)
+}
+
+/// 从 obj_ptr 读元素起始地址。
+unsafe fn element_addr(
+    obj_ptr: crate::oops::oop_handle::ObjPtr,
+    index: i32,
+    elem_size: usize,
+) -> *mut u8 {
+    unsafe { (obj_ptr as *mut u8).add(ARRAY_DATA_OFFSET + (index as usize) * elem_size) }
+}
+
+// ── iaload..saload ──────────────────────────────────────────────────
+// int/float/引用元素占 1 槽，long/double 占 2 槽。
+// byte/char/short 需要扩展到 int。
+
+fn iaload(interp: &mut Interpreter) -> Flow {
+    let (obj_ptr, index, _) = pop_array_index(interp);
+    let p = unsafe { element_addr(obj_ptr, index, 4) } as *const i32;
+    interp.push_slot(unsafe { *p });
+    Flow::Continue
+}
+
+fn laload(interp: &mut Interpreter) -> Flow {
+    let (obj_ptr, index, _) = pop_array_index(interp);
+    let p = unsafe { element_addr(obj_ptr, index, 8) } as *const i64;
+    interp.push_long(unsafe { *p });
+    Flow::Continue
+}
+
+fn faload(interp: &mut Interpreter) -> Flow {
+    let (obj_ptr, index, _) = pop_array_index(interp);
+    let p = unsafe { element_addr(obj_ptr, index, 4) } as *const u32;
+    push_f32(interp, f32::from_bits(unsafe { *p }));
+    Flow::Continue
+}
+
+fn daload(interp: &mut Interpreter) -> Flow {
+    let (obj_ptr, index, _) = pop_array_index(interp);
+    let p = unsafe { element_addr(obj_ptr, index, 8) } as *const u64;
+    push_f64(interp, f64::from_bits(unsafe { *p }));
+    Flow::Continue
+}
+
+/// aaload：引用数组。元素是 narrow ptr，占 1 槽。
+fn aaload(interp: &mut Interpreter) -> Flow {
+    let (obj_ptr, index, _) = pop_array_index(interp);
+    let p = unsafe { element_addr(obj_ptr, index, 4) } as *const u32;
+    interp.push_slot(unsafe { *p } as i32);
+    Flow::Continue
+}
+
+/// baload：byte 数组（有符号扩展）。
+fn baload(interp: &mut Interpreter) -> Flow {
+    let (obj_ptr, index, _) = pop_array_index(interp);
+    let p = unsafe { element_addr(obj_ptr, index, 1) } as *const i8;
+    interp.push_slot(unsafe { *p } as i32);
+    Flow::Continue
+}
+
+/// caload：char 数组（零扩展）。
+fn caload(interp: &mut Interpreter) -> Flow {
+    let (obj_ptr, index, _) = pop_array_index(interp);
+    let p = unsafe { element_addr(obj_ptr, index, 2) } as *const u16;
+    interp.push_slot(unsafe { *p } as i32);
+    Flow::Continue
+}
+
+/// saload：short 数组（有符号扩展）。
+fn saload(interp: &mut Interpreter) -> Flow {
+    let (obj_ptr, index, _) = pop_array_index(interp);
+    let p = unsafe { element_addr(obj_ptr, index, 2) } as *const i16;
+    interp.push_slot(unsafe { *p } as i32);
+    Flow::Continue
+}
+
+// ── iastore..sastore ──────────────────────────────────────────────────
+// 写入时按窄类型截断。
+
+fn iastore(interp: &mut Interpreter) -> Flow {
+    let v = interp.pop_slot();
+    let (obj_ptr, index, _) = pop_array_index(interp);
+    let p = unsafe { element_addr(obj_ptr, index, 4) } as *mut i32;
+    unsafe { *p = v };
+    Flow::Continue
+}
+
+fn lastore(interp: &mut Interpreter) -> Flow {
+    let v = interp.pop_long();
+    let (obj_ptr, index, _) = pop_array_index(interp);
+    let p = unsafe { element_addr(obj_ptr, index, 8) } as *mut i64;
+    unsafe { *p = v };
+    Flow::Continue
+}
+
+fn fastore(interp: &mut Interpreter) -> Flow {
+    let v = pop_f32(interp);
+    let (obj_ptr, index, _) = pop_array_index(interp);
+    let p = unsafe { element_addr(obj_ptr, index, 4) } as *mut u32;
+    unsafe { *p = v.to_bits() };
+    Flow::Continue
+}
+
+fn dastore(interp: &mut Interpreter) -> Flow {
+    let v = pop_f64(interp);
+    let (obj_ptr, index, _) = pop_array_index(interp);
+    let p = unsafe { element_addr(obj_ptr, index, 8) } as *mut u64;
+    unsafe { *p = v.to_bits() };
+    Flow::Continue
+}
+
+fn aastore(interp: &mut Interpreter) -> Flow {
+    let v = interp.pop_slot() as u32;
+    let (obj_ptr, index, _) = pop_array_index(interp);
+    let p = unsafe { element_addr(obj_ptr, index, 4) } as *mut u32;
+    unsafe { *p = v };
+    Flow::Continue
+}
+
+fn bastore(interp: &mut Interpreter) -> Flow {
+    let v = interp.pop_slot() as i8;
+    let (obj_ptr, index, _) = pop_array_index(interp);
+    let p = unsafe { element_addr(obj_ptr, index, 1) } as *mut i8;
+    unsafe { *p = v };
+    Flow::Continue
+}
+
+fn castore(interp: &mut Interpreter) -> Flow {
+    let v = interp.pop_slot() as u16;
+    let (obj_ptr, index, _) = pop_array_index(interp);
+    let p = unsafe { element_addr(obj_ptr, index, 2) } as *mut u16;
+    unsafe { *p = v };
+    Flow::Continue
+}
+
+fn sastore(interp: &mut Interpreter) -> Flow {
+    let v = interp.pop_slot() as i16;
+    let (obj_ptr, index, _) = pop_array_index(interp);
+    let p = unsafe { element_addr(obj_ptr, index, 2) } as *mut i16;
+    unsafe { *p = v };
+    Flow::Continue
 }

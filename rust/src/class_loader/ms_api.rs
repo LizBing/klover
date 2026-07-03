@@ -1,12 +1,67 @@
 use std::ops::{Deref, DerefMut};
+use std::ptr;
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::ptr;
 
 use parking_lot::{Mutex, RwLock};
 
 const SMALL_CHUNK_BYTE_SIZE: usize = 8 * 1024; // 8 KB
 const BUMP_THRESHOLD: usize = SMALL_CHUNK_BYTE_SIZE / 2; // 4 KB
+
+// ── Metaspace 压缩指针 ────────────────────────────────────────────────
+//
+// 与 C 层 `core/memory/comp_space_defs.h` 保持一致。
+//
+//   base = METASPACE_BASE = 1 << 43
+//   shift = 3（8 字节对齐）
+//   编码后 32 位 narrow ptr 覆盖 32 GB，与 COMPSPACE_BYTE_SIZE 相同。
+//   narrow == 0 保留给 NULL。
+//
+// 任何 metaspace 内分配的、可被 MSRef 引用的结构（Klass、Field、Method 等）
+// 都可以用这套编解码。
+
+/// Metaspace 的虚拟内存基址（与 C 层 `METASPACE_BASE` 一致）。
+pub const METASPACE_BASE: usize = 1usize << 43;
+
+/// 压缩指针的对齐粒度（与 C 层 `COMP_PTR_SHIFT` 一致）。
+const COMP_PTR_SHIFT: u32 = 3;
+
+/// 将一个 metaspace 内的裸指针编码为 32 位 narrow ptr。
+///
+/// `ptr` 为 null 时返回 0。
+///
+/// # Panics
+/// `ptr` 必须位于 `[METASPACE_BASE, METASPACE_BASE + 32GB)` 内且 8 字节对齐，
+/// 否则 panic（编码失败说明分配器或调用方有 bug）。
+fn ms_comp_ptr_encode<T>(ptr: *const T) -> u32 {
+    if ptr.is_null() {
+        return 0;
+    }
+    let addr = ptr as usize;
+    assert!(
+        addr >= METASPACE_BASE,
+        "ms_comp_ptr_encode: ptr {:#x} below METASPACE_BASE",
+        addr
+    );
+    let off = addr - METASPACE_BASE;
+    assert!(
+        off >> COMP_PTR_SHIFT <= u32::MAX as usize,
+        "ms_comp_ptr_encode: offset overflow"
+    );
+    let narrow = (off >> COMP_PTR_SHIFT) as u32;
+    narrow
+}
+
+/// 将 32 位 narrow ptr 解码为 metaspace 内的裸指针。
+///
+/// `narrow == 0` 返回 null。
+fn ms_comp_ptr_decode<T>(narrow: u32) -> *mut T {
+    if narrow == 0 {
+        return std::ptr::null_mut();
+    }
+    let addr = METASPACE_BASE + ((narrow as usize) << COMP_PTR_SHIFT);
+    addr as *mut T
+}
 
 unsafe extern "C" {
     pub fn ms_init() -> bool;
@@ -233,7 +288,7 @@ impl<T: Sized> MSBox<T> {
 impl<T: ?Sized> MSBox<T> {
     pub unsafe fn from_raw(raw: *mut T) -> Self {
         Self {
-            raw: NonNull::new(raw).unwrap()
+            raw: NonNull::new(raw).unwrap(),
         }
     }
 }
@@ -268,7 +323,31 @@ unsafe impl<T: Sync> Sync for MSBox<T> {}
 // Safety: guaranteed by developer.
 #[derive(Debug)]
 pub struct MSRef<T> {
-    raw: NonNull<T>
+    raw: NonNull<T>,
+}
+
+/// Metaspace 压缩指针。  32 位偏移量（以 `METASPACE_BASE` 为基准，
+/// 8 字节对齐）。  0 保留给 null。
+pub type CompPtr = u32;
+
+impl<T> MSRef<T> {
+    /// 将引用编码为压缩指针。
+    pub fn encode(&self) -> CompPtr {
+        ms_comp_ptr_encode(self.raw.as_ptr())
+    }
+
+    /// 将压缩指针解码为引用。
+    ///
+    /// # Safety
+    /// `cp` 必须是之前由 `encode` 或 `ms_comp_ptr_encode` 生成的合法值，
+    /// 指向 metaspace 内类型为 `T` 的对象。
+    pub unsafe fn decode(cp: CompPtr) -> Self {
+        let ptr = ms_comp_ptr_decode::<T>(cp);
+        // SAFETY: 由调用方保证 cp 合法。
+        Self {
+            raw: unsafe { NonNull::new_unchecked(ptr) },
+        }
+    }
 }
 
 impl<T> From<&MSBox<T>> for MSRef<T> {
@@ -279,7 +358,11 @@ impl<T> From<&MSBox<T>> for MSRef<T> {
 
 impl<T> From<&T> for MSRef<T> {
     fn from(value: &T) -> Self {
-        unsafe { Self { raw: NonNull::new_unchecked(value as *const T as *mut T) } }
+        unsafe {
+            Self {
+                raw: NonNull::new_unchecked(value as *const T as *mut T),
+            }
+        }
     }
 }
 
@@ -297,7 +380,7 @@ impl<T> Clone for MSRef<T> {
 
 impl<T> Deref for MSRef<T> {
     type Target = T;
-    
+
     fn deref(&self) -> &Self::Target {
         unsafe { self.raw.as_ref() }
     }
