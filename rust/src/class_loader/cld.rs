@@ -4,7 +4,7 @@ use dashmap::{DashMap, mapref::entry::Entry};
 
 use crate::{
     class_loader::{
-        cld_map, load_error::{LoadError, LoadResult}, ms_box::{MSAllocator, MSBox}
+        cld_map, load_error::{LoadError, LoadResult}, ms_api::{MSAllocator, MSBox}
     },
     class_parser::{class_file::ClassFile, cp_info::ConstantPoolInfo},
     oops::{

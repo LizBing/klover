@@ -1,6 +1,8 @@
 use std::{marker::PhantomData, ptr::NonNull};
 
+use crate::oops::desc::FieldDesc;
 use crate::oops::{attr::CodeAttr, method::Method, normal_klass::NormalKlass, oop_handle::ObjDesc};
+use crate::oops::acc_flags::AccFlags;
 
 /// 一个 JVM 栈槽。  long / double 占据两个相邻槽（高 32 位在低地址）。
 pub type StackSlot = i32;
@@ -137,8 +139,6 @@ impl Interpreter {
         method: NonNull<Method>,
         args: &[StackSlot],
     ) -> InvokeResult {
-        use crate::oops::acc_flags::AccFlags;
-
         let m = unsafe { method.as_ref() };
         if !m.acc_flags.contains(AccFlags::ACC_STATIC) {
             return Err(InvokeError::NotStatic);
@@ -241,7 +241,7 @@ impl Interpreter {
 }
 
 /// 一个字段描述符占用几个栈槽。
-pub(super) fn arg_slots_of(d: &crate::oops::desc::FieldDesc) -> usize {
+pub(super) fn arg_slots_of(d: &FieldDesc) -> usize {
     if d.byte_size() > 4 { 2 } else { 1 }
 }
 

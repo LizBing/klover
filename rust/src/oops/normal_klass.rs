@@ -11,7 +11,7 @@ use crate::{
     class_loader::{
         bootstrap_cld::BootstrapCLD,
         cld::ClassLoaderData,
-        ms_box::{MSAllocator, MSBox}
+        ms_api::{MSAllocator, MSBox}
     },
     class_parser::{
         class_file::ClassFile,
@@ -185,7 +185,7 @@ fn build_cp<'a>(parsed_cp: &[ConstantPoolInfo], msa: &MSAllocator) -> ResolveRes
             ptr::write(&mut cp_slice[i], None);
         }
     }
-
+    
     // Slot 0 is Unusable (JVM CP is 1-indexed).
     for i in 1..cp_len {
         if matches!(parsed_cp[i], ConstantPoolInfo::Unusable) {
@@ -199,7 +199,7 @@ fn build_cp<'a>(parsed_cp: &[ConstantPoolInfo], msa: &MSAllocator) -> ResolveRes
     Ok(cp_slice)
 }
 
-fn cp_slice_get(cp_slice: &[Option<CPEntry>], idx: usize) -> &CPEntry {
+pub fn cp_slice_get(cp_slice: &[Option<CPEntry>], idx: usize) -> &CPEntry {
     unsafe { cp_slice[idx].as_ref().unwrap_unchecked() }
 }
 

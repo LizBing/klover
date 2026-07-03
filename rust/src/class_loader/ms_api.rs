@@ -1,3 +1,4 @@
+use std::ops::{Deref, DerefMut};
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::ptr;
@@ -226,6 +227,12 @@ impl<T> MSBox<T> {
             raw: unsafe { NonNull::new_unchecked(ptr) },
         }
     }
+
+    pub fn from_raw(raw: *mut T) -> Self {
+        Self {
+            raw: NonNull::new(raw).unwrap()
+        }
+    }
 }
 
 impl<T> std::ops::Deref for MSBox<T> {
@@ -254,6 +261,37 @@ impl<T> Drop for MSBox<T> {
 // so it is Send/Sync under the same conditions as Box<T>.
 unsafe impl<T: Send> Send for MSBox<T> {}
 unsafe impl<T: Sync> Sync for MSBox<T> {}
+
+// Safety: guaranteed by developer.
+pub struct MSRef<T> {
+    raw: NonNull<T>
+}
+
+impl<T> From<&MSBox<T>> for MSRef<T> {
+    fn from(value: &MSBox<T>) -> Self {
+        Self { raw: value.raw }
+    }
+}
+
+impl<T> From<&T> for MSRef<T> {
+    fn from(value: &T) -> Self {
+        unsafe { Self { raw: NonNull::new_unchecked(value as *const T as *mut T) } }
+    }
+}
+
+impl<T> From<*const T> for MSRef<T> {
+    fn from(value: *const T) -> Self {
+        unsafe { (&*value).into() }
+    }
+}
+
+impl<T> Deref for MSRef<T> {
+    type Target = T;
+    
+    fn deref(&self) -> &Self::Target {
+        unsafe { self.raw.as_ref() }
+    }
+}
 
 // ── tests ───────────────────────────────────────────────────────────────
 

@@ -4,11 +4,10 @@ use std::{
 };
 
 use crate::{
-    class_loader::ms_box::MSAllocator,
+    class_loader::ms_api::{MSAllocator, MSRef},
     class_parser::attr_info::{CodeAttrInfo, ExceptionTableEntryInfo},
     oops::{
-        cp_entry::{CPEntry, ClassCPEntry, StringCPEntry},
-        resolve_error::{ResolveError, ResolveResult},
+        cp_entry::{CPEntry, ClassCPEntry, StringCPEntry}, normal_klass::cp_slice_get, resolve_error::{ResolveError, ResolveResult}
     },
 };
 
@@ -16,14 +15,14 @@ pub struct ExceptionTableEntry {
     start_pc: u16,
     end_pc: u16,
     handler_pc: u16,
-    catch_type: NonNull<ClassCPEntry>,
+    catch_type: MSRef<ClassCPEntry>,
 }
 
 impl ExceptionTableEntry {
     fn from(info: &ExceptionTableEntryInfo, cp: &[Option<CPEntry>]) -> ResolveResult<Self> {
         let ct = unsafe {
-            match cp[info.catch_type as usize].as_ref().unwrap_unchecked() {
-                CPEntry::Class { entry } => NonNull::new_unchecked(entry as *const _ as *mut _),
+            match cp_slice_get(cp, info.catch_type as usize) {
+                CPEntry::Class { entry } => entry,
                 _ => return Err(ResolveError::MismatchCPType),
             }
         };

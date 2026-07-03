@@ -10,7 +10,7 @@ use crate::{
     class_loader::{
         class_path::ClassPath,
         load_error::{LoadError, LoadResult},
-        ms_box::{MSAllocator, MSBox},
+        ms_api::{MSAllocator, MSBox},
     },
     class_parser::class_file::ClassFile,
     oops::{
