@@ -1,9 +1,27 @@
-use std::{ops::Deref, ptr::NonNull, sync::{LazyLock, OnceLock}};
+use std::{
+    ops::Deref,
+    ptr::NonNull,
+    sync::{LazyLock, OnceLock, atomic::Ordering},
+};
 
 use dashmap::{DashMap, Entry};
 
 use crate::{
-    class_loader::{class_path::ClassPath, load_error::{LoadError, LoadResult}, ms_box::{MSAllocator, MSBox}}, class_parser::class_file::ClassFile, oops::{array_klass::ArrayKlass, desc::{FieldDesc, FieldElemType}, klass::Klass, normal_klass::NormalKlass, oop_handle::{KLASS_OOP_STORAGE_ID, OOPHandle}, prim_klass::PrimKlass, symbol_table::{SymbolHandle, SymbolTable}}
+    class_loader::{
+        class_path::ClassPath,
+        load_error::{LoadError, LoadResult},
+        ms_box::{MSAllocator, MSBox},
+    },
+    class_parser::class_file::ClassFile,
+    oops::{
+        array_klass::ArrayKlass,
+        desc::{FieldDesc, FieldElemType},
+        klass::Klass,
+        normal_klass::NormalKlass,
+        oop_handle::{KLASS_OOP_STORAGE_ID, OOPHandle},
+        prim_klass::PrimKlass,
+        symbol_table::{SymbolHandle, SymbolTable},
+    },
 };
 
 pub struct BootstrapCLD {
@@ -25,7 +43,7 @@ unsafe impl Sync for BootstrapCLD {}
 static BSCLD: BootstrapCLD = BootstrapCLD {
     msa: MSAllocator::new(),
     klasses: LazyLock::new(|| DashMap::new()),
-    
+
     boolean_klass: OnceLock::new(),
     byte_klass: OnceLock::new(),
     char_klass: OnceLock::new(),
@@ -46,88 +64,162 @@ impl BootstrapCLD {
     pub fn find_class(name: &str) -> LoadResult<NonNull<Klass>> {
         if let Some(x) = name.chars().next() {
             if x == '[' {
-                return Self::find_array_klass(name)
+                return Self::find_array_klass(name);
             }
         }
-        
+
         if let Some(x) = Self::find_prim_klass(name) {
-            return Ok(x)
+            return Ok(x);
         }
 
         Self::find_normal_klass(name)
     }
-    
+
     fn find_prim_klass(name: &str) -> Option<NonNull<Klass>> {
         let boxed = match name {
-            "boolean" => BSCLD.int_klass.get_or_init(|| MSBox::new(&BSCLD.msa, Klass::Primitive(PrimKlass::new(name, size_of::<bool>())))),
-            "byte" => BSCLD.int_klass.get_or_init(|| MSBox::new(&BSCLD.msa, Klass::Primitive(PrimKlass::new(name, size_of::<i8>())))),
-            "char" => BSCLD.int_klass.get_or_init(|| MSBox::new(&BSCLD.msa, Klass::Primitive(PrimKlass::new(name, size_of::<u16>())))),
-            "double" => BSCLD.int_klass.get_or_init(|| MSBox::new(&BSCLD.msa, Klass::Primitive(PrimKlass::new(name, size_of::<f64>())))),
-            "float" => BSCLD.int_klass.get_or_init(|| MSBox::new(&BSCLD.msa, Klass::Primitive(PrimKlass::new(name, size_of::<f32>())))),
-            "int" => BSCLD.int_klass.get_or_init(|| MSBox::new(&BSCLD.msa, Klass::Primitive(PrimKlass::new(name, size_of::<i32>())))),
-            "long" => BSCLD.int_klass.get_or_init(|| MSBox::new(&BSCLD.msa, Klass::Primitive(PrimKlass::new(name, size_of::<i64>())))),
-            "short" => BSCLD.int_klass.get_or_init(|| MSBox::new(&BSCLD.msa, Klass::Primitive(PrimKlass::new(name, size_of::<i16>())))),
+            "boolean" => BSCLD.boolean_klass.get_or_init(|| {
+                MSBox::new(
+                    &BSCLD.msa,
+                    Klass::Primitive(PrimKlass::new(name, size_of::<bool>())),
+                )
+            }),
+            "byte" => BSCLD.byte_klass.get_or_init(|| {
+                MSBox::new(
+                    &BSCLD.msa,
+                    Klass::Primitive(PrimKlass::new(name, size_of::<i8>())),
+                )
+            }),
+            "char" => BSCLD.char_klass.get_or_init(|| {
+                MSBox::new(
+                    &BSCLD.msa,
+                    Klass::Primitive(PrimKlass::new(name, size_of::<u16>())),
+                )
+            }),
+            "double" => BSCLD.double_klass.get_or_init(|| {
+                MSBox::new(
+                    &BSCLD.msa,
+                    Klass::Primitive(PrimKlass::new(name, size_of::<f64>())),
+                )
+            }),
+            "float" => BSCLD.float_klass.get_or_init(|| {
+                MSBox::new(
+                    &BSCLD.msa,
+                    Klass::Primitive(PrimKlass::new(name, size_of::<f32>())),
+                )
+            }),
+            "int" => BSCLD.int_klass.get_or_init(|| {
+                MSBox::new(
+                    &BSCLD.msa,
+                    Klass::Primitive(PrimKlass::new(name, size_of::<i32>())),
+                )
+            }),
+            "long" => BSCLD.long_klass.get_or_init(|| {
+                MSBox::new(
+                    &BSCLD.msa,
+                    Klass::Primitive(PrimKlass::new(name, size_of::<i64>())),
+                )
+            }),
+            "short" => BSCLD.short_klass.get_or_init(|| {
+                MSBox::new(
+                    &BSCLD.msa,
+                    Klass::Primitive(PrimKlass::new(name, size_of::<i16>())),
+                )
+            }),
 
             _ => return None,
         };
 
         unsafe { Some(NonNull::new_unchecked(boxed.deref() as *const Klass as _)) }
     }
-    
+
     fn find_array_klass(name: &str) -> LoadResult<NonNull<Klass>> {
         let sym = SymbolTable::intern(name);
         let entry = BSCLD.klasses.entry(sym);
 
         let vacant = match entry {
-            Entry::Occupied(x) => return unsafe { Ok(NonNull::new_unchecked(x.get().deref() as *const Klass as *mut Klass)) },
-            Entry::Vacant(v) => v
+            Entry::Occupied(x) => {
+                return unsafe {
+                    Ok(NonNull::new_unchecked(
+                        x.get().deref() as *const Klass as *mut Klass
+                    ))
+                };
+            }
+            Entry::Vacant(v) => v,
         };
-        
+
         let desc = match FieldDesc::from(name) {
             Ok(x) => x,
-            Err(e) => return Err(LoadError::Resolve(e))
+            Err(e) => return Err(LoadError::Resolve(e)),
         };
 
         let klass = ArrayKlass {
             name: name.into(),
             desc,
-            mirror: OOPHandle::new(KLASS_OOP_STORAGE_ID)
+            mirror: OOPHandle::new(KLASS_OOP_STORAGE_ID),
         };
 
         let boxed = MSBox::new(&BSCLD.msa, Klass::Array(klass));
         let r = vacant.insert(boxed);
 
-        return unsafe { Ok(NonNull::new_unchecked(r.deref().deref() as *const Klass as *mut Klass)) };
+        return unsafe {
+            Ok(NonNull::new_unchecked(
+                r.deref().deref() as *const Klass as *mut Klass
+            ))
+        };
     }
-    
+
     fn find_normal_klass(name: &str) -> LoadResult<NonNull<Klass>> {
         let sym = SymbolTable::intern(name);
         let entry = BSCLD.klasses.entry(sym);
 
         let vacant = match entry {
-            Entry::Occupied(x) => return unsafe { Ok(NonNull::new_unchecked(x.get().deref() as *const Klass as *mut Klass)) },
-            Entry::Vacant(v) => v
+            Entry::Occupied(x) => {
+                return unsafe {
+                    Ok(NonNull::new_unchecked(
+                        x.get().deref() as *const Klass as *mut Klass
+                    ))
+                };
+            }
+            Entry::Vacant(v) => v,
         };
 
         let bytes = match ClassPath::read_bs_class(name) {
             Some(x) => x,
-            None => return Err(LoadError::NotFound(name.into()))
+            None => return Err(LoadError::NotFound(name.into())),
         };
 
         let cf = match ClassFile::from(&bytes) {
             Ok(x) => x,
-            Err(e) => return Err(LoadError::Parse(e))
+            Err(e) => return Err(LoadError::Parse(e)),
         };
 
-        let klass = match NormalKlass::from(cf, &BSCLD.msa) {
+        let (klass, super_entry) = match NormalKlass::build(cf, None) {
             Ok(x) => x,
-            Err(e) => return Err(LoadError::Resolve(e))
+            Err(e) => return Err(LoadError::Resolve(e)),
         };
-        klass.cld.set(None).unwrap();
+        let normal = unsafe { klass.as_normal().unwrap_unchecked() };
 
-        let boxed = MSBox::new(&BSCLD.msa, Klass::Normal(klass));
-        let r = vacant.insert(boxed);
+        match super_entry {
+            Some(x) => {
+                let super_klass = Self::find_normal_klass(x.name.utf8())?;
+                x.resolved.store(super_klass.as_ptr(), Ordering::Relaxed);
+                let super_ptr = unsafe {
+                    NonNull::new_unchecked(super_klass.as_ref().as_normal().unwrap()
+                        as *const NormalKlass
+                        as *mut NormalKlass)
+                };
+                normal.set_super(Some(super_ptr));
+            }
 
-        return unsafe { Ok(NonNull::new_unchecked(r.deref().deref() as *const Klass as *mut Klass)) };
+            None => normal.set_super(None),
+        }
+
+        let r = vacant.insert(klass);
+
+        return unsafe {
+            Ok(NonNull::new_unchecked(
+                r.deref().deref() as *const Klass as *mut Klass
+            ))
+        };
     }
 }

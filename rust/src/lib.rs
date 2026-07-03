@@ -1,5 +1,5 @@
-mod class_loader;
-mod class_parser;
-mod interpreter;
-mod oops;
-mod runtime;
+pub mod class_loader;
+pub mod class_parser;
+pub mod interpreter;
+pub mod oops;
+pub mod runtime;

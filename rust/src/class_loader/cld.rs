@@ -1,4 +1,4 @@
-use std::{ops::Deref, ptr::NonNull};
+use std::{ops::Deref, ptr::NonNull, sync::atomic::Ordering};
 
 use dashmap::{DashMap, mapref::entry::Entry};
 
@@ -89,15 +89,24 @@ impl ClassLoaderData {
             Entry::Vacant(v) => v,
         };
 
-        let klass = match NormalKlass::from(cf, &self.ms_allocator) {
+        let (klass, super_entry) = match NormalKlass::build(cf, Some(&self)) {
             Ok(x) => x,
             Err(e) => return Err(LoadError::Resolve(e)),
         };
-        let self_ptr = unsafe { NonNull::new_unchecked(self as *const _ as _) };
-        klass.cld.set(Some(self_ptr)).unwrap();
+        let normal = unsafe { klass.as_normal().unwrap_unchecked() };
+        
+        match super_entry {
+            Some(x) => {
+                let super_klass = self.load_class(x.name.utf8())?;
+                x.resolved.store(super_klass.as_ptr(), Ordering::Relaxed);
+                let super_ptr = unsafe { NonNull::new_unchecked(super_klass.as_ref().as_normal().unwrap() as *const NormalKlass as *mut NormalKlass) };
+                normal.set_super(Some(super_ptr));
+            },
 
-        let boxed = MSBox::new(&self.ms_allocator, Klass::Normal(klass));
-        let r = vacant.insert(boxed);
+            None => return Err(LoadError::NoSuper { class_name: name_utf8 })
+        }
+        
+        let r = vacant.insert(klass);
 
         Ok(Self::klass_ptr(r.deref()))
     }
@@ -113,12 +122,8 @@ impl ClassLoaderData {
 }
 
 impl ClassLoaderData {
-    pub fn load_class(cld: Option<&Self>, name: &str) -> LoadResult<NonNull<Klass>> {
-        match cld {
-            // invoke cld.mirror.loadClass()
-            Some(_) => Err(LoadError::NotFound(name.into())),
-            
-            None => BootstrapCLD::find_class(name)
-        }
+    // invoke self.mirror.loadClass()
+    pub fn load_class(&self, name: &str) -> LoadResult<NonNull<Klass>> {
+        unimplemented!()
     }
 }

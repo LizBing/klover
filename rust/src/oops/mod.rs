@@ -1,13 +1,13 @@
-mod acc_flags;
+pub mod acc_flags;
 pub mod array_klass;
 pub mod attr;
 pub mod cp_entry;
 pub mod desc;
-mod field;
+pub mod field;
 pub mod klass;
 pub mod method;
 pub mod normal_klass;
-mod obj_layout;
+pub mod obj_layout;
 pub mod oop_handle;
 pub mod prim_klass;
 pub mod resolve_error;

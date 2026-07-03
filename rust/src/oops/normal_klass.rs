@@ -1,12 +1,12 @@
 use std::{
-    boxed, cell::OnceCell, mem::size_of, ptr::{self, NonNull}, slice, sync::Mutex
+    boxed, cell::OnceCell, mem::size_of, ops::{Deref, DerefMut}, ptr::{self, NonNull}, slice, sync::{Mutex, atomic::Ordering}
 };
 
 use crate::{
     class_loader::{bootstrap_cld::BootstrapCLD, cld::ClassLoaderData, ms_box::{MSAllocator, MSBox}},
     class_parser::{class_file::ClassFile, cp_info::ConstantPoolInfo, field_info::FieldInfo, method_info::MethodInfo},
     oops::{
-        acc_flags::AccFlags, cp_entry::{CPEntry, ClassCPEntry}, field::Field, method::Method, obj_layout::ObjLayout, oop_handle::{KLASS_OOP_STORAGE_ID, NarrowOOP, OOPHandle}, resolve_error::{ResolveError, ResolveResult}, symbol_table::SymbolHandle
+        acc_flags::AccFlags, cp_entry::{CPEntry, ClassCPEntry}, field::Field, klass::Klass, method::Method, obj_layout::ObjLayout, oop_handle::{KLASS_OOP_STORAGE_ID, NarrowOOP, OOPHandle}, resolve_error::{ResolveError, ResolveResult}, symbol_table::SymbolHandle
     },
 };
 
@@ -219,7 +219,7 @@ impl NormalKlass {
     pub fn build<'a>(
         cf: ClassFile,
         cld: Option<&ClassLoaderData>
-    ) -> ResolveResult<(MSBox<Self>, Option<&'a ClassCPEntry>)> {
+    ) -> ResolveResult<(MSBox<Klass>, Option<&'a ClassCPEntry>)> {
         let msa = match cld {
             Some(x) => &x.ms_allocator,
             None => BootstrapCLD::bs_msa()
@@ -269,7 +269,8 @@ impl NormalKlass {
             methods
         };
 
-        let boxed = MSBox::new(msa, klass);
+        let mut boxed = MSBox::new(msa, Klass::Normal(klass));
+        this_entry.resolved.store(boxed.deref_mut(), Ordering::Relaxed);
 
         Ok((boxed, super_entry))
     }

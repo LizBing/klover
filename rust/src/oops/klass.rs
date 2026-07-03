@@ -8,4 +8,11 @@ pub enum Klass {
     Array(ArrayKlass)
 }
 
-impl Klass {}
+impl Klass {
+    pub fn as_normal(&self) -> Option<&NormalKlass> {
+        match self {
+            Self::Normal(x) => Some(x),
+            _ => None
+        }
+    }
+}
