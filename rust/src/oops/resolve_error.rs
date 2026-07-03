@@ -1,5 +1,3 @@
-use crate::class_loader::load_error::LoadError;
-
 #[derive(Debug)]
 pub enum ResolveError {
     MismatchCPType,

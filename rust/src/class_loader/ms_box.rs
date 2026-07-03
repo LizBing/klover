@@ -1,6 +1,6 @@
-use std::ptr::{NonNull, drop_in_place};
+use std::ptr::NonNull;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::{mem, ptr};
+use std::ptr;
 
 use parking_lot::{Mutex, RwLock};
 

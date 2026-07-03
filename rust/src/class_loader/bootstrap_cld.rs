@@ -15,7 +15,7 @@ use crate::{
     class_parser::class_file::ClassFile,
     oops::{
         array_klass::ArrayKlass,
-        desc::{FieldDesc, FieldElemType},
+        desc::FieldDesc,
         klass::Klass,
         normal_klass::NormalKlass,
         oop_handle::{KLASS_OOP_STORAGE_ID, OOPHandle},
