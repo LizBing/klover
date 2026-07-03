@@ -1,9 +1,11 @@
-use std::{marker::PhantomData, ptr::NonNull};
+use std::marker::PhantomData;
+use std::ptr::null;
 
+use crate::oops::acc_flags::AccFlags;
+use crate::oops::cp_entry::CPEntry;
 use crate::oops::desc::FieldDesc;
 use crate::oops::oop_handle::ObjPtr;
-use crate::oops::{attr::CodeAttr, method::Method, normal_klass::NormalKlass, oop_handle::ObjDesc};
-use crate::oops::acc_flags::AccFlags;
+use crate::oops::{attr::CodeAttr, method::Method, normal_klass::NormalKlass};
 
 /// 一个 JVM 栈槽。  long / double 占据两个相邻槽（高 32 位在低地址）。
 pub type StackSlot = i32;
@@ -23,13 +25,13 @@ pub enum Flow {
 }
 
 /// 方法返回值。
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum ReturnValue {
     Int(i32),
     Long(i64),
     Float(f32),
     Double(f64),
-    Ref(NonNull<ObjDesc>),
+    Ref(ObjPtr),
 }
 
 // ── 栈帧 ──────────────────────────────────────────────────────────────
@@ -61,19 +63,19 @@ pub(super) struct Registers {
     /// 程序计数器。
     pub pc: *mut u8,
 
-    pub klass: NonNull<NormalKlass>,
-    pub method: NonNull<Method>,
+    pub klass: *const NormalKlass,
+    pub method: *const Method,
 }
 
 impl Registers {
     pub fn code(&self) -> &CodeAttr {
-        unsafe { self.method.as_ref().code.as_ref().unwrap_unchecked() }
+        unsafe { (*self.method).code.as_ref().unwrap_unchecked() }
     }
 
     /// 读取当前类常量池索引处的条目。
     #[inline]
-    pub(super) fn cp_get(&self, idx: usize) -> &crate::oops::cp_entry::CPEntry {
-        unsafe { self.klass.as_ref().cp_get(idx) }
+    pub(super) fn cp_get(&self, idx: usize) -> &CPEntry {
+        unsafe { (*self.klass).cp_get(idx) }
     }
 }
 
@@ -115,15 +117,17 @@ impl Interpreter {
     /// 创建一个拥有 `stack_words` 个槽的解释器栈。
     pub fn new(stack_words: usize) -> Self {
         let stack = vec![0i32; stack_words].into_boxed_slice();
+
         // 占位寄存器——真正的值由第一次 invoke 填入。
         let regs = Registers {
             __: PhantomData,
             bp: std::ptr::null_mut(),
             sp: std::ptr::null_mut(),
             pc: std::ptr::null_mut(),
-            klass: unsafe { NonNull::new_unchecked(1usize as *mut NormalKlass) },
-            method: unsafe { NonNull::new_unchecked(1usize as *mut Method) },
+            klass: null(),
+            method: null(),
         };
+
         Self {
             stack,
             frames: Vec::new(),
@@ -136,20 +140,19 @@ impl Interpreter {
     /// `args` 按槽给出（long / double 占两槽，高 32 位在低地址），顺序与方法描述符一致。
     pub fn invoke_static(
         &mut self,
-        klass: NonNull<NormalKlass>,
-        method: NonNull<Method>,
+        klass: &NormalKlass,
+        method: &Method,
         args: &[StackSlot],
     ) -> InvokeResult {
-        let m = unsafe { method.as_ref() };
-        if !m.acc_flags.contains(AccFlags::ACC_STATIC) {
+        if !method.acc_flags.contains(AccFlags::ACC_STATIC) {
             return Err(InvokeError::NotStatic);
         }
-        let code = m.code.as_ref().ok_or(InvokeError::NoCode)?;
+        let code = method.code.as_ref().ok_or(InvokeError::NoCode)?;
         let max_locals = code.max_locals as usize;
         let max_stack = code.max_stack as usize;
 
         // 局部变量区：实参 + 编译器补充的额外局部变量槽。
-        let arg_slot_count = Self::arg_slot_count(unsafe { klass.as_ref() }, m);
+        let arg_slot_count = Self::arg_slot_count(&method);
         if args.len() != arg_slot_count {
             return Err(InvokeError::ArgCountMismatch {
                 expected: arg_slot_count,
@@ -219,7 +222,7 @@ impl Interpreter {
     }
 
     /// 计算静态方法的实参 slot 数（long / double 算 2）。
-    fn arg_slot_count(_klass: &NormalKlass, method: &Method) -> usize {
+    fn arg_slot_count(method: &Method) -> usize {
         method
             .desc
             .params_desc
@@ -252,6 +255,25 @@ impl Interpreter {
     /// 当前寄存器组的引用。
     pub(super) fn regs(&mut self) -> &mut Registers {
         &mut self.regs
+    }
+
+    /// 压入一个栈槽。  sp 先减 1 再写入（栈向低地址增长）。
+    #[inline]
+    pub(super) fn push_slot(&mut self, v: StackSlot) {
+        unsafe {
+            self.regs.sp = self.regs.sp.sub(1);
+            *self.regs.sp = v;
+        }
+    }
+
+    /// 弹出一个栈槽。
+    #[inline]
+    pub(super) fn pop_slot(&mut self) -> StackSlot {
+        unsafe {
+            let v = *self.regs.sp;
+            self.regs.sp = self.regs.sp.add(1);
+            v
+        }
     }
 
     /// 从字节码读取 1 个 u8 操作数并推进 pc。

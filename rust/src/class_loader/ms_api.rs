@@ -1,4 +1,4 @@
-use std::ops::{self, Deref, DerefMut};
+use std::ops::{Deref, DerefMut};
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::ptr;

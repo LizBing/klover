@@ -3,9 +3,9 @@
 use std::ptr::NonNull;
 
 #[repr(C)]
-pub(crate) struct ObjDesc {
-    pub(crate) markword: u64,
-    pub(crate) payload: [u8; 0],
+pub struct ObjDesc {
+    pub markword: u64,
+    pub payload: [u8; 0],
 }
 
 pub(crate) type ObjPtr = *mut ObjDesc;

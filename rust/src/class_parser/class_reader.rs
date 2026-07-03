@@ -27,10 +27,7 @@ impl ClassReader<'_> {
     }
 
     pub fn read_u16(&mut self) -> ParseResult<u16> {
-        let low = self.read_u8()?;
-        let high = self.read_u8()?;
-
-        Ok(u16::from_be_bytes([low, high]))
+        Ok(u16::from_be_bytes([self.read_u8()?, self.read_u8()?]))
     }
 
     pub fn read_u32(&mut self) -> ParseResult<u32> {
