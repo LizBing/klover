@@ -468,6 +468,110 @@ fn array_mixed() {
     }
 }
 
+// ── invokeinterface 测试 ───────────────────────────────────────────────
+
+/// `IntAdder.interfaceTest()`：new IntAdder + invokeinterface Adder.add。
+#[test]
+fn iface_basic() {
+    let classes = concat!(env!("CARGO_MANIFEST_DIR"), "/../test_data/classes");
+    init_runtime(classes);
+
+    let klass = BootstrapCLD::find_class("IntAdder").expect("load IntAdder");
+    let normal = klass.as_normal().expect("IntAdder is not Normal");
+    let method = find_static_method(normal, "interfaceTest", "()I");
+
+    let mut interp = Interpreter::new(4096);
+    let ret = interp
+        .invoke_static(normal, method, &[])
+        .expect("invoke_static");
+    match ret {
+        Some(ReturnValue::Int(v)) => assert_eq!(v, 7),
+        other => panic!("expected Int(7), got {:?}", other),
+    }
+}
+
+/// `IntAdder.nestedInterfaceTest()`：接口引用作为参数传递后仍能正确派发。
+#[test]
+fn iface_nested() {
+    let classes = concat!(env!("CARGO_MANIFEST_DIR"), "/../test_data/classes");
+    init_runtime(classes);
+
+    let klass = BootstrapCLD::find_class("IntAdder").expect("load IntAdder");
+    let normal = klass.as_normal().expect("IntAdder is not Normal");
+    let method = find_static_method(normal, "nestedInterfaceTest", "()I");
+
+    let mut interp = Interpreter::new(4096);
+    let ret = interp
+        .invoke_static(normal, method, &[])
+        .expect("invoke_static");
+    match ret {
+        Some(ReturnValue::Int(v)) => assert_eq!(v, 30),
+        other => panic!("expected Int(30), got {:?}", other),
+    }
+}
+
+// ── instanceof / checkcast 测试 ────────────────────────────────────────
+
+/// `ObjTest.instanceofTest()`：new ObjTest 后 instanceof ObjTest → true(1)。
+#[test]
+fn instanceof_obj() {
+    let classes = concat!(env!("CARGO_MANIFEST_DIR"), "/../test_data/classes");
+    init_runtime(classes);
+
+    let klass = BootstrapCLD::find_class("ObjTest").expect("load ObjTest");
+    let normal = klass.as_normal().expect("ObjTest is not Normal");
+    let method = find_static_method(normal, "instanceofTest", "()I");
+
+    let mut interp = Interpreter::new(4096);
+    let ret = interp
+        .invoke_static(normal, method, &[])
+        .expect("invoke_static");
+    match ret {
+        Some(ReturnValue::Int(v)) => assert_eq!(v, 1),
+        other => panic!("expected Int(1), got {:?}", other),
+    }
+}
+
+/// `ObjTest.instanceofNullTest()`：null instanceof ObjTest → false(0)。
+#[test]
+fn instanceof_null() {
+    let classes = concat!(env!("CARGO_MANIFEST_DIR"), "/../test_data/classes");
+    init_runtime(classes);
+
+    let klass = BootstrapCLD::find_class("ObjTest").expect("load ObjTest");
+    let normal = klass.as_normal().expect("ObjTest is not Normal");
+    let method = find_static_method(normal, "instanceofNullTest", "()I");
+
+    let mut interp = Interpreter::new(4096);
+    let ret = interp
+        .invoke_static(normal, method, &[])
+        .expect("invoke_static");
+    match ret {
+        Some(ReturnValue::Int(v)) => assert_eq!(v, 0),
+        other => panic!("expected Int(0), got {:?}", other),
+    }
+}
+
+/// `ObjTest.checkcastTest()`：Object 引用 cast 成 ObjTest 后调 sum()。
+#[test]
+fn checkcast_obj() {
+    let classes = concat!(env!("CARGO_MANIFEST_DIR"), "/../test_data/classes");
+    init_runtime(classes);
+
+    let klass = BootstrapCLD::find_class("ObjTest").expect("load ObjTest");
+    let normal = klass.as_normal().expect("ObjTest is not Normal");
+    let method = find_static_method(normal, "checkcastTest", "()I");
+
+    let mut interp = Interpreter::new(4096);
+    let ret = interp
+        .invoke_static(normal, method, &[])
+        .expect("invoke_static");
+    match ret {
+        Some(ReturnValue::Int(v)) => assert_eq!(v, 7),
+        other => panic!("expected Int(7), got {:?}", other),
+    }
+}
+
 // ── 阶段 3：浮点 / 转换 / 比较 / 控制流 ─────────────────────────────────
 
 /// Helper：调用 Wide 的指定 static 方法并断言返回 Int。

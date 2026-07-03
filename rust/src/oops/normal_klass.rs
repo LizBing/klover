@@ -529,4 +529,20 @@ impl NormalKlass {
             None => None,
         }
     }
+
+    /// 判断 `self` 是否是 `target` 的子类（或就是 `target` 本身）。
+    ///
+    /// 沿继承链向上，用 MSRef 指针相等判断。  仅支持普通类；
+    /// 接口关系（implements）不走继承链，MVP 不支持。
+    pub fn is_subclass_of(&self, target: &NormalKlass) -> bool {
+        let self_ref = crate::class_loader::ms_api::MSRef::from(self as &NormalKlass);
+        let target_ref = crate::class_loader::ms_api::MSRef::from(target as &NormalKlass);
+        if self_ref.equals(&target_ref) {
+            return true;
+        }
+        match self.get_super() {
+            Some(s) => s.is_subclass_of(target),
+            None => false,
+        }
+    }
 }

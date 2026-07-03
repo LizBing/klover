@@ -323,6 +323,12 @@ impl Interpreter {
         }
     }
 
+    /// 读栈顶但不弹出。
+    #[inline]
+    pub(super) fn peek_slot(&self) -> StackSlot {
+        unsafe { *self.regs.sp }
+    }
+
     /// 压入一个 long / double（2 槽）。  约定：高 32 位在低地址。
     #[inline]
     pub(super) fn push_long(&mut self, v: DStackSlot) {

@@ -324,6 +324,7 @@ fn init_instruction_table() -> [InsFnType; INSTRUCTION_COUNT] {
     t[0xb6] = invokevirtual;
     t[0xb7] = invokespecial;
     t[0xb8] = invokestatic_handler;
+    t[0xb9] = invokeinterface;
 
     // ── 字段访问 ───────────────────────────────────────────────────
     t[0xb2] = getstatic;
@@ -348,6 +349,10 @@ fn init_instruction_table() -> [InsFnType; INSTRUCTION_COUNT] {
     t[0x54] = bastore;
     t[0x55] = castore;
     t[0x56] = sastore;
+
+    // ── 类型检查 ───────────────────────────────────────────────────
+    t[0xc0] = checkcast;
+    t[0xc1] = instanceof;
 
     // ── 返回 ────────────────────────────────────────────────────────
     t[0xac] = ireturn;
@@ -1694,23 +1699,67 @@ fn invokevirtual(interp: &mut Interpreter) -> Flow {
         _ => panic!("invokevirtual: CP[{}] is not a MethodRef", idx),
     };
 
-    // 先解析一次拿到 method 的描述符信息（用于实参 slot 计数）。
-    // 这里解析出的方法只用于获取 name+desc 和参数布局，实际派发按运行时类型。
+    // 解析出 name+desc 和实参 slot 数。
     let resolved_msref =
         resolve_method_ref(caller, method_ref).expect("invokevirtual: resolve failed");
     let resolved: &Method = &resolved_msref;
     let mname = resolved.name.clone();
     let mdesc = resolved.desc.raw.clone();
-
-    // 收集实参（含 this）。栈顶是最后一个参数，下面是 this。
     let n = Interpreter::instance_arg_slot_count(resolved);
+
+    invoke_dispatched(interp, &mname, &mdesc, n)
+}
+
+/// `invokeinterface`：接口方法派发。
+///
+/// 与 invokevirtual 类似，但 CP 条目是 InterfaceMethodRef，
+/// 且字节码多一个 count 字节（历史遗留，读取后丢弃）。
+///
+/// MVP 限制：不支持 default method（需要遍历 implements 列表）。
+fn invokeinterface(interp: &mut Interpreter) -> Flow {
+    let idx = interp.read_u16() as usize;
+    let _count = interp.read_u8(); // 历史遗留的 arg slot 数，MVP 不用
+    let caller = unsafe { &*interp.regs().klass };
+    let method_ref = match caller.cp_get(idx) {
+        CPEntry::InterfaceMethodRef(e) => e,
+        CPEntry::MethodRef(e) => e, // 宽容：有些编译器对接口方法也用 MethodRef
+        _ => panic!(
+            "invokeinterface: CP[{}] is not a MethodRef/InterfaceMethodRef",
+            idx
+        ),
+    };
+
+    let resolved_msref =
+        resolve_method_ref(caller, method_ref).expect("invokeinterface: resolve failed");
+    let resolved: &Method = &resolved_msref;
+    let mname = resolved.name.clone();
+    let mdesc = resolved.desc.raw.clone();
+    let n = Interpreter::instance_arg_slot_count(resolved);
+
+    invoke_dispatched(interp, &mname, &mdesc, n)
+}
+
+/// invokevirtual / invokeinterface 共用的虚派发核心。
+///
+/// 栈布局（顶在上）：..., argN, ..., arg1, this
+/// `n` 是实参总 slot 数（含 this）。
+///
+/// 从 this 对应的运行时 klass 开始线性查找 name+desc。
+// TODO: default method 需要遍历 implements 列表。
+fn invoke_dispatched(
+    interp: &mut Interpreter,
+    mname: &crate::oops::symbol_table::SymbolHandle,
+    mdesc: &crate::oops::symbol_table::SymbolHandle,
+    n: usize,
+) -> Flow {
+    // 收集实参（含 this）。栈顶是最后一个参数，下面是 this。
     let mut args = Vec::with_capacity(n);
     for _ in 0..n {
         args.push(interp.pop_slot());
     }
     args.reverse();
     let this_nptr = args[0] as u32;
-    assert!(this_nptr != 0, "invokevirtual on null");
+    assert!(this_nptr != 0, "invoke on null");
 
     // 从对象 markword 解出运行时 klass。
     let obj_ptr = decode_oop(this_nptr);
@@ -1718,25 +1767,25 @@ fn invokevirtual(interp: &mut Interpreter) -> Flow {
     let klass_ref = unsafe { klass_from_markword(markword) };
     let runtime_klass: &NormalKlass = match &*klass_ref {
         Klass::Normal(n) => n,
-        _ => panic!("invokevirtual: object klass is not Normal"),
+        _ => panic!("invoke: object klass is not Normal"),
     };
 
     // 在运行时 klass 上线性查找方法。
     let mut cur: Option<&NormalKlass> = Some(runtime_klass);
     let target: &Method = loop {
         if let Some(k) = cur {
-            if let Some(m) = k.find_method(&mname, &mdesc) {
+            if let Some(m) = k.find_method(mname, mdesc) {
                 break m;
             }
             cur = k.get_super();
         } else {
-            panic!("invokevirtual: method not found in runtime type");
+            panic!("invoke: method not found in runtime type");
         }
     };
 
     let ret = interp
         .invoke_instance(runtime_klass, target, &args)
-        .expect("invokevirtual: invocation failed");
+        .expect("invoke: invocation failed");
     push_return_value(interp, ret);
     Flow::Continue
 }
@@ -2015,5 +2064,79 @@ fn sastore(interp: &mut Interpreter) -> Flow {
     let (obj_ptr, index, _) = pop_array_index(interp);
     let p = unsafe { element_addr(obj_ptr, index, 2) } as *mut i16;
     unsafe { *p = v };
+    Flow::Continue
+}
+
+// ── 类型检查 handler ──────────────────────────────────────────────────
+//
+// instanceof / checkcast 共用类型判断逻辑：
+//   1. 解析 CP ClassRef → 目标 Klass
+//   2. 解对象的运行时 klass
+//   3. 判断运行时 klass 是否是目标类的子类（仅普通类，接口留 TODO）
+//
+// null 处理：instanceof 返回 false，checkcast 通过。
+
+/// 判断对象是否是目标类型的实例（仅普通类）。
+///
+/// `obj_nptr == 0` 表示 null，返回 false。
+// TODO: 接口类型判断（遍历 implements 列表）
+fn is_instance_of(obj_nptr: u32, target_klass: &crate::class_loader::ms_api::MSRef<Klass>) -> bool {
+    if obj_nptr == 0 {
+        return false;
+    }
+    let obj_ptr = decode_oop(obj_nptr);
+    let markword = unsafe { (*obj_ptr).markword };
+    let obj_klass_ref = unsafe { klass_from_markword(markword) };
+    let obj_normal = match &*obj_klass_ref {
+        Klass::Normal(n) => n,
+        _ => return false, // 数组对象的 instanceof 留 TODO
+    };
+    let target_normal = match target_klass.as_normal() {
+        Some(n) => n,
+        None => return false, // 目标是接口/数组，MVP 不支持
+    };
+    obj_normal.is_subclass_of(target_normal)
+}
+
+/// `instanceof`：弹对象，push int（1=true, 0=false）。
+fn instanceof(interp: &mut Interpreter) -> Flow {
+    let idx = interp.read_u16() as usize;
+    let caller = unsafe { &*interp.regs().klass };
+    let class_entry = match caller.cp_get(idx) {
+        CPEntry::Class(e) => e,
+        _ => panic!("instanceof: CP[{}] is not a Class", idx),
+    };
+    let target_klass = resolve_class_ref(caller, class_entry).expect("instanceof: resolve failed");
+
+    let obj_nptr = interp.pop_slot() as u32;
+    let result = if is_instance_of(obj_nptr, &target_klass) {
+        1
+    } else {
+        0
+    };
+    interp.push_slot(result);
+    Flow::Continue
+}
+
+/// `checkcast`：不修改栈。  失败时 panic（TODO: ClassCastException）。
+fn checkcast(interp: &mut Interpreter) -> Flow {
+    let idx = interp.read_u16() as usize;
+    let caller = unsafe { &*interp.regs().klass };
+    let class_entry = match caller.cp_get(idx) {
+        CPEntry::Class(e) => e,
+        _ => panic!("checkcast: CP[{}] is not a Class", idx),
+    };
+    let target_klass = resolve_class_ref(caller, class_entry).expect("checkcast: resolve failed");
+
+    let obj_nptr = interp.peek_slot() as u32;
+    if obj_nptr == 0 {
+        // null 可以 cast 到任何引用类型。
+        return Flow::Continue;
+    }
+    // TODO 阶段 5：ClassCastException
+    assert!(
+        is_instance_of(obj_nptr, &target_klass),
+        "checkcast: object is not an instance of target class"
+    );
     Flow::Continue
 }

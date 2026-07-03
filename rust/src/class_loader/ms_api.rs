@@ -348,6 +348,11 @@ impl<T> MSRef<T> {
             raw: unsafe { NonNull::new_unchecked(ptr) },
         }
     }
+
+    /// 判断两个 MSRef 是否指向同一个对象（指针相等）。
+    pub fn equals<U>(&self, other: &MSRef<U>) -> bool {
+        self.raw.as_ptr() as *const () == other.raw.as_ptr() as *const ()
+    }
 }
 
 impl<T> From<&MSBox<T>> for MSRef<T> {
