@@ -4,6 +4,11 @@ pub enum ResolveError {
     MismatchAttrType,
     InvalidDesc { raw: String },
     UnknownRefKind { kind: u8 },
+
+    // 运行时解析错误（CP 引用解析阶段）
+    ClassNotFound,
+    MethodNotFound,
+    FieldNotFound,
 }
 
 pub type ResolveResult<T> = Result<T, ResolveError>;

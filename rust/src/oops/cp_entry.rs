@@ -1,9 +1,17 @@
 use std::{mem, sync::OnceLock};
 
 use crate::{
-    class_loader::ms_api::MSRef, class_parser::cp_info::ConstantPoolInfo, oops::{
-        desc::MethodDesc, field::Field, klass::Klass, method::Method, oop_handle::{KLASS_OOP_STORAGE_ID, OOPHandle}, resolve_error::{ResolveError, ResolveResult}, symbol_table::{SymbolHandle, SymbolTable}
-    }
+    class_loader::ms_api::MSRef,
+    class_parser::cp_info::ConstantPoolInfo,
+    oops::{
+        desc::MethodDesc,
+        field::Field,
+        klass::Klass,
+        method::Method,
+        oop_handle::{KLASS_OOP_STORAGE_ID, OOPHandle},
+        resolve_error::{ResolveError, ResolveResult},
+        symbol_table::{SymbolHandle, SymbolTable},
+    },
 };
 
 #[derive(Debug)]
@@ -13,6 +21,34 @@ pub struct CPRefEntry<T> {
     desc: SymbolHandle,
 
     resolved: OnceLock<MSRef<T>>,
+}
+
+impl<T> CPRefEntry<T> {
+    /// 声明该引用的类的内部名（例如 `java/lang/String`）。
+    pub fn class_name(&self) -> &SymbolHandle {
+        &self.class_name
+    }
+
+    /// 字段或方法名。
+    pub fn name(&self) -> &SymbolHandle {
+        &self.name
+    }
+
+    /// 字段或方法描述符。
+    pub fn desc(&self) -> &SymbolHandle {
+        &self.desc
+    }
+
+    /// 已解析出的目标（字段 / 方法）。  未解析时返回 `None`。
+    pub fn resolved(&self) -> Option<&MSRef<T>> {
+        self.resolved.get()
+    }
+
+    /// 尝试记录解析结果。  返回 `Ok(())` 表示首次设置成功；
+    /// `Err(value)` 表示已经被别人先解析过，返回传入的值供调用者丢弃。
+    pub fn try_resolve(&self, value: MSRef<T>) -> Result<(), MSRef<T>> {
+        self.resolved.set(value)
+    }
 }
 
 fn resolve_name_and_type(
@@ -132,21 +168,17 @@ fn resolve_method_handle_entry<T>(
         let entry = CPRefEntry::<T>::from(info, cp, parsed_cp)?;
 
         cp[idx] = Some(match info {
-            ConstantPoolInfo::FieldrefInfo { .. } => CPEntry::FieldRef(
-                unsafe {
-                    mem::transmute_copy::<CPRefEntry<T>, CPRefEntry<Field>>(&entry)
-                },
-            ),
-            ConstantPoolInfo::MethodrefInfo { .. } => CPEntry::MethodRef(
-                unsafe {
-                    mem::transmute_copy::<CPRefEntry<T>, CPRefEntry<Method>>(&entry)
-                },
-            ),
-            ConstantPoolInfo::InterfaceMethodrefInfo { .. } => CPEntry::InterfaceMethodRef(
-                unsafe {
+            ConstantPoolInfo::FieldrefInfo { .. } => CPEntry::FieldRef(unsafe {
+                mem::transmute_copy::<CPRefEntry<T>, CPRefEntry<Field>>(&entry)
+            }),
+            ConstantPoolInfo::MethodrefInfo { .. } => CPEntry::MethodRef(unsafe {
+                mem::transmute_copy::<CPRefEntry<T>, CPRefEntry<Method>>(&entry)
+            }),
+            ConstantPoolInfo::InterfaceMethodrefInfo { .. } => {
+                CPEntry::InterfaceMethodRef(unsafe {
                     std::mem::transmute_copy::<CPRefEntry<T>, CPRefEntry<Method>>(&entry)
-                },
-            ),
+                })
+            }
             _ => return Err(ResolveError::MismatchCPType),
         });
         // Prevent double-drop: ownership has been transferred via transmute_copy.
@@ -154,17 +186,13 @@ fn resolve_method_handle_entry<T>(
     }
 
     let entry = match cp[idx].as_ref() {
-        Some(CPEntry::FieldRef(x)) => {
-            x as *const CPRefEntry<Field> as *const CPRefEntry<T>
-        }
-        Some(CPEntry::MethodRef(x)) => {
-            x as *const CPRefEntry<Method> as *const CPRefEntry<T>
-        }
-        
+        Some(CPEntry::FieldRef(x)) => x as *const CPRefEntry<Field> as *const CPRefEntry<T>,
+        Some(CPEntry::MethodRef(x)) => x as *const CPRefEntry<Method> as *const CPRefEntry<T>,
+
         Some(CPEntry::InterfaceMethodRef(x)) => {
             x as *const CPRefEntry<Method> as *const CPRefEntry<T>
         }
-        
+
         _ => return Err(ResolveError::MismatchCPType),
     };
 
@@ -249,7 +277,7 @@ pub enum CPEntry {
 
     Float(f32),
 
-    Long (i64),
+    Long(i64),
 
     Double(f64),
 
@@ -264,7 +292,7 @@ pub enum CPEntry {
 
     MethodType {
         raw: SymbolHandle,
-        desc: MethodDesc
+        desc: MethodDesc,
     },
 
     // Ignore for now.
@@ -297,12 +325,10 @@ fn resolve_class_symbol(
             ConstantPoolInfo::ClassInfo { name_index } => {
                 let name = resolve_symbol(*name_index as usize, cp, parsed_cp)?;
 
-                cp[idx] = Some(CPEntry::Class(
-                    ClassCPEntry {
-                        name: name.clone(),
-                        resolved: OnceLock::new(),
-                    }
-                ));
+                cp[idx] = Some(CPEntry::Class(ClassCPEntry {
+                    name: name.clone(),
+                    resolved: OnceLock::new(),
+                }));
 
                 Ok(name)
             }
@@ -347,12 +373,10 @@ impl CPEntry {
         match info {
             ConstantPoolInfo::ClassInfo { name_index } => {
                 let name = resolve_symbol(*name_index as usize, cp, parsed_cp)?;
-                Ok(Some(Self::Class(
-                    ClassCPEntry {
-                        name,
-                        resolved: OnceLock::new()
-                    }
-                )))
+                Ok(Some(Self::Class(ClassCPEntry {
+                    name,
+                    resolved: OnceLock::new(),
+                })))
             }
 
             ConstantPoolInfo::FieldrefInfo { .. } => {
@@ -382,12 +406,12 @@ impl CPEntry {
                 }
             }
 
-            ConstantPoolInfo::StringInfo { string_index } => Ok(Some(Self::StringConstant(
-                StringCPEntry {
+            ConstantPoolInfo::StringInfo { string_index } => {
+                Ok(Some(Self::StringConstant(StringCPEntry {
                     raw: resolve_symbol(*string_index as usize, cp, parsed_cp)?,
                     resolved: OOPHandle::new(KLASS_OOP_STORAGE_ID),
-                },
-            ))),
+                })))
+            }
 
             ConstantPoolInfo::IntegerInfo { value } => Ok(Some(Self::Integer(*value))),
 
@@ -427,7 +451,7 @@ impl CPEntry {
                 let raw = resolve_symbol(*desc_index as usize, cp, parsed_cp)?;
                 Ok(Some(Self::MethodType {
                     raw: raw.clone(),
-                    desc: MethodDesc::from(raw.utf8())?
+                    desc: MethodDesc::from(raw.utf8())?,
                 }))
             }
 

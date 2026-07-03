@@ -5,6 +5,7 @@
 #include "obj_model/oop_hierarchy.h"
 #include "utils/global_defs.h"
 #include <stdatomic.h>
+#include <string.h>
 
 static VirtSpace* VS = NULL;
 static HeapWord* _Atomic BUMPING_TOP = NULL;
@@ -37,6 +38,12 @@ objptr_t gcheap_alloc(Klass* klass_ptr, size_t word_size) {
     objptr_t obj = (objptr_t)cur_top;
 
     obj->markword = mw_default(comp_ptr_encode(METASPACE_BASE, klass_ptr));
-    
+
+    /* Zero the payload (everything after the markword) so all fields start
+     * at their default values (0 / null).  Required by the JVM spec and
+     * keeps GC from scanning stale data. */
+    size_t payload_bytes = (word_size * sizeof(HeapWord)) - sizeof(ObjDesc);
+    memset(obj->payload, 0, payload_bytes);
+
     return obj;
 }

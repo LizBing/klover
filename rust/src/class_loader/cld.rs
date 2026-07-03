@@ -4,11 +4,18 @@ use dashmap::{DashMap, mapref::entry::Entry};
 
 use crate::{
     class_loader::{
-        cld_map, load_error::{LoadError, LoadResult}, ms_api::{MSAllocator, MSBox, MSRef}
+        bootstrap_cld::BootstrapCLD,
+        cld_map,
+        load_error::{LoadError, LoadResult},
+        ms_api::{MSAllocator, MSBox, MSRef},
     },
     class_parser::{class_file::ClassFile, cp_info::ConstantPoolInfo},
     oops::{
-        klass::Klass, normal_klass::NormalKlass, oop_handle::{CLD_MIRROR_STORAGE_ID, OOPHandle}, resolve_error::ResolveError, symbol_table::{SymbolHandle, SymbolTable}
+        klass::Klass,
+        normal_klass::NormalKlass,
+        oop_handle::{CLD_MIRROR_STORAGE_ID, OOPHandle},
+        resolve_error::ResolveError,
+        symbol_table::{SymbolHandle, SymbolTable},
     },
 };
 
@@ -66,13 +73,14 @@ impl ClassLoaderData {
         };
 
         let name_utf8 = match &cf.constant_pool[cf.this_class as usize] {
-            ConstantPoolInfo::ClassInfo { name_index } => 
+            ConstantPoolInfo::ClassInfo { name_index } => {
                 match &cf.constant_pool[*name_index as usize] {
                     ConstantPoolInfo::Utf8Info { utf8 } => utf8.clone(),
-                    _ => return Err(LoadError::Resolve(ResolveError::MismatchCPType))
-                },
+                    _ => return Err(LoadError::Resolve(ResolveError::MismatchCPType)),
+                }
+            }
 
-            _ => return Err(LoadError::Resolve(ResolveError::MismatchCPType))
+            _ => return Err(LoadError::Resolve(ResolveError::MismatchCPType)),
         };
         // field desc
         let name = SymbolTable::intern(name_utf8.as_str());
@@ -94,19 +102,23 @@ impl ClassLoaderData {
             Err(e) => return Err(LoadError::Resolve(e)),
         };
         let normal = unsafe { klass.as_normal().unwrap_unchecked() };
-        
+
         match super_entry {
             Some(x) => {
                 let super_klass = self.load_class(x.name.utf8())?;
                 x.resolved.set(super_klass.clone()).unwrap();
-                
+
                 let super_normal = super_klass.as_normal().unwrap();
                 normal.set_super(Some(super_normal.into()));
-            },
+            }
 
-            None => return Err(LoadError::NoSuper { class_name: name_utf8 })
+            None => {
+                return Err(LoadError::NoSuper {
+                    class_name: name_utf8,
+                });
+            }
         }
-        
+
         let r = vacant.insert(klass);
 
         Ok(Self::klass_ptr(r.deref()))
@@ -114,17 +126,22 @@ impl ClassLoaderData {
 
     pub fn find_loaded_class(&self, name: &str) -> Option<NonNull<Klass>> {
         let sym = SymbolTable::intern(name);
-        
+
         match self.klasses.get(&sym) {
             Some(x) => Some(Self::klass_ptr(x.deref())),
-            None => None
+            None => None,
         }
     }
 }
 
 impl ClassLoaderData {
-    // invoke self.mirror.loadClass()
+    /// 加载指定名称的类。
+    ///
+    /// 按双亲委派模型：先委派给父加载器，最终落到 bootstrap。
+    /// 当前实现只是把所有请求委派给 `BootstrapCLD`（尚未支持用户自定义 ClassLoader
+    /// 的 `loadClass` 覆盖）。未来接入 native `ClassLoader.loadClass` 时重写。
     pub fn load_class(&self, name: &str) -> LoadResult<MSRef<Klass>> {
-        unimplemented!()
+        // TODO: 真正的双亲委派（调用 self.mirror 对应的 java/lang/ClassLoader.loadClass）。
+        BootstrapCLD::find_class(name)
     }
 }
