@@ -10,7 +10,7 @@ public abstract class ClassLoader {
         native_cld_ptr = newNativeCLD();
     }
 
-    public Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+    public Class<?> loadClass(String name) throws ClassNotFoundException {
         Class<?> c = findLoadedClass(name);
         if (c == null) {
             try {
