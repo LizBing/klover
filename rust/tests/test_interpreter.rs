@@ -314,3 +314,287 @@ fn wide_inc5() {
         other => panic!("expected Int(2147483647), got {:?}", other),
     }
 }
+
+// ── 阶段 3：浮点 / 转换 / 比较 / 控制流 ─────────────────────────────────
+
+/// Helper：调用 Wide 的指定 static 方法并断言返回 Int。
+fn invoke_wide_int(name: &str, desc: &str, args: &[StackSlot], expected: i32) {
+    let classes = concat!(env!("CARGO_MANIFEST_DIR"), "/../test_data/classes");
+    init_runtime(classes);
+
+    let klass = BootstrapCLD::find_class("Wide").expect("load Wide");
+    let normal = klass.as_normal().expect("Wide is not Normal");
+    let method = find_static_method(normal, name, desc);
+
+    let mut interp = Interpreter::new(1024);
+    let ret = interp
+        .invoke_static(normal, method, args)
+        .expect("invoke_static");
+    match ret {
+        Some(ReturnValue::Int(v)) => assert_eq!(v, expected),
+        other => panic!("{:?}: expected Int({}), got {:?}", name, expected, other),
+    }
+}
+
+/// Helper：调用 ControlFlow 的指定 static 方法并断言返回 Int。
+fn invoke_control_flow(name: &str, desc: &str, args: &[StackSlot], expected: i32) {
+    let classes = concat!(env!("CARGO_MANIFEST_DIR"), "/../test_data/classes");
+    init_runtime(classes);
+
+    let klass = BootstrapCLD::find_class("ControlFlow").expect("load ControlFlow");
+    let normal = klass.as_normal().expect("ControlFlow is not Normal");
+    let method = find_static_method(normal, name, desc);
+
+    let mut interp = Interpreter::new(1024);
+    let ret = interp
+        .invoke_static(normal, method, args)
+        .expect("invoke_static");
+    match ret {
+        Some(ReturnValue::Int(v)) => assert_eq!(v, expected),
+        other => panic!("{:?}: expected Int({}), got {:?}", name, expected, other),
+    }
+}
+
+#[test]
+fn cf_sum_10() {
+    invoke_control_flow("sum", "(I)I", &[10], 55);
+} // 1+2+...+10
+
+#[test]
+fn cf_sum_0() {
+    invoke_control_flow("sum", "(I)I", &[0], 0);
+} // while 不执行
+
+#[test]
+fn cf_max_ge() {
+    invoke_control_flow("max", "(II)I", &[5, 3], 5);
+}
+
+#[test]
+fn cf_max_lt() {
+    invoke_control_flow("max", "(II)I", &[3, 5], 5);
+}
+
+#[test]
+fn cf_count_to() {
+    invoke_control_flow("countTo", "(I)I", &[7], 7);
+}
+
+#[test]
+fn cf_factorial_5() {
+    invoke_control_flow("factorial", "(I)I", &[5], 120);
+}
+
+#[test]
+fn cf_first_even_from_odd() {
+    invoke_control_flow("firstEven", "(I)I", &[3], 4);
+}
+
+#[test]
+fn cf_first_even_from_even() {
+    invoke_control_flow("firstEven", "(I)I", &[8], 8);
+}
+
+/// Helper：调用 Wide 的指定 static float 方法并断言返回 Float。
+fn invoke_wide_float(name: &str, desc: &str, args: &[StackSlot], expected: f32) {
+    let classes = concat!(env!("CARGO_MANIFEST_DIR"), "/../test_data/classes");
+    init_runtime(classes);
+
+    let klass = BootstrapCLD::find_class("Wide").expect("load Wide");
+    let normal = klass.as_normal().expect("Wide is not Normal");
+    let method = find_static_method(normal, name, desc);
+
+    let mut interp = Interpreter::new(1024);
+    let ret = interp
+        .invoke_static(normal, method, args)
+        .expect("invoke_static");
+    match ret {
+        Some(ReturnValue::Float(v)) => assert!(
+            (v - expected).abs() < 1e-5,
+            "{:?}: expected {}, got {}",
+            name,
+            expected,
+            v
+        ),
+        other => panic!("{:?}: expected Float({}), got {:?}", name, expected, other),
+    }
+}
+
+/// Helper：调用 Wide 的指定 static double 方法并断言返回 Double。
+fn invoke_wide_double(name: &str, desc: &str, args: &[StackSlot], expected: f64) {
+    let classes = concat!(env!("CARGO_MANIFEST_DIR"), "/../test_data/classes");
+    init_runtime(classes);
+
+    let klass = BootstrapCLD::find_class("Wide").expect("load Wide");
+    let normal = klass.as_normal().expect("Wide is not Normal");
+    let method = find_static_method(normal, name, desc);
+
+    let mut interp = Interpreter::new(1024);
+    let ret = interp
+        .invoke_static(normal, method, args)
+        .expect("invoke_static");
+    match ret {
+        Some(ReturnValue::Double(v)) => assert!(
+            (v - expected).abs() < 1e-10,
+            "{:?}: expected {}, got {}",
+            name,
+            expected,
+            v
+        ),
+        other => panic!("{:?}: expected Double({}), got {:?}", name, expected, other),
+    }
+}
+
+fn float_slot(v: f32) -> StackSlot {
+    v.to_bits() as i32
+}
+
+fn double_slots(v: f64) -> [StackSlot; 2] {
+    let bits = v.to_bits() as i64;
+    long_slots(bits)
+}
+
+#[test]
+fn wide_fadd() {
+    invoke_wide_float("fadd", "(FF)F", &[float_slot(1.5), float_slot(2.5)], 4.0);
+}
+
+#[test]
+fn wide_fsub() {
+    invoke_wide_float("fsub", "(FF)F", &[float_slot(5.0), float_slot(1.5)], 3.5);
+}
+
+#[test]
+fn wide_fmul() {
+    invoke_wide_float("fmul", "(FF)F", &[float_slot(3.0), float_slot(4.0)], 12.0);
+}
+
+#[test]
+fn wide_fdiv() {
+    invoke_wide_float("fdiv", "(FF)F", &[float_slot(7.0), float_slot(2.0)], 3.5);
+}
+
+#[test]
+fn wide_fneg() {
+    invoke_wide_float("fneg", "(F)F", &[float_slot(3.5)], -3.5);
+}
+
+#[test]
+fn wide_dadd() {
+    let mut args = Vec::new();
+    args.extend_from_slice(&double_slots(1.5));
+    args.extend_from_slice(&double_slots(2.5));
+    invoke_wide_double("dadd", "(DD)D", &args, 4.0);
+}
+
+#[test]
+fn wide_dsub() {
+    let mut args = Vec::new();
+    args.extend_from_slice(&double_slots(5.0));
+    args.extend_from_slice(&double_slots(1.25));
+    invoke_wide_double("dsub", "(DD)D", &args, 3.75);
+}
+
+#[test]
+fn wide_dmul() {
+    let mut args = Vec::new();
+    args.extend_from_slice(&double_slots(3.0));
+    args.extend_from_slice(&double_slots(4.0));
+    invoke_wide_double("dmul", "(DD)D", &args, 12.0);
+}
+
+#[test]
+fn wide_ddiv() {
+    let mut args = Vec::new();
+    args.extend_from_slice(&double_slots(7.0));
+    args.extend_from_slice(&double_slots(2.0));
+    invoke_wide_double("ddiv", "(DD)D", &args, 3.5);
+}
+
+#[test]
+fn wide_dneg() {
+    invoke_wide_double("dneg", "(D)D", &double_slots(3.5), -3.5);
+}
+
+// 比较：lcmp / fcmp / dcmp 驱动分支
+#[test]
+fn wide_lcmp_lt() {
+    let mut args = Vec::new();
+    args.extend_from_slice(&long_slots(5));
+    args.extend_from_slice(&long_slots(10));
+    // lcmp(a,b) == -1，ifge 10 不跳，走 ldc -1
+    invoke_wide_long("lcmp", "(JJ)J", &args, -1);
+}
+
+#[test]
+fn wide_lcmp_eq() {
+    let mut args = Vec::new();
+    args.extend_from_slice(&long_slots(7));
+    args.extend_from_slice(&long_slots(7));
+    invoke_wide_long("lcmp", "(JJ)J", &args, 0);
+}
+
+#[test]
+fn wide_fbranch_gt() {
+    // fbranch(5.0, 3.0) → fcmpl 后 ifle 不跳 → iconst_1
+    invoke_wide_int("fbranch", "(FF)I", &[float_slot(5.0), float_slot(3.0)], 1);
+}
+
+#[test]
+fn wide_fbranch_lt() {
+    // fbranch(3.0, 5.0) → fcmpl ifle 跳；fcmpg ifge 不跳 → iconst_m1
+    invoke_wide_int("fbranch", "(FF)I", &[float_slot(3.0), float_slot(5.0)], -1);
+}
+
+#[test]
+fn wide_dbranch_gt() {
+    let mut args = Vec::new();
+    args.extend_from_slice(&double_slots(5.0));
+    args.extend_from_slice(&double_slots(3.0));
+    invoke_wide_int("dbranch", "(DD)I", &args, 1);
+}
+
+// 类型转换：取其中几条作代表
+#[test]
+fn wide_i2l() {
+    invoke_wide_long("i2l", "(I)J", &[123456], 123456);
+}
+
+#[test]
+fn wide_l2i() {
+    invoke_wide_int(
+        "l2i",
+        "(J)I",
+        &long_slots(1234567890123i64),
+        1234567890123i64 as i32,
+    );
+}
+
+#[test]
+fn wide_i2f() {
+    invoke_wide_float("i2f", "(I)F", &[42], 42.0);
+}
+
+#[test]
+fn wide_i2d() {
+    invoke_wide_double("i2d", "(I)D", &[42], 42.0);
+}
+
+#[test]
+fn wide_f2i() {
+    invoke_wide_int("f2i", "(F)I", &[float_slot(3.7)], 3);
+}
+
+#[test]
+fn wide_d2i() {
+    let mut args = Vec::new();
+    args.extend_from_slice(&double_slots(-3.7));
+    invoke_wide_int("d2i", "(D)I", &args, -3);
+}
+
+#[test]
+fn wide_d2f() {
+    let mut args = Vec::new();
+    args.extend_from_slice(&double_slots(3.5));
+    invoke_wide_float("d2f", "(D)F", &args, 3.5);
+}

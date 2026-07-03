@@ -324,6 +324,42 @@ impl Interpreter {
         self.read_u16() as i16
     }
 
+    /// 读一个 u32（big-endian）。
+    #[inline]
+    pub(super) fn read_u32(&mut self) -> u32 {
+        let b0 = self.read_u8() as u32;
+        let b1 = self.read_u8() as u32;
+        let b2 = self.read_u8() as u32;
+        let b3 = self.read_u8() as u32;
+        (b0 << 24) | (b1 << 16) | (b2 << 8) | b3
+    }
+
+    /// 读一个 i32（big-endian）。
+    #[inline]
+    pub(super) fn read_i32(&mut self) -> i32 {
+        self.read_u32() as i32
+    }
+
+    /// 将 pc 对齐到 4 字节边界（相对方法 code 起点）。
+    ///
+    /// 用于 tableswitch / lookupswitch 的 0-3 字节 padding。
+    /// JVM 规范：opcode 后跟 padding，使 default 偏移量的起始位置相对于
+    /// 方法 code 起点是 4 的倍数。
+    ///
+    /// 调用时 pc 已越过 opcode（位于 insn_start + 1）。
+    #[inline]
+    pub(super) fn align_pc_to_4(&mut self) {
+        let code_start = self.regs.code().code.as_ptr() as usize;
+        // insn_start = pc - 1；default 起始位置 = insn_start + 1 + pad = pc + pad。
+        // 要求 (pc + pad - code_start) % 4 == 0。
+        let pc_addr = self.regs.pc as usize;
+        let rel = (pc_addr - code_start) % 4;
+        if rel != 0 {
+            let pad = 4 - rel;
+            self.regs.pc = unsafe { self.regs.pc.add(pad) };
+        }
+    }
+
     /// 执行条件分支。在 handler 进入时 pc 指向 opcode 之后（由 run_loop 推进 1），
     /// `cond` 为真时跳到 `insn_start + rel`（insn_start = pc - 1）。
     ///
