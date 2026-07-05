@@ -1,4 +1,4 @@
-use crate::oops::{desc::FieldDesc, oop_handle::OOPHandle, symbol_table::SymbolHandle};
+use crate::oops::{desc::{FieldDesc, FieldElemType}, oop_handle::{NObjPtr, OOPHandle}, symbol_table::SymbolHandle};
 
 /// 数组元素的固定布局：
 ///   markword(8) + length(4) + padding(4) + elements(...)
@@ -37,7 +37,7 @@ impl ArrayKlass {
             crate::oops::desc::FieldElemType::Double => 8,
             // 引用类型元素（Class）占 4 字节（narrow ptr）。
             crate::oops::desc::FieldElemType::Class { .. } => {
-                std::mem::size_of::<crate::oops::oop_handle::NObjPtr>()
+                std::mem::size_of::<NObjPtr>()
             }
         }
     }
@@ -47,7 +47,7 @@ impl ArrayKlass {
         self.desc.dimensions > 1
             || matches!(
                 self.desc.elem,
-                crate::oops::desc::FieldElemType::Class { .. }
+                FieldElemType::Class { .. }
             )
     }
 }

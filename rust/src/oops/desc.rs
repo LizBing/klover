@@ -57,6 +57,13 @@ impl FieldDesc {
             FieldElemType::Class { .. } => size_of::<NObjPtr>(),
         }
     }
+
+    pub fn is_ref_type(&self) -> bool {
+        if self.dimensions != 0 { return true };
+
+        if let FieldElemType::Class { .. } = self.elem { true }
+        else { false }
+    }
 }
 
 impl FieldDesc {

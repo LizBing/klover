@@ -1,10 +1,5 @@
 use std::{
-    cell::OnceCell,
-    mem::size_of,
-    ops::{Deref, DerefMut},
-    ptr::{self, NonNull},
-    slice,
-    sync::atomic::Ordering,
+    cell::OnceCell, marker::PhantomData, mem::size_of, ops::Deref, ptr::{self, NonNull, null}, slice
 };
 
 use crate::{
@@ -17,17 +12,9 @@ use crate::{
         class_file::ClassFile, cp_info::ConstantPoolInfo, field_info::FieldInfo,
         method_info::MethodInfo,
     },
-    gc_binding::obj_layout::ObjLayout,
+    gc_bindings::obj_layout::ObjLayout,
     oops::{
-        acc_flags::AccFlags,
-        attr::ConstantValueAttr,
-        cp_entry::{CPEntry, ClassCPEntry},
-        field::Field,
-        klass::Klass,
-        method::Method,
-        oop_handle::{KLASS_OOP_STORAGE_ID, NObjPtr, OOPHandle},
-        resolve_error::{ResolveError, ResolveResult},
-        symbol_table::SymbolHandle,
+        acc_flags::AccFlags, attr::ConstantValueAttr, cp_entry::{CPEntry, ClassCPEntry}, desc::FieldDesc, field::Field, fields::Fields, klass::Klass, method::Method, oop_handle::{KLASS_OOP_STORAGE_ID, NObjPtr, OOPHandle}, resolve_error::{ResolveError, ResolveResult}, symbol_table::SymbolHandle
     },
 };
 
@@ -43,235 +30,6 @@ fn allocate_slice_from_vec<T>(msa: &MSAllocator, vec: Vec<T>) -> MSBox<[T]> {
 
 /// 对象头大小（markword）。
 const HEADER_BYTES: usize = 8;
-/// 统一对象对齐粒度。
-const ALIGN_BYTES: usize = 8;
-
-#[inline]
-fn align_up(n: usize, align: usize) -> usize {
-    (n + align - 1) & !(align - 1)
-}
-
-/// 类加载准备阶段收集的原始字段信息（尚未计算 instance offset）。
-///
-/// static 字段的 storage 已经分配并填好了 ConstantValue；
-/// instance 字段只按 bucket 分组，offset 推迟到 `set_super` 才算。
-#[derive(Debug)]
-struct RawFields {
-    /// static storage（已分配、已填 ConstantValue）。
-    static_storage: MSBox<[u8]>,
-    /// static 字段（offset 相对于 static_storage，已计算）。
-    static_fields: MSBox<[Field]>,
-
-    /// instance 字段，按声明顺序排列（offset 尚未设置）。
-    instance_fields: Vec<Field>,
-    /// instance 字段按 bucket 分组的索引（0=ptr, 1=8B, 2=4B, 3=2B, 4=1B）。
-    /// set_super 时按此顺序赋 offset。
-    instance_buckets: [Vec<usize>; 5],
-}
-
-/// 类加载完成、`set_super` 调用后构建的完整字段信息。
-///
-/// 此时 instance 字段的 offset 已含父类偏移，可用于 `getfield`/`putfield`。
-#[derive(Debug)]
-pub struct Fields {
-    pub(crate) static_storage: MSBox<[u8]>,
-    pub(crate) static_fields: MSBox<[Field]>,
-    pub(crate) instance_fields: MSBox<[Field]>,
-    /// 本类 instance 部分的引用字段数（与 ObjLayout.ptr_count 一致）。
-    pub(crate) instance_ptr_count: usize,
-}
-
-impl RawFields {
-    fn build(
-        infos: &[FieldInfo],
-        cp: &[Option<CPEntry>],
-        msa: &MSAllocator,
-    ) -> ResolveResult<Self> {
-        let ptr_size = size_of::<NObjPtr>();
-
-        let bucket = |f: &Field| -> usize {
-            match f.desc.byte_size() {
-                s if s == ptr_size => 0,
-                8 => 1,
-                4 => 2,
-                2 => 3,
-                _ => 4,
-            }
-        };
-
-        let mut static_fields: Vec<Field> = Vec::new();
-        let mut instance_fields: Vec<Field> = Vec::new();
-        let mut instance_buckets: [Vec<usize>; 5] = Default::default();
-
-        for info in infos {
-            let f = Field::from(info, cp)?;
-            if f.acc_flags.contains(AccFlags::ACC_STATIC) {
-                static_fields.push(f);
-            } else {
-                let cat = bucket(&f);
-                instance_buckets[cat].push(instance_fields.len());
-                instance_fields.push(f);
-            }
-        }
-
-        // static 字段：立即计算 offset（相对 static_storage）并分配 storage。
-        let (static_storage, static_fields_boxed) = Self::layout_static(&mut static_fields, msa)?;
-
-        Ok(Self {
-            static_storage,
-            static_fields: static_fields_boxed,
-            instance_fields,
-            instance_buckets,
-        })
-    }
-
-    /// 计算 static 字段 offset（不依赖父类），分配 storage，填 ConstantValue。
-    fn layout_static(
-        statics: &mut Vec<Field>,
-        msa: &MSAllocator,
-    ) -> ResolveResult<(MSBox<[u8]>, MSBox<[Field]>)> {
-        let ptr_size = size_of::<NObjPtr>();
-
-        // 按 bucket 重新排成 5 组。
-        let mut buckets: [Vec<usize>; 5] = Default::default();
-        for (i, f) in statics.iter().enumerate() {
-            let cat = match f.desc.byte_size() {
-                s if s == ptr_size => 0,
-                8 => 1,
-                4 => 2,
-                2 => 3,
-                _ => 4,
-            };
-            buckets[cat].push(i);
-        }
-
-        let mut offset = 0usize;
-
-        // oop 区
-        for &i in &buckets[0] {
-            statics[i].set_offs(offset);
-            offset += ptr_size;
-        }
-        if !buckets[1].is_empty() {
-            offset = align_up(offset, 8);
-        }
-        for &i in &buckets[1] {
-            statics[i].set_offs(offset);
-            offset += 8;
-        }
-        for &i in &buckets[2] {
-            statics[i].set_offs(offset);
-            offset += 4;
-        }
-        for &i in &buckets[3] {
-            statics[i].set_offs(offset);
-            offset += 2;
-        }
-        for &i in &buckets[4] {
-            statics[i].set_offs(offset);
-            offset += 1;
-        }
-
-        let payload_size = align_up(offset, ALIGN_BYTES);
-
-        // 分配 storage（calloc 已经清零）。
-        let storage_ptr = msa.calloc::<u8>(1, payload_size);
-        let storage = unsafe { slice::from_raw_parts_mut(storage_ptr, payload_size) };
-
-        // 填 ConstantValue。
-        for f in statics.iter() {
-            if let Some(cv) = &f.constant_value {
-                let offs = f.offs();
-                match cv {
-                    ConstantValueAttr::Integer(v) => {
-                        storage[offs..offs + 4].copy_from_slice(&v.to_ne_bytes());
-                    }
-                    ConstantValueAttr::Float(v) => {
-                        let bits = v.to_bits();
-                        storage[offs..offs + 4].copy_from_slice(&bits.to_ne_bytes());
-                    }
-                    ConstantValueAttr::Long(v) => {
-                        storage[offs..offs + 8].copy_from_slice(&v.to_ne_bytes());
-                    }
-                    ConstantValueAttr::Double(v) => {
-                        let bits = v.to_bits();
-                        storage[offs..offs + 8].copy_from_slice(&bits.to_ne_bytes());
-                    }
-                    ConstantValueAttr::String(_) => {
-                        // String 常量解析需要 StringPool（native 阶段）。
-                        // MVP 阶段保留 null。
-                    }
-                }
-            }
-        }
-
-        let static_storage = unsafe { MSBox::from_raw(storage) };
-        let static_fields = allocate_slice_from_vec(msa, std::mem::take(statics));
-
-        Ok((static_storage, static_fields))
-    }
-}
-
-impl Fields {
-    /// 在 `set_super` 时构建：计算 instance 字段 offset（含父类偏移 + padding）。
-    ///
-    /// `layer_start` = 本类部分起点（= 父类 byte_size，Object 是 HEADER_BYTES=8）。
-    /// 返回 `(Fields, byte_size, ptr_count)`，后两者用于填 `ObjLayout`。
-    fn finalize(raw: RawFields, layer_start: usize, msa: &MSAllocator) -> (Self, usize, usize) {
-        let ptr_size = size_of::<NObjPtr>();
-        let RawFields {
-            static_storage,
-            static_fields,
-            mut instance_fields,
-            instance_buckets,
-        } = raw;
-
-        let instance_ptr_count = instance_buckets[0].len();
-        let mut offset = layer_start;
-
-        // oop 区。
-        for &i in &instance_buckets[0] {
-            instance_fields[i].set_offs(offset);
-            offset += ptr_size;
-        }
-        // oop 区后 padding（若后面有 8B 字段且 oop 区大小不是 8 的倍数）。
-        if !instance_buckets[1].is_empty() {
-            offset = align_up(offset, 8);
-        }
-        for &i in &instance_buckets[1] {
-            instance_fields[i].set_offs(offset);
-            offset += 8;
-        }
-        for &i in &instance_buckets[2] {
-            instance_fields[i].set_offs(offset);
-            offset += 4;
-        }
-        for &i in &instance_buckets[3] {
-            instance_fields[i].set_offs(offset);
-            offset += 2;
-        }
-        for &i in &instance_buckets[4] {
-            instance_fields[i].set_offs(offset);
-            offset += 1;
-        }
-
-        // 累计 byte_size（含本类部分 + 整体 padding）。
-        let byte_size = align_up(offset, ALIGN_BYTES);
-
-        let instance_fields_boxed = allocate_slice_from_vec(msa, instance_fields);
-
-        (
-            Self {
-                static_storage,
-                static_fields,
-                instance_fields: instance_fields_boxed,
-                instance_ptr_count,
-            },
-            byte_size,
-            instance_ptr_count,
-        )
-    }
-}
 
 #[derive(Debug)]
 pub struct NormalKlass {
@@ -289,15 +47,13 @@ pub struct NormalKlass {
 
     interfaces: MSBox<[MSRef<ClassCPEntry>]>,
 
-    /// build 阶段产物；`set_super` 时被 take 出来构建 `fields`。
-    raw_fields: OnceCell<RawFields>,
-    /// `set_super` 后可用；在此之前为 `None`。
+    /// `set_super, init_fields` 后可用；在此之前为 `None`。
     fields: OnceCell<Fields>,
 
     methods: MSBox<[Method]>,
 
     /// 对象内存布局描述。`set_super` 后可用。
-    pub obj_layout: ObjLayout,
+    pub obj_layout: OnceCell<ObjLayout>,
 }
 
 fn build_cp<'a>(
@@ -326,8 +82,8 @@ fn build_cp<'a>(
     unsafe { Ok(MSBox::from_raw(cp_slice)) }
 }
 
-pub fn cp_slice_get(cp_slice: &[Option<CPEntry>], idx: usize) -> &CPEntry {
-    unsafe { cp_slice[idx].as_ref().unwrap_unchecked() }
+pub fn cp_slice_get(cp_slice: &[Option<CPEntry>], idx: usize) -> Option<&CPEntry> {
+    cp_slice[idx].as_ref()
 }
 
 fn build_interfaces(
@@ -341,7 +97,7 @@ fn build_interfaces(
 
     for (i, idx) in parsed_ifaces.iter().enumerate() {
         iface_slice[i] = match cp_slice_get(cp_slice, *idx as usize) {
-            CPEntry::Class(entry) => entry.into(),
+            Some(CPEntry::Class(entry)) => entry.into(),
             _ => return Err(ResolveError::MismatchCPType),
         };
     }
@@ -371,7 +127,7 @@ impl NormalKlass {
     pub fn build(
         cf: ClassFile,
         cld: Option<&ClassLoaderData>,
-    ) -> ResolveResult<(MSBox<Klass>, Option<MSRef<ClassCPEntry>>)> {
+    ) -> ResolveResult<(MSBox<Klass>, Option<MSRef<ClassCPEntry>>, RawFields)> {
         let msa = match cld {
             Some(x) => &x.ms_allocator,
             None => BootstrapCLD::bs_msa(),
@@ -382,7 +138,7 @@ impl NormalKlass {
         let cp = build_cp(&cf.constant_pool, msa)?;
 
         let this_entry: MSRef<ClassCPEntry> = match cp_slice_get(&cp, cf.this_class as usize) {
-            CPEntry::Class(entry) => entry.into(),
+            Some(CPEntry::Class(entry)) => entry.into(),
             _ => return Err(ResolveError::MismatchCPType),
         };
 
@@ -391,7 +147,7 @@ impl NormalKlass {
         } else {
             Some(
                 match cp_slice_get(&cp, cf.super_index as usize) {
-                    CPEntry::Class(entry) => entry,
+                    Some(CPEntry::Class(entry)) => entry,
                     _ => return Err(ResolveError::MismatchCPType),
                 }
                 .into(),
@@ -419,16 +175,24 @@ impl NormalKlass {
             cld: cld_ptr,
             constant_pool: cp,
             interfaces,
-            raw_fields: OnceCell::from(raw_fields),
             fields: OnceCell::new(),
             methods,
-            obj_layout: ObjLayout::default(),
+            obj_layout: OnceCell::new()
         };
 
         let boxed = MSBox::new(msa, Klass::Normal(klass));
         this_entry.resolved.set((&boxed).into());
 
-        Ok((boxed, super_entry))
+        Ok((boxed, super_entry, RawFields))
+    }
+
+    pub fn cal_object_layout(&self) {
+        let super_layout = match self.get_super() {
+            Some(super_ref) => super_ref.get_obj_layout(),
+            None => null()
+        };
+
+        
     }
 
     // callsite: cld
@@ -522,9 +286,22 @@ impl NormalKlass {
             None => None,
         }
     }
+}
 
+impl NormalKlass {
+    pub fn get_msa(&self) -> &MSAllocator {
+        match self.cld {
+            Some(x) => unsafe { &x.as_ref().ms_allocator },
+            None => BootstrapCLD::bs_msa()
+        }
+    }
+    
+    pub fn get_obj_layout(&self) -> &ObjLayout {
+        self.obj_layout.get().expect("Obj layout hasn't been initialized.")
+    }
+    
     pub fn get_super(&self) -> Option<&NormalKlass> {
-        match self.super_klass.get().unwrap() {
+        match self.super_klass.get().expect("Super hasn't been set.") {
             Some(x) => Some(x.deref()),
             None => None,
         }

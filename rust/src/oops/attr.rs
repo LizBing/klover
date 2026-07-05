@@ -4,7 +4,9 @@ use crate::{
     class_loader::ms_api::{MSAllocator, MSBox, MSRef},
     class_parser::attr_info::{CodeAttrInfo, ExceptionTableEntryInfo},
     oops::{
-        cp_entry::{CPEntry, ClassCPEntry, StringCPEntry}, normal_klass::cp_slice_get, resolve_error::{ResolveError, ResolveResult}
+        cp_entry::{CPEntry, ClassCPEntry, StringCPEntry},
+        normal_klass::cp_slice_get,
+        resolve_error::{ResolveError, ResolveResult},
     },
 };
 
@@ -13,22 +15,48 @@ pub struct ExceptionTableEntry {
     start_pc: u16,
     end_pc: u16,
     handler_pc: u16,
-    catch_type: MSRef<ClassCPEntry>,
+    /// `None` 表示 catch all（finally 块或 catch_type == 0）。
+    catch_type: Option<MSRef<ClassCPEntry>>,
 }
 
 impl ExceptionTableEntry {
     fn from(info: &ExceptionTableEntryInfo, cp: &[Option<CPEntry>]) -> ResolveResult<Self> {
-        let ct = match cp_slice_get(cp, info.catch_type as usize) {
-            CPEntry::Class(entry) => entry,
-            _ => return Err(ResolveError::MismatchCPType),
+        let catch_type = if info.catch_type == 0 {
+            None // catch all
+        } else {
+            let ct = match cp_slice_get(cp, info.catch_type as usize) {
+                Some(CPEntry::Class(entry)) => entry,
+                _ => return Err(ResolveError::MismatchCPType),
+            };
+            Some(ct.into())
         };
 
         Ok(Self {
             start_pc: info.start_pc,
             end_pc: info.end_pc,
             handler_pc: info.handler_pc,
-            catch_type: ct.into(),
+            catch_type,
         })
+    }
+
+    /// 异常处理器的覆盖范围起点（bci，含）。
+    pub fn start_pc(&self) -> u16 {
+        self.start_pc
+    }
+
+    /// 异常处理器的覆盖范围终点（bci，不含）。
+    pub fn end_pc(&self) -> u16 {
+        self.end_pc
+    }
+
+    /// handler 的起始 bci。
+    pub fn handler_pc(&self) -> u16 {
+        self.handler_pc
+    }
+
+    /// `None` 表示 catch all；`Some` 表示只捕获指定类及其子类。
+    pub fn catch_type(&self) -> Option<&MSRef<ClassCPEntry>> {
+        self.catch_type.as_ref()
     }
 }
 
@@ -41,7 +69,11 @@ pub struct CodeAttr {
 }
 
 impl CodeAttr {
-    pub fn from(info: &CodeAttrInfo, cp: &[Option<CPEntry>], msa: &MSAllocator) -> ResolveResult<Self> {
+    pub fn from(
+        info: &CodeAttrInfo,
+        cp: &[Option<CPEntry>],
+        msa: &MSAllocator,
+    ) -> ResolveResult<Self> {
         let code = unsafe {
             let len = info.code.len();
             let mem = msa.alloc(len);
@@ -90,7 +122,7 @@ impl ConstantValueAttr {
             CPEntry::Long(value) => Ok(Self::Long(*value)),
             CPEntry::Double(value) => Ok(Self::Double(*value)),
             CPEntry::StringConstant(entry) => Ok(Self::String(entry.into())),
-            
+
             _ => Err(ResolveError::MismatchCPType),
         }
     }

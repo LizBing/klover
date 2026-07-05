@@ -45,7 +45,7 @@ typedef struct ObjLayout ObjLayout;
 struct ObjLayout {
     const ObjLayout* super_layout; /* NULL for java.lang.Object */
     size_t byte_size;              /* cumulative: markword + all supers + self */
-    size_t ptr_count;              /* oop count in THIS class's layer only */
+    size_t ptrs_count;              /* oop count in THIS class's layer only */
 };
 
 /* Defined in Rust (src/gc_binding/gc_binding.rs).  Returns NULL for

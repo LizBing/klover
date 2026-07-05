@@ -8,11 +8,11 @@
 #![allow(clippy::erasing_op)]
 
 use crate::class_loader::resolve::{resolve_class_ref, resolve_method_ref};
-use crate::gc_binding::{
-    gc_binding::alloc_object,
+use crate::gc_bindings::{
+    gc_bindings::alloc_object,
     oop_codec::{decode_oop, encode_oop, klass_from_markword},
 };
-use crate::interpreter::interpreter::{Flow, Interpreter, ReturnValue, StackSlot};
+use crate::interpreter::interpreter::{Flow, Interpreter, InvokeOutcome, ReturnValue, StackSlot};
 use crate::oops::{
     cp_entry::{CPEntry, CPRefEntry, ClassCPEntry},
     field::Field,
@@ -1429,11 +1429,22 @@ fn invokespecial(interp: &mut Interpreter) -> Flow {
     let ret = interp
         .invoke_instance(target_normal, method, &args)
         .expect("invokespecial: invocation failed");
-    push_return_value(interp, ret);
-    Flow::Continue
+    handle_invoke_outcome(interp, ret)
 }
 
 /// 把方法返回值压回当前栈（void 方法不压）。
+/// 处理方法调用结果。  正常返回则压栈并返回 `Continue`；
+/// 异常未捕获则返回 `Throw`。
+fn handle_invoke_outcome(interp: &mut Interpreter, outcome: InvokeOutcome) -> Flow {
+    match outcome {
+        InvokeOutcome::Returned(ret) => {
+            push_return_value(interp, ret);
+            Flow::Continue
+        }
+        InvokeOutcome::Thrown(exc_nptr) => Flow::Throw(exc_nptr),
+    }
+}
+
 fn push_return_value(interp: &mut Interpreter, ret: Option<ReturnValue>) {
     match ret {
         Some(ReturnValue::Int(v)) => interp.push_slot(v),
@@ -1684,8 +1695,7 @@ fn invokestatic_handler(interp: &mut Interpreter) -> Flow {
     let ret = interp
         .invoke_static(target_normal, method, &args)
         .expect("invokestatic: invocation failed");
-    push_return_value(interp, ret);
-    Flow::Continue
+    handle_invoke_outcome(interp, ret)
 }
 
 /// `invokevirtual`：虚方法派发。
@@ -1786,8 +1796,7 @@ fn invoke_dispatched(
     let ret = interp
         .invoke_instance(runtime_klass, target, &args)
         .expect("invoke: invocation failed");
-    push_return_value(interp, ret);
-    Flow::Continue
+    handle_invoke_outcome(interp, ret)
 }
 
 // ── 数组指令 handler ──────────────────────────────────────────────────

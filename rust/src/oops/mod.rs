@@ -4,6 +4,7 @@ pub mod attr;
 pub mod cp_entry;
 pub mod desc;
 pub mod field;
+pub mod fields;
 pub mod klass;
 pub mod method;
 pub mod normal_klass;

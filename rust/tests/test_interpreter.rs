@@ -31,7 +31,7 @@ fn init_runtime(bs_class_path: &str) {
         }
         // 初始化 Java 堆（64MB 足够测试用）。
         unsafe {
-            klover::gc_binding::gc_binding::init_heap(64 * 1024 * 1024);
+            klover::gc_bindings::gc_bindings::init_heap(64 * 1024 * 1024);
         }
         Arguments::init(Arguments {
             bs_class_path: bs_class_path.to_string(),

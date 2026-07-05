@@ -70,7 +70,7 @@ pub fn resolve_method_ref(
     }
 
     let klass_ref = load_class_by_caller(caller, entry.class_name().utf8())?;
-    let normal = klass_ref.as_normal().ok_or(ResolveError::MismatchCPType)?;
+    let normal = klass_ref.as_normal().ok_or(ResolveError::NotANormal)?;
 
     // 沿继承链向上找第一个匹配的方法。
     let mut cur: Option<&NormalKlass> = Some(normal);
