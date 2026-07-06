@@ -34,7 +34,7 @@ pub struct NormalKlass {
     // Points to rust memory space.
     pub cld: Option<NonNull<ClassLoaderData>>,
 
-    constant_pool: MSBox<[Option<CPEntry>]>,
+    constant_pool: MSBox<[OnceCell<CPEntry>]>,
 
     interfaces: MSBox<[MSRef<ClassCPEntry>]>,
 
@@ -49,18 +49,18 @@ pub struct NormalKlass {
 fn build_cp<'a>(
     parsed_cp: &[ConstantPoolInfo],
     msa: &MSAllocator,
-) -> ResolveResult<MSBox<[Option<CPEntry>]>> {
+) -> ResolveResult<MSBox<[OnceCell<CPEntry>]>> {
     let cp_len = parsed_cp.len();
     let uninit = msa.calloc(cp_len);
 
     for i in 0..cp_len {
-        uninit[i].write(None);
+        uninit[i].write(OnceCell::new());
     }
 
-    let mut cp = unsafe { MSBox::from_raw(uninit.assume_init_mut()) };
+    let cp = unsafe { MSBox::from_raw(uninit.assume_init_mut()) };
 
     for i in 1..cp_len {
-        CPEntry::from(i, &mut cp, parsed_cp)?;
+        CPEntry::from(i, &cp, parsed_cp)?;
     }
 
     Ok(cp)
