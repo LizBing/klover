@@ -1,6 +1,17 @@
-use std::{array, marker::PhantomData, slice};
+use std::{array, marker::PhantomData, ptr};
 
-use crate::{class_loader::ms_api::{MSAllocator, MSBox}, class_parser::field_info::FieldInfo, oops::{acc_flags::AccFlags, cp_entry::CPEntry, desc::FieldDesc, field::Field, oop_handle::NObjPtr, resolve_error::ResolveResult}};
+use crate::{
+    class_loader::ms_api::{MSAllocator, MSBox},
+    class_parser::field_info::FieldInfo,
+    oops::{
+        acc_flags::AccFlags,
+        cp_entry::CPEntry,
+        desc::FieldDesc,
+        field::Field,
+        oop_handle::NObjPtr,
+        resolve_error::ResolveResult
+    }
+};
 
 #[inline]
 fn align(n: usize) -> usize {
@@ -11,12 +22,15 @@ fn align(n: usize) -> usize {
 
 fn allocate_slice_from_vec<T>(msa: &MSAllocator, vec: Vec<T>) -> MSBox<[T]> {
     let len = vec.len();
-    let mem = msa.calloc::<T>(size_of::<T>(), len);
-    let slice = unsafe { slice::from_raw_parts_mut(mem, len) };
-    for (i, item) in vec.into_iter().enumerate() {
-        unsafe { slice.as_mut_ptr().add(i).write(item) };
+    let uninit = msa.calloc(len);
+
+    for (i, v) in vec.into_iter().enumerate() {
+        uninit[i].write(v);
     }
-    unsafe { MSBox::from_raw(slice) }
+
+    unsafe {
+        MSBox::from_raw(uninit.assume_init_mut())
+    }
 }
 
 
@@ -131,7 +145,7 @@ impl Fields {
     }
     
 
-    fn build(infos: &[FieldInfo], cp_slice: &[Option<CPEntry>], msa: &MSAllocator) -> ResolveResult<Self> {
+    pub fn build(infos: &[FieldInfo], cp_slice: &[Option<CPEntry>], msa: &MSAllocator) -> ResolveResult<Self> {
         let mut instance_buckets = array::from_fn(|_| Vec::new());
         let mut static_buckets = array::from_fn(|_| Vec::new());
 
@@ -154,8 +168,9 @@ impl Fields {
             None
         } else {
             unsafe {
-                let mem = msa.alloc(s_size);
-                Some(MSBox::from_raw(mem))
+                let uninit = msa.calloc(s_size);
+                ptr::write_bytes(uninit.as_mut_ptr(), 0, s_size);
+                Some(MSBox::from_raw(uninit.assume_init_mut()))
             }
         };
 

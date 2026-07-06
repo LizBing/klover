@@ -4,7 +4,6 @@ use std::ptr::null;
 use crate::oops::acc_flags::AccFlags;
 use crate::oops::cp_entry::CPEntry;
 use crate::oops::desc::FieldDesc;
-use crate::oops::oop_handle::ObjPtr;
 use crate::oops::{attr::CodeAttr, method::Method, normal_klass::NormalKlass};
 
 /// 一个 JVM 栈槽。  long / double 占据两个相邻槽（高 32 位在低地址）。
@@ -69,7 +68,7 @@ pub(super) struct Registers {
 
 impl Registers {
     pub fn code(&self) -> &CodeAttr {
-        unsafe { (*self.method).code.as_ref().unwrap_unchecked() }
+        unsafe { (*self.method).code.as_ref().expect("no code") }
     }
 
     /// 读取当前类常量池索引处的条目。

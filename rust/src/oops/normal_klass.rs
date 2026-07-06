@@ -1,5 +1,5 @@
 use std::{
-    cell::OnceCell, marker::PhantomData, mem::size_of, ops::Deref, ptr::{self, NonNull, null}, slice
+    cell::OnceCell, ops::Deref, ptr::{NonNull, null}
 };
 
 use crate::{
@@ -9,12 +9,12 @@ use crate::{
         ms_api::{MSAllocator, MSBox, MSRef},
     },
     class_parser::{
-        class_file::ClassFile, cp_info::ConstantPoolInfo, field_info::FieldInfo,
+        class_file::ClassFile, cp_info::ConstantPoolInfo,
         method_info::MethodInfo,
     },
     gc_bindings::obj_layout::ObjLayout,
     oops::{
-        acc_flags::AccFlags, attr::ConstantValueAttr, cp_entry::{CPEntry, ClassCPEntry}, desc::FieldDesc, field::Field, fields::Fields, klass::Klass, method::Method, oop_handle::{KLASS_OOP_STORAGE_ID, NObjPtr, OOPHandle}, resolve_error::{ResolveError, ResolveResult}, symbol_table::SymbolHandle
+        acc_flags::AccFlags, cp_entry::{CPEntry, ClassCPEntry}, field::Field, fields::Fields, klass::Klass, method::Method, oop_handle::{KLASS_OOP_STORAGE_ID, OOPHandle}, resolve_error::{ResolveError, ResolveResult}, symbol_table::SymbolHandle
     },
 };
 
@@ -38,13 +38,12 @@ pub struct NormalKlass {
 
     interfaces: MSBox<[MSRef<ClassCPEntry>]>,
 
-    /// `set_super, init_fields` 后可用；在此之前为 `None`。
-    fields: OnceCell<Fields>,
+    fields: Fields,
 
     methods: MSBox<[Method]>,
 
     /// 对象内存布局描述。`set_super init_fieds` 后可用。
-    pub obj_layout: OnceCell<ObjLayout>,
+    obj_layout: OnceCell<ObjLayout>,
 }
 
 fn build_cp<'a>(
@@ -52,25 +51,19 @@ fn build_cp<'a>(
     msa: &MSAllocator,
 ) -> ResolveResult<MSBox<[Option<CPEntry>]>> {
     let cp_len = parsed_cp.len();
-    let cp_mem = msa.calloc::<Option<CPEntry>>(size_of::<Option<CPEntry>>(), cp_len);
-    let cp_slice = unsafe { slice::from_raw_parts_mut(cp_mem, cp_len) };
+    let uninit = msa.calloc(cp_len);
+
     for i in 0..cp_len {
-        unsafe {
-            ptr::write(&mut cp_slice[i], None);
-        }
+        uninit[i].write(None);
     }
 
-    // Slot 0 is Unusable (JVM CP is 1-indexed).
+    let mut cp = unsafe { MSBox::from_raw(uninit.assume_init_mut()) };
+
     for i in 1..cp_len {
-        if matches!(parsed_cp[i], ConstantPoolInfo::Unusable) {
-            continue;
-        }
-        if let Some(entry) = CPEntry::from(i, cp_slice, parsed_cp)? {
-            cp_slice[i] = Some(entry);
-        }
+        CPEntry::from(i, &mut cp, parsed_cp)?;
     }
 
-    unsafe { Ok(MSBox::from_raw(cp_slice)) }
+    Ok(cp)
 }
 
 pub fn cp_slice_get(cp_slice: &[Option<CPEntry>], idx: usize) -> Option<&CPEntry> {
@@ -83,17 +76,16 @@ fn build_interfaces(
     msa: &MSAllocator,
 ) -> ResolveResult<MSBox<[MSRef<ClassCPEntry>]>> {
     let iface_len = parsed_ifaces.len();
-    let iface_mem = msa.calloc::<MSRef<ClassCPEntry>>(size_of::<MSRef<ClassCPEntry>>(), iface_len);
-    let iface_slice = unsafe { slice::from_raw_parts_mut(iface_mem, iface_len) };
+    let uninit = msa.calloc(iface_len);
 
     for (i, idx) in parsed_ifaces.iter().enumerate() {
-        iface_slice[i] = match cp_slice_get(cp_slice, *idx as usize) {
-            Some(CPEntry::Class(entry)) => entry.into(),
+        match cp_slice_get(cp_slice, *idx as usize) {
+            Some(CPEntry::Class(entry)) => uninit[i].write(entry.into()),
             _ => return Err(ResolveError::MismatchCPType),
         };
     }
 
-    unsafe { Ok(MSBox::from_raw(iface_slice)) }
+    unsafe { Ok(MSBox::from_raw(uninit.assume_init_mut())) }
 }
 
 fn build_methods(
@@ -102,16 +94,13 @@ fn build_methods(
     msa: &MSAllocator,
 ) -> ResolveResult<MSBox<[Method]>> {
     let methods_len = parsed_methods.len();
-    let methods_mem = msa.calloc::<Method>(size_of::<Method>(), methods_len);
-    let methods_slice = unsafe { slice::from_raw_parts_mut(methods_mem, methods_len) };
+    let uninit = msa.calloc(methods_len);
 
     for (i, info) in parsed_methods.iter().enumerate() {
-        unsafe {
-            ptr::write(&mut methods_slice[i], Method::from(info, cp_slice, msa)?);
-        }
+        uninit[i].write(Method::from(info, cp_slice, msa)?);
     }
 
-    unsafe { Ok(MSBox::from_raw(methods_slice)) }
+    unsafe { Ok(MSBox::from_raw(uninit.assume_init_mut())) }
 }
 
 impl NormalKlass {
@@ -138,14 +127,15 @@ impl NormalKlass {
         } else {
             Some(
                 match cp_slice_get(&cp, cf.super_index as usize) {
-                    Some(CPEntry::Class(entry)) => entry,
+                    Some(CPEntry::Class(entry)) => entry.into(),
                     _ => return Err(ResolveError::MismatchCPType),
                 }
-                .into(),
             )
         };
 
         let interfaces = build_interfaces(&cf.interfaces, &cp, msa)?;
+
+        let fields = Fields::build(&cf.fields, &cp, msa)?;
 
         let methods = build_methods(&cf.methods, &cp, msa)?;
 
@@ -162,7 +152,7 @@ impl NormalKlass {
             cld: cld_ptr,
             constant_pool: cp,
             interfaces,
-            fields: OnceCell::new(),
+            fields,
             methods,
             obj_layout: OnceCell::new()
         };
@@ -172,38 +162,37 @@ impl NormalKlass {
 
         Ok((boxed, super_entry))
     }
-
+    
+    // callsite: cld
+    pub fn set_super(&self, s: Option<MSRef<NormalKlass>>) {
+        self.super_klass.set(s).unwrap()
+    }
+    
+    // After 'set_super()'
     pub fn cal_object_layout(&self) {
-        let super_layout = match self.get_super() {
-            Some(super_ref) => super_ref.get_obj_layout(),
-            None => null()
+        let (super_layout, super_size) = match self.get_super() {
+            Some(super_ref) => {
+                let super_layout = super_ref.get_obj_layout();
+                (super_layout as *const _, super_layout.byte_size)
+            }
+            None => (null(), 0)
         };
 
-        let fields = self.get_fields();
+        let fields = &self.fields;
         
         let layout = ObjLayout {
             super_layout,
-            byte_size: fields.instance_size,
+            byte_size: super_size + fields.instance_size,
             ptrs_count: fields.instance_ptrs_count
         };
 
         self.obj_layout.set(layout).unwrap()
-    }
-
-    // callsite: cld
-    pub fn set_super(&self, s: Option<MSRef<NormalKlass>>) {
-        self.super_klass.set(s).unwrap()
     }
 }
 
 impl NormalKlass {
     pub fn cp_get(&self, idx: usize) -> &CPEntry {
         unsafe { self.constant_pool.as_ref()[idx].as_ref().unwrap_unchecked() }
-    }
-
-    /// 返回已 finalize 的 `Fields`。仅在 `set_super` 后可用。
-    pub fn get_fields(&self) -> &Fields {
-        self.fields.get().expect("fields not finalized yet")
     }
 
     pub fn find_method(&self, mname: &SymbolHandle, mdesc: &SymbolHandle) -> Option<&Method> {
@@ -219,7 +208,8 @@ impl NormalKlass {
     /// 沿继承链查找字段（name + descriptor 同时匹配）。
     /// 返回的字段同时覆盖 instance 与 static，调用方按 acc_flags 区分。
     pub fn find_field(&self, fname: &SymbolHandle, fdesc: &SymbolHandle) -> Option<&Field> {
-        let f = self.get_fields();
+        let f = &self.fields;
+        
         if let Some(x) = f.instance_fields.as_ref() {
             for field in x.as_ref() {
                 if field.name.equals(fname) && field.desc.raw.equals(fdesc) {
@@ -245,13 +235,6 @@ impl NormalKlass {
 }
 
 impl NormalKlass {
-    pub fn get_msa(&self) -> &MSAllocator {
-        match self.cld {
-            Some(x) => unsafe { &x.as_ref().ms_allocator },
-            None => BootstrapCLD::bs_msa()
-        }
-    }
-    
     pub fn get_obj_layout(&self) -> &ObjLayout {
         self.obj_layout.get().expect("Obj layout hasn't been initialized.")
     }

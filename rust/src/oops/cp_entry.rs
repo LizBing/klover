@@ -367,75 +367,75 @@ impl CPEntry {
         idx: usize,
         cp: &mut [Option<Self>],
         parsed_cp: &[ConstantPoolInfo],
-    ) -> ResolveResult<Option<Self>> {
+    ) -> ResolveResult<()> {
         let info = &parsed_cp[idx];
 
-        match info {
+        cp[idx] = match info {
             ConstantPoolInfo::ClassInfo { name_index } => {
                 let name = resolve_symbol(*name_index as usize, cp, parsed_cp)?;
-                Ok(Some(Self::Class(ClassCPEntry {
+                Some(Self::Class(ClassCPEntry {
                     name,
                     resolved: OnceLock::new(),
-                })))
+                }))
             }
 
             ConstantPoolInfo::FieldrefInfo { .. } => {
                 if cp[idx].is_some() {
-                    Ok(None)
+                    return Ok(())
                 } else {
                     let entry = CPRefEntry::from(info, cp, parsed_cp)?;
-                    Ok(Some(Self::FieldRef(entry)))
+                    Some(Self::FieldRef(entry))
                 }
             }
 
             ConstantPoolInfo::MethodrefInfo { .. } => {
                 if cp[idx].is_some() {
-                    Ok(None)
+                    return Ok(())
                 } else {
                     let entry = CPRefEntry::from(info, cp, parsed_cp)?;
-                    Ok(Some(Self::MethodRef(entry)))
+                    Some(Self::MethodRef(entry))
                 }
             }
 
             ConstantPoolInfo::InterfaceMethodrefInfo { .. } => {
                 if cp[idx].is_some() {
-                    Ok(None)
+                    return Ok(())
                 } else {
                     let entry = CPRefEntry::from(info, cp, parsed_cp)?;
-                    Ok(Some(Self::InterfaceMethodRef(entry)))
+                    Some(Self::InterfaceMethodRef(entry))
                 }
             }
 
             ConstantPoolInfo::StringInfo { string_index } => {
-                Ok(Some(Self::StringConstant(StringCPEntry {
+                Some(Self::StringConstant(StringCPEntry {
                     raw: resolve_symbol(*string_index as usize, cp, parsed_cp)?,
                     resolved: OOPHandle::new(KLASS_OOP_STORAGE_ID),
-                })))
+                }))
             }
 
-            ConstantPoolInfo::IntegerInfo { value } => Ok(Some(Self::Integer(*value))),
+            ConstantPoolInfo::IntegerInfo { value } => Some(Self::Integer(*value)),
 
-            ConstantPoolInfo::FloatInfo { value } => Ok(Some(Self::Float(*value))),
+            ConstantPoolInfo::FloatInfo { value } => Some(Self::Float(*value)),
 
-            ConstantPoolInfo::LongInfo { value } => Ok(Some(Self::Long(*value))),
+            ConstantPoolInfo::LongInfo { value } => Some(Self::Long(*value)),
 
-            ConstantPoolInfo::DoubleInfo { value } => Ok(Some(Self::Double(*value))),
+            ConstantPoolInfo::DoubleInfo { value } => Some(Self::Double(*value)),
 
             ConstantPoolInfo::NameAndTypeInfo { .. } => {
                 if cp[idx].is_some() {
-                    Ok(None)
+                    return Ok(())
                 } else {
                     let (name, desc) = resolve_name_and_type(idx, cp, parsed_cp)?;
-                    Ok(Some(Self::NameAndType { name, desc }))
+                    Some(Self::NameAndType { name, desc })
                 }
             }
 
             ConstantPoolInfo::Utf8Info { .. } => {
                 if cp[idx].is_some() {
-                    Ok(None)
+                    return Ok(())
                 } else {
                     let handle = resolve_symbol(idx, cp, parsed_cp)?;
-                    Ok(Some(Self::Utf8(handle)))
+                    Some(Self::Utf8(handle))
                 }
             }
 
@@ -444,33 +444,35 @@ impl CPEntry {
                 ref_index,
             } => {
                 let entry = MethodHandleEntry::from(*ref_kind, *ref_index as usize, cp, parsed_cp)?;
-                Ok(Some(Self::MethodHandle(entry)))
+                Some(Self::MethodHandle(entry))
             }
 
             ConstantPoolInfo::MethodTypeInfo { desc_index } => {
                 let raw = resolve_symbol(*desc_index as usize, cp, parsed_cp)?;
-                Ok(Some(Self::MethodType {
+                Some(Self::MethodType {
                     raw: raw.clone(),
                     desc: MethodDesc::from(raw.utf8())?,
-                }))
+                })
             }
 
-            ConstantPoolInfo::DynamicInfo { .. } => Ok(Some(Self::Dynamic {})),
+            ConstantPoolInfo::DynamicInfo { .. } => Some(Self::Dynamic {}),
 
-            ConstantPoolInfo::InvokeDynamicInfo { .. } => Ok(Some(Self::InvokeDynamic {})),
+            ConstantPoolInfo::InvokeDynamicInfo { .. } => Some(Self::InvokeDynamic {}),
 
             ConstantPoolInfo::ModuleInfo { .. } => {
                 let name = resolve_symbol(idx, cp, parsed_cp)?;
-                Ok(Some(Self::Module { name }))
+                Some(Self::Module { name })
             }
 
             ConstantPoolInfo::PackageInfo { .. } => {
                 let name = resolve_symbol(idx, cp, parsed_cp)?;
-                Ok(Some(Self::Package { name }))
+                Some(Self::Package { name })
             }
 
-            ConstantPoolInfo::Unusable => unreachable!(),
-        }
+            ConstantPoolInfo::Unusable => None,
+        };
+
+        Ok(())
     }
 }
 

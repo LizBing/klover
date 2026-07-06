@@ -1,5 +1,3 @@
-use std::ptr;
-
 use crate::{
     class_loader::ms_api::{MSAllocator, MSBox, MSRef},
     class_parser::attr_info::{CodeAttrInfo, ExceptionTableEntryInfo},
@@ -76,23 +74,23 @@ impl CodeAttr {
     ) -> ResolveResult<Self> {
         let code = unsafe {
             let len = info.code.len();
-            let mem = msa.alloc(len);
-            ptr::copy(info.code.as_ptr(), mem, len);
+            let uninit = msa.calloc(len);
+            let slice = uninit.write_copy_of_slice(&info.code);
 
-            MSBox::from_raw(ptr::slice_from_raw_parts_mut(mem, len))
+            MSBox::from_raw(slice)
         };
 
-        let mut et = unsafe {
+        let et = unsafe {
             let len = info.exception_table.len();
-            let mem = msa.calloc(size_of::<ExceptionTableEntry>(), len);
-            MSBox::from_raw(ptr::slice_from_raw_parts_mut(mem, len))
-        };
+            let uninit = msa.calloc(len);
 
-        let mut i = 0;
-        for n in &info.exception_table {
-            et[i] = ExceptionTableEntry::from(n, cp)?;
-            i += 1;
-        }
+            for (i, v) in info.exception_table.iter().enumerate() {
+                let entry = ExceptionTableEntry::from(v, cp)?;
+                uninit[i].write(entry);
+            }
+
+            MSBox::from_raw(uninit.assume_init_mut())
+        };
 
         Ok(Self {
             max_stack: info.max_stack,

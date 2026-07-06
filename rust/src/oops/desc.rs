@@ -1,6 +1,6 @@
 use std::{
     mem::size_of,
-    sync::{OnceLock, atomic::AtomicPtr},
+    sync::OnceLock,
 };
 
 use crate::{
