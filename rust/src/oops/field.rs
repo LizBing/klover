@@ -49,7 +49,7 @@ impl Field {
         })
     }
 
-    pub(super) fn set_offs(&mut self, n: usize) {
+    pub(super) fn set_offs(&self, n: usize) {
         self.offs.set(n).unwrap()
     }
 }

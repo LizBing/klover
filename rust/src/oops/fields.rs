@@ -1,6 +1,6 @@
-use std::marker::PhantomData;
+use std::{array, marker::PhantomData, slice};
 
-use crate::{class_loader::ms_api::{MSAllocator, MSBox}, oops::{desc::FieldDesc, field::Field, oop_handle::NObjPtr}};
+use crate::{class_loader::ms_api::{MSAllocator, MSBox}, class_parser::field_info::FieldInfo, oops::{acc_flags::AccFlags, cp_entry::CPEntry, desc::FieldDesc, field::Field, oop_handle::NObjPtr, resolve_error::ResolveResult}};
 
 #[inline]
 fn align(n: usize) -> usize {
@@ -8,6 +8,17 @@ fn align(n: usize) -> usize {
     
     (n + alignment - 1) & !(alignment - 1)
 }
+
+fn allocate_slice_from_vec<T>(msa: &MSAllocator, vec: Vec<T>) -> MSBox<[T]> {
+    let len = vec.len();
+    let mem = msa.calloc::<T>(size_of::<T>(), len);
+    let slice = unsafe { slice::from_raw_parts_mut(mem, len) };
+    for (i, item) in vec.into_iter().enumerate() {
+        unsafe { slice.as_mut_ptr().add(i).write(item) };
+    }
+    unsafe { MSBox::from_raw(slice) }
+}
+
 
 /// 类加载完成、`set_super` 调用后构建的完整字段信息。
 ///
@@ -19,7 +30,8 @@ pub struct Fields {
     pub static_storage: Option<MSBox<[u8]>>,
     pub static_fields: Option<MSBox<[Field]>>,
     pub static_ptrs_count: usize,
-    
+
+    pub instance_size: usize,
     pub instance_fields: Option<MSBox<[Field]>>,
     /// 本类 instance 部分的引用字段数（与 ObjLayout.ptr_count 一致）。
     pub instance_ptrs_count: usize,
@@ -39,67 +51,92 @@ impl Fields {
         }
     }
 
-    // returns: (storage byte size, fields, ptrs count)
+    // returns: (byte size, fields, ptrs count)
     fn build_catagory(buckets: &mut [Vec<Field>; 5], msa: &MSAllocator) -> (usize, Option<MSBox<[Field]>>, usize) {
         let mut byte_size = 0;
         let mut ptrs_count = 0;
         let mut fields_buf = Vec::new();
         
         // ptrs
-        for n in buckets[0] {
-            n.set_offs(byte_size);
-            byte_size += size_of::<NObjPtr>();
-            fields_buf.push(n);
+        loop {
+            match buckets[0].pop() {
+                Some(x) => {
+                    x.set_offs(byte_size);
+                    byte_size += size_of::<NObjPtr>();
+                    fields_buf.push(x);
+                    
+                    ptrs_count += 1;
+                }
 
-            ptrs_count += 1;
+                None => break
+            }
         }
-
+        
         byte_size = align(byte_size);
         
         // 8 bytes
-        for n in buckets[1] {
-            n.set_offs(byte_size);
-            byte_size += 8;
-            fields_buf.push(n);
-        }
-        
-        // 4 bytes
-        for n in buckets[2] {
-            n.set_offs(byte_size);
-            byte_size += 4;
-            fields_buf.push(n);
-        }
-        
-        // 2 bytes
-        for n in buckets[3] {
-            n.set_offs(byte_size);
-            byte_size += 2;
-            fields_buf.push(n);
-        }
-        
-        // 1 bytes
-        for n in buckets[4] {
-            n.set_offs(byte_size);
-            byte_size += 1;
-            fields_buf.push(n);
+        loop {
+            match buckets[1].pop() {
+                Some(x) => {
+                    x.set_offs(byte_size);
+                    byte_size += 8;
+                    fields_buf.push(x);
+                }
+
+                None => break
+            }
+        }// 4 bytes
+        loop {
+            match buckets[2].pop() {
+                Some(x) => {
+                    x.set_offs(byte_size);
+                    byte_size += 4;
+                    fields_buf.push(x);
+                }
+
+                None => break
+            }
+        }// 2 bytes
+        loop {
+            match buckets[3].pop() {
+                Some(x) => {
+                    x.set_offs(byte_size);
+                    byte_size += 2;
+                    fields_buf.push(x);
+                }
+
+                None => break
+            }
+        }// 1 bytes
+        loop {
+            match buckets[4].pop() {
+                Some(x) => {
+                    x.set_offs(byte_size);
+                    byte_size += 1;
+                    fields_buf.push(x);
+                }
+
+                None => break
+            }
         }
 
         byte_size = align(byte_size);
 
         if fields_buf.len() != 0 {
-            let fields = 
+            let fields = allocate_slice_from_vec(msa, fields_buf);
+            (byte_size, Some(fields), ptrs_count)
+        } else {
+            (0, None, 0)
         }
-
-        (byte_size, )
     }
     
 
     fn build(infos: &[FieldInfo], cp_slice: &[Option<CPEntry>], msa: &MSAllocator) -> ResolveResult<Self> {
-        let mut instance_buckets = vec![Vec::new(); 5];
-        let mut static_buckets = vec![Vec::new(); 5];
+        let mut instance_buckets = array::from_fn(|_| Vec::new());
+        let mut static_buckets = array::from_fn(|_| Vec::new());
 
         for info in infos {
-            let f = Field::from(info, cp)?;
+            let f = Field::from(info, cp_slice)?;
             
             let bucket = if f.acc_flags.contains(AccFlags::ACC_STATIC) {
                 Self::get_bucket(&mut static_buckets, &f.desc)
@@ -110,6 +147,28 @@ impl Fields {
             bucket.push(f);
         }
 
-        
+        let (instance_size, instance_fields, instance_ptrs_count) = Self::build_catagory(&mut instance_buckets, msa);
+        let (s_size, static_fields, static_ptrs_count) = Self::build_catagory(&mut static_buckets, msa);
+
+        let static_storage = if s_size == 0 {
+            None
+        } else {
+            unsafe {
+                let mem = msa.alloc(s_size);
+                Some(MSBox::from_raw(mem))
+            }
+        };
+
+        Ok(Self {
+            __: PhantomData,
+
+            static_storage,
+            static_fields,
+            static_ptrs_count,
+
+            instance_size,
+            instance_fields,
+            instance_ptrs_count
+        })
     }
 }

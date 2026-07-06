@@ -18,15 +18,6 @@ use crate::{
     },
 };
 
-fn allocate_slice_from_vec<T>(msa: &MSAllocator, vec: Vec<T>) -> MSBox<[T]> {
-    let len = vec.len();
-    let mem = msa.calloc::<T>(size_of::<T>(), len);
-    let slice = unsafe { slice::from_raw_parts_mut(mem, len) };
-    for (i, item) in vec.into_iter().enumerate() {
-        unsafe { slice.as_mut_ptr().add(i).write(item) };
-    }
-    unsafe { MSBox::from_raw(slice) }
-}
 
 /// 对象头大小（markword）。
 const HEADER_BYTES: usize = 8;
@@ -40,7 +31,7 @@ pub struct NormalKlass {
     pub this_klass: MSRef<ClassCPEntry>,
     super_klass: OnceCell<Option<MSRef<NormalKlass>>>, // resolve in cld callsite
 
-    // Points rust memory space.
+    // Points to rust memory space.
     pub cld: Option<NonNull<ClassLoaderData>>,
 
     constant_pool: MSBox<[Option<CPEntry>]>,
@@ -52,7 +43,7 @@ pub struct NormalKlass {
 
     methods: MSBox<[Method]>,
 
-    /// 对象内存布局描述。`set_super` 后可用。
+    /// 对象内存布局描述。`set_super init_fieds` 后可用。
     pub obj_layout: OnceCell<ObjLayout>,
 }
 
@@ -127,7 +118,7 @@ impl NormalKlass {
     pub fn build(
         cf: ClassFile,
         cld: Option<&ClassLoaderData>,
-    ) -> ResolveResult<(MSBox<Klass>, Option<MSRef<ClassCPEntry>>, RawFields)> {
+    ) -> ResolveResult<(MSBox<Klass>, Option<MSRef<ClassCPEntry>>)> {
         let msa = match cld {
             Some(x) => &x.ms_allocator,
             None => BootstrapCLD::bs_msa(),
