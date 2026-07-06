@@ -13,6 +13,7 @@ use crate::gc_bindings::{
     oop_codec::{decode_oop, encode_oop, klass_from_markword},
 };
 use crate::interpreter::interpreter::{Flow, Interpreter, InvokeOutcome, ReturnValue, StackSlot};
+use crate::oops::desc::FieldElemType;
 use crate::oops::{
     cp_entry::{CPEntry, CPRefEntry, ClassCPEntry},
     field::Field,
@@ -503,8 +504,8 @@ fn ldc(interp: &mut Interpreter) -> Flow {
     let idx = interp.read_u8() as usize;
     let cp = unsafe { (*interp.regs().klass).cp_get(idx) };
     match cp {
-        CPEntry::Integer(v) => interp.push_slot(*v),
-        CPEntry::Float(v) => push_f32(interp, *v),
+        Some(CPEntry::Integer(v)) => interp.push_slot(*v),
+        Some(CPEntry::Float(v)) => push_f32(interp, *v),
         _ => unimplemented!("ldc entry at {}", idx),
     }
     Flow::Continue
@@ -515,8 +516,8 @@ fn ldc_w(interp: &mut Interpreter) -> Flow {
     let idx = interp.read_u16() as usize;
     let cp = unsafe { (*interp.regs().klass).cp_get(idx) };
     match cp {
-        CPEntry::Integer(v) => interp.push_slot(*v),
-        CPEntry::Float(v) => push_f32(interp, *v),
+        Some(CPEntry::Integer(v)) => interp.push_slot(*v),
+        Some(CPEntry::Float(v)) => push_f32(interp, *v),
         _ => unimplemented!("ldc_w entry at {}", idx),
     }
     Flow::Continue
@@ -527,8 +528,8 @@ fn ldc2_w(interp: &mut Interpreter) -> Flow {
     let idx = interp.read_u16() as usize;
     let cp = unsafe { (*interp.regs().klass).cp_get(idx) };
     match cp {
-        CPEntry::Long(v) => interp.push_long(*v),
-        CPEntry::Double(v) => push_f64(interp, *v),
+        Some(CPEntry::Long(v)) => interp.push_long(*v),
+        Some(CPEntry::Double(v)) => push_f64(interp, *v),
         _ => unimplemented!("ldc2_w entry at {}", idx),
     }
     Flow::Continue
@@ -1264,22 +1265,7 @@ fn dreturn(interp: &mut Interpreter) -> Flow {
 ///
 /// 仅支持普通类（NormalKlass）；数组、接口在阶段 4 后续步骤实现。
 fn new(interp: &mut Interpreter) -> Flow {
-    let idx = interp.read_u16() as usize;
-    let caller = unsafe { &*interp.regs().klass };
-    let class_entry: &ClassCPEntry = match caller.cp_get(idx) {
-        CPEntry::Class(e) => e,
-        _ => panic!("new: CP[{}] is not a Class", idx),
-    };
-    let klass_ref = resolve_class_ref(caller, class_entry).expect("new: failed to resolve class");
-    let normal = klass_ref.as_normal().expect("new: not a NormalKlass");
-
-    // 分配对象。
-    let byte_size = normal.obj_layout.byte_size;
-    let klass_ptr: *const Klass = &*klass_ref as *const Klass;
-    let obj_ptr = alloc_object(klass_ptr, byte_size);
-    let narrow = encode_oop(obj_ptr);
-    interp.push_slot(narrow as i32);
-    Flow::Continue
+    unimplemented!()
 }
 
 // ── 栈操作 handler ────────────────────────────────────────────────────
@@ -1404,32 +1390,7 @@ fn collect_instance_args(interp: &mut Interpreter, method: &Method) -> Vec<Stack
 /// 用 `resolve_method_ref` 解析（沿继承链向上找第一个匹配），
 /// 然后用解析出的“声明类”调用。
 fn invokespecial(interp: &mut Interpreter) -> Flow {
-    let idx = interp.read_u16() as usize;
-    let caller = unsafe { &*interp.regs().klass };
-    let method_ref: &CPRefEntry<Method> = match caller.cp_get(idx) {
-        CPEntry::MethodRef(e) => e,
-        _ => panic!("invokespecial: CP[{}] is not a MethodRef", idx),
-    };
-    let method_msref =
-        resolve_method_ref(caller, method_ref).expect("invokespecial: failed to resolve method");
-    let method: &Method = &method_msref;
-
-    // 目标类 = 声明方法所在的类。resolve_method_ref 不返回声明类，
-    // 我们从 MethodRef 的 class_name 加载它。
-    // 更简单的做法：在解析时返回 (类, 方法)，但当前接口只返回方法。
-    // 这里重新走 load_class 拿声明类（已缓存，开销低）。
-    let target_klass =
-        crate::class_loader::resolve::load_class_by_caller(caller, method_ref.class_name().utf8())
-            .expect("invokespecial: failed to load target class");
-    let target_normal = target_klass
-        .as_normal()
-        .expect("invokespecial: target not Normal");
-
-    let args = collect_instance_args(interp, method);
-    let ret = interp
-        .invoke_instance(target_normal, method, &args)
-        .expect("invokespecial: invocation failed");
-    handle_invoke_outcome(interp, ret)
+    unimplemented!()
 }
 
 /// 把方法返回值压回当前栈（void 方法不压）。
@@ -1456,210 +1417,29 @@ fn push_return_value(interp: &mut Interpreter, ret: Option<ReturnValue>) {
     }
 }
 
-// ── 字段访问 handler ──────────────────────────────────────────────────
-//
-// instance 字段：相对对象 markword 的偏移；通过 narrow ptr 解码访问。
-// static 字段：相对 static_storage 的偏移；直接访问 metaspace 内存。
-//
-// 读写在 payload 字节区上按 FieldDesc 的 byte_size 进行（1/2/4/8）。
-// 引用字段以 narrow ptr 形式存取（栈槽 / 字段槽都是 u32）。
-
-/// 从 `base + offs` 读 `size` 字节，扩展为 i64 返回。
-///
-/// 引用字段（size == 4 且是 reference 类型）应在外层特殊处理，不走这里。
-unsafe fn read_payload(base: *const u8, offs: usize, size: usize) -> i64 {
-    let p = base.add(offs);
-    match size {
-        1 => *(p as *const i8) as i64,
-        2 => (*(p as *const u16) as i32) as i64,
-        4 => (*(p as *const u32) as i32) as i64,
-        8 => *(p as *const i64),
-        _ => unreachable!("invalid field size {}", size),
-    }
-}
-
-/// 向 `base + offs` 写 `size` 字节，从 i64 截断。
-unsafe fn write_payload(base: *mut u8, offs: usize, size: usize, value: i64) {
-    let p = base.add(offs);
-    match size {
-        1 => *(p as *mut i8) = value as i8,
-        2 => *(p as *mut u16) = value as u16,
-        4 => *(p as *mut u32) = value as u32,
-        8 => *(p as *mut i64) = value,
-        _ => unreachable!("invalid field size {}", size),
-    }
-}
-
 /// 字段是否是引用类型（对象 / 数组）。
 fn is_reference_field(f: &Field) -> bool {
-    f.desc.dimensions > 0 || matches!(f.desc.elem, crate::oops::desc::FieldElemType::Class { .. })
-}
-
-/// 获取声明类的 static_storage 起始指针。
-///
-/// 由于 resolve_field_ref 只返回 Field，不返回声明类，这里沿继承链
-/// 查找哪个类持有该 field 的 static_storage。
-fn static_storage_base(caller: &NormalKlass, field: &Field) -> *mut u8 {
-    let mut cur: Option<&NormalKlass> = Some(caller);
-    while let Some(k) = cur {
-        let f = k.fields();
-        let storage_ptr = f.static_storage.as_ref().as_ptr() as *mut u8;
-        for sf in f.static_fields.as_ref() {
-            if std::ptr::eq(sf as *const Field, field as *const Field) {
-                return storage_ptr;
-            }
-        }
-        cur = k.get_super();
-    }
-    unreachable!("static field not found in inheritance chain")
+    f.desc.dimensions > 0 || matches!(f.desc.elem, FieldElemType::Class { .. })
 }
 
 /// `getstatic`：读 static 字段。
 fn getstatic(interp: &mut Interpreter) -> Flow {
-    let idx = interp.read_u16() as usize;
-    let caller = unsafe { &*interp.regs().klass };
-    let field_ref = match caller.cp_get(idx) {
-        CPEntry::FieldRef(e) => e,
-        _ => panic!("getstatic: CP[{}] is not a FieldRef", idx),
-    };
-    let field_msref = crate::class_loader::resolve::resolve_field_ref(caller, field_ref)
-        .expect("getstatic: resolve failed");
-    let field: &Field = &field_msref;
-    assert!(
-        field
-            .acc_flags
-            .contains(crate::oops::acc_flags::AccFlags::ACC_STATIC)
-    );
-
-    let base = static_storage_base(caller, field);
-    let offs = field.offs();
-    if is_reference_field(field) {
-        let nptr = unsafe { read_payload(base, offs, 4) } as u32;
-        interp.push_slot(nptr as i32);
-    } else {
-        let size = field.desc.byte_size();
-        let v = unsafe { read_payload(base, offs, size) };
-        if size == 8 {
-            interp.push_long(v);
-        } else {
-            interp.push_slot(v as i32);
-        }
-    }
-    Flow::Continue
+    unimplemented!()
 }
 
 /// `putstatic`：写 static 字段。
 fn putstatic(interp: &mut Interpreter) -> Flow {
-    let idx = interp.read_u16() as usize;
-    let caller = unsafe { &*interp.regs().klass };
-    let field_ref = match caller.cp_get(idx) {
-        CPEntry::FieldRef(e) => e,
-        _ => panic!("putstatic: CP[{}] is not a FieldRef", idx),
-    };
-    let field_msref = crate::class_loader::resolve::resolve_field_ref(caller, field_ref)
-        .expect("putstatic: resolve failed");
-    let field: &Field = &field_msref;
-    assert!(
-        field
-            .acc_flags
-            .contains(crate::oops::acc_flags::AccFlags::ACC_STATIC)
-    );
-
-    let base = static_storage_base(caller, field);
-    let offs = field.offs();
-    let size = field.desc.byte_size();
-    if is_reference_field(field) {
-        let nptr = interp.pop_slot() as u32;
-        unsafe { write_payload(base, offs, 4, nptr as i64) };
-    } else if size == 8 {
-        let v = interp.pop_long();
-        unsafe { write_payload(base, offs, 8, v) };
-    } else {
-        let v = interp.pop_slot() as i64;
-        unsafe { write_payload(base, offs, size, v) };
-    }
-    Flow::Continue
+    unimplemented!()
 }
 
 /// `getfield`：读 instance 字段。
 fn getfield(interp: &mut Interpreter) -> Flow {
-    let idx = interp.read_u16() as usize;
-    let caller = unsafe { &*interp.regs().klass };
-    let field_ref = match caller.cp_get(idx) {
-        CPEntry::FieldRef(e) => e,
-        _ => panic!("getfield: CP[{}] is not a FieldRef", idx),
-    };
-    let field_msref = crate::class_loader::resolve::resolve_field_ref(caller, field_ref)
-        .expect("getfield: resolve failed");
-    let field: &Field = &field_msref;
-    assert!(
-        !field
-            .acc_flags
-            .contains(crate::oops::acc_flags::AccFlags::ACC_STATIC)
-    );
-
-    let this_nptr = interp.pop_slot() as u32;
-    assert!(this_nptr != 0, "getfield on null");
-    let obj_ptr = decode_oop(this_nptr);
-    let base = obj_ptr as *const u8;
-    let offs = field.offs();
-    if is_reference_field(field) {
-        let nptr = unsafe { read_payload(base, offs, 4) } as u32;
-        interp.push_slot(nptr as i32);
-    } else {
-        let size = field.desc.byte_size();
-        let v = unsafe { read_payload(base, offs, size) };
-        if size == 8 {
-            interp.push_long(v);
-        } else {
-            interp.push_slot(v as i32);
-        }
-    }
-    Flow::Continue
+    unimplemented!()
 }
 
 /// `putfield`：写 instance 字段。
 fn putfield(interp: &mut Interpreter) -> Flow {
-    let idx = interp.read_u16() as usize;
-    let caller = unsafe { &*interp.regs().klass };
-    let field_ref = match caller.cp_get(idx) {
-        CPEntry::FieldRef(e) => e,
-        _ => panic!("putfield: CP[{}] is not a FieldRef", idx),
-    };
-    let field_msref = crate::class_loader::resolve::resolve_field_ref(caller, field_ref)
-        .expect("putfield: resolve failed");
-    let field: &Field = &field_msref;
-    assert!(
-        !field
-            .acc_flags
-            .contains(crate::oops::acc_flags::AccFlags::ACC_STATIC)
-    );
-
-    let size = field.desc.byte_size();
-    let offs = field.offs();
-    if is_reference_field(field) {
-        let v = interp.pop_slot() as i64;
-        let this_nptr = interp.pop_slot() as u32;
-        assert!(this_nptr != 0, "putfield on null");
-        let obj_ptr = decode_oop(this_nptr);
-        let base = obj_ptr as *mut u8;
-        unsafe { write_payload(base, offs, 4, v) };
-    } else if size == 8 {
-        let v = interp.pop_long();
-        let this_nptr = interp.pop_slot() as u32;
-        assert!(this_nptr != 0, "putfield on null");
-        let obj_ptr = decode_oop(this_nptr);
-        let base = obj_ptr as *mut u8;
-        unsafe { write_payload(base, offs, 8, v) };
-    } else {
-        let v = interp.pop_slot() as i64;
-        let this_nptr = interp.pop_slot() as u32;
-        assert!(this_nptr != 0, "putfield on null");
-        let obj_ptr = decode_oop(this_nptr);
-        let base = obj_ptr as *mut u8;
-        unsafe { write_payload(base, offs, size, v) };
-    }
-    Flow::Continue
+    unimplemented!()
 }
 
 // ── invokestatic / invokevirtual handler ────────────────────────────────
@@ -1669,7 +1449,7 @@ fn invokestatic_handler(interp: &mut Interpreter) -> Flow {
     let idx = interp.read_u16() as usize;
     let caller = unsafe { &*interp.regs().klass };
     let method_ref = match caller.cp_get(idx) {
-        CPEntry::MethodRef(e) => e,
+        Some(CPEntry::MethodRef(e)) => e,
         _ => panic!("invokestatic: CP[{}] is not a MethodRef", idx),
     };
     let method_msref =
@@ -1705,7 +1485,7 @@ fn invokevirtual(interp: &mut Interpreter) -> Flow {
     let idx = interp.read_u16() as usize;
     let caller = unsafe { &*interp.regs().klass };
     let method_ref = match caller.cp_get(idx) {
-        CPEntry::MethodRef(e) => e,
+        Some(CPEntry::MethodRef(e)) => e,
         _ => panic!("invokevirtual: CP[{}] is not a MethodRef", idx),
     };
 
@@ -1731,8 +1511,8 @@ fn invokeinterface(interp: &mut Interpreter) -> Flow {
     let _count = interp.read_u8(); // 历史遗留的 arg slot 数，MVP 不用
     let caller = unsafe { &*interp.regs().klass };
     let method_ref = match caller.cp_get(idx) {
-        CPEntry::InterfaceMethodRef(e) => e,
-        CPEntry::MethodRef(e) => e, // 宽容：有些编译器对接口方法也用 MethodRef
+        Some(CPEntry::InterfaceMethodRef(e)) => e,
+        Some(CPEntry::MethodRef(e)) => e, // 宽容：有些编译器对接口方法也用 MethodRef
         _ => panic!(
             "invokeinterface: CP[{}] is not a MethodRef/InterfaceMethodRef",
             idx
@@ -1878,7 +1658,7 @@ fn anewarray(interp: &mut Interpreter) -> Flow {
     let caller = unsafe { &*interp.regs().klass };
     // 先解析元素类。
     let elem_entry = match caller.cp_get(idx) {
-        CPEntry::Class(e) => e,
+        Some(CPEntry::Class(e)) => e,
         _ => panic!("anewarray: CP[{}] is not a Class", idx),
     };
     let _elem_klass = resolve_class_ref(caller, elem_entry).expect("anewarray: resolve elem class");
@@ -2112,7 +1892,7 @@ fn instanceof(interp: &mut Interpreter) -> Flow {
     let idx = interp.read_u16() as usize;
     let caller = unsafe { &*interp.regs().klass };
     let class_entry = match caller.cp_get(idx) {
-        CPEntry::Class(e) => e,
+        Some(CPEntry::Class(e)) => e,
         _ => panic!("instanceof: CP[{}] is not a Class", idx),
     };
     let target_klass = resolve_class_ref(caller, class_entry).expect("instanceof: resolve failed");
@@ -2132,7 +1912,7 @@ fn checkcast(interp: &mut Interpreter) -> Flow {
     let idx = interp.read_u16() as usize;
     let caller = unsafe { &*interp.regs().klass };
     let class_entry = match caller.cp_get(idx) {
-        CPEntry::Class(e) => e,
+        Some(CPEntry::Class(e)) => e,
         _ => panic!("checkcast: CP[{}] is not a Class", idx),
     };
     let target_klass = resolve_class_ref(caller, class_entry).expect("checkcast: resolve failed");

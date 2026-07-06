@@ -50,7 +50,7 @@ pub unsafe extern "C" fn klover_obj_layout_of(klass: *const Klass) -> *const Obj
         return std::ptr::null();
     }
     match unsafe { &*klass } {
-        Klass::Normal(n) => &n.obj_layout as *const ObjLayout,
+        Klass::Normal(n) => n.get_obj_layout() as *const ObjLayout,
         _ => std::ptr::null(),
     }
 }

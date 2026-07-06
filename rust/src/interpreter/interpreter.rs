@@ -73,7 +73,7 @@ impl Registers {
 
     /// 读取当前类常量池索引处的条目。
     #[inline]
-    pub(super) fn cp_get(&self, idx: usize) -> &CPEntry {
+    pub(super) fn cp_get(&self, idx: usize) -> Option<&CPEntry> {
         unsafe { (*self.klass).cp_get(idx) }
     }
 }
@@ -244,7 +244,7 @@ impl Interpreter {
                     // 在调用者帧的 exception_table 里查找 handler。
                     // 调用者帧的 pc 已经是 invoke 指令之后的位置。
                     let caller_method = self.regs.method;
-                    let caller_code = match (*caller_method).code.as_ref() {
+                    let caller_code = match unsafe { (*caller_method).code.as_ref() } {
                         Some(c) => c,
                         None => {
                             self.frames.pop();
