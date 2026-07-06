@@ -1,5 +1,6 @@
+use std::mem::MaybeUninit;
 use std::ops::{Deref, DerefMut};
-use std::ptr;
+use std::{ptr, slice};
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -113,16 +114,28 @@ impl MSAllocator {
     /// bump-pointer allocation inside a small chunk.  Larger objects
     /// receive their own dedicated chunk obtained from the C metaspace
     /// layer.
-    pub fn alloc<T>(&self, size: usize) -> *mut T {
-        if size < BUMP_THRESHOLD {
-            self.bump_alloc(size)
-        } else {
-            self.sized_alloc(size)
+    fn alloc<T>(&self) -> &mut MaybeUninit<T> {
+        let size = size_of::<T>();
+
+        unsafe {
+            if size < BUMP_THRESHOLD {
+                &mut *self.bump_alloc(size)
+            } else {
+                &mut *self.sized_alloc(size)
+            }
         }
     }
 
-    pub fn calloc<T>(&self, elem_size: usize, count: usize) -> *mut T {
-        self.alloc(elem_size * count)
+    pub fn calloc<T>(&self, count: usize) -> &mut [MaybeUninit<T>] {
+        let size = size_of::<T>();
+        let mem = if size < BUMP_THRESHOLD {
+            self.bump_alloc(size)
+        } else {
+            self.sized_alloc(size)
+        };
+        let slice = unsafe { slice::from_raw_parts_mut(mem, count) };
+
+        slice
     }
 
     // ── bump-pointer allocation ──────────────────────────────────────
@@ -273,12 +286,11 @@ pub struct MSBox<T: ?Sized> {
     raw: NonNull<T>,
 }
 
-impl<T: Sized> MSBox<T> {
+impl<T> MSBox<T> {
     /// Allocate memory through `allocator` and move `value` into it.
     pub fn new(allocator: &MSAllocator, value: T) -> Self {
-        let size = std::mem::size_of::<T>();
-        let ptr = allocator.alloc::<T>(size);
-        unsafe { ptr.write(value) };
+        let uninit = allocator.alloc::<T>();
+        let ptr = uninit.write(value);
         MSBox {
             raw: unsafe { NonNull::new_unchecked(ptr) },
         }
