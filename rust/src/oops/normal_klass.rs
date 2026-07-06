@@ -147,10 +147,6 @@ impl NormalKlass {
 
         let interfaces = build_interfaces(&cf.interfaces, &cp, msa)?;
 
-        // 5. Build raw fields（static storage 立即分配；instance offset 推迟）。
-        let raw_fields = RawFields::build(&cf.fields, &cp, msa)?;
-
-        // 6. Build methods.
         let methods = build_methods(&cf.methods, &cp, msa)?;
 
         let cld_ptr = match cld {
@@ -174,7 +170,7 @@ impl NormalKlass {
         let boxed = MSBox::new(msa, Klass::Normal(klass));
         this_entry.resolved.set((&boxed).into());
 
-        Ok((boxed, super_entry, RawFields))
+        Ok((boxed, super_entry))
     }
 
     pub fn cal_object_layout(&self) {
@@ -183,57 +179,20 @@ impl NormalKlass {
             None => null()
         };
 
+        let fields = self.get_fields();
         
+        let layout = ObjLayout {
+            super_layout,
+            byte_size: fields.instance_size,
+            ptrs_count: fields.instance_ptrs_count
+        };
+
+        self.obj_layout.set(layout).unwrap()
     }
 
     // callsite: cld
     pub fn set_super(&self, s: Option<MSRef<NormalKlass>>) {
-        // layer_start：本类部分起点 = 父类 byte_size。
-        // Object 类（s == None）只有 markword，起点 = HEADER_BYTES。
-        let (layer_start, super_layout_ptr): (usize, *const ObjLayout) = match &s {
-            Some(super_ref) => {
-                let super_normal: &NormalKlass = super_ref.deref();
-                (super_normal.obj_layout.byte_size, &super_normal.obj_layout)
-            }
-            None => (HEADER_BYTES, ptr::null()),
-        };
-
-        self.super_klass.set(s).unwrap();
-
-        // 构建 instance field layout + 填 obj_layout。
-        let msa = self
-            .cld
-            .map(|c| unsafe { &(*c.as_ptr()).ms_allocator })
-            .unwrap_or_else(BootstrapCLD::bs_msa);
-
-        // take 出 build 阶段存的 raw_fields。
-        // OnceCell::get 在 set 后返回 Some，但我们要 move 出来，需要用 unsafe。
-        // 这里用一个内部可变技巧：直接用 Cell/UCell 不合适（RawFields 不是 Copy）。
-        // 简化：用 OnceCell::get 取引用，但 finalize 需要 owned——
-        // 重新设计：raw_fields 用 take 语义。
-        // Rust 的 OnceCell 不支持 take，所以用 Option + 锁。
-        // 为避免重构，这里用 unsafe 读出后 forget OnceCell。
-        let raw_fields = match self.raw_fields.get() {
-            Some(r) => unsafe {
-                // SAFETY: set_super 只会被调用一次（super_klass 的 OnceCell 保证）。
-                let owned = std::ptr::read(r);
-                owned
-            },
-            None => unreachable!("raw_fields must be set in build"),
-        };
-
-        let (fields, byte_size, ptr_count) = Fields::finalize(raw_fields, layer_start, msa);
-        self.fields.set(fields).expect("fields already set");
-
-        // 填 obj_layout。修改 self.obj_layout 需要 &mut self，但 set_super 接收 &self。
-        // ObjLayout 不是 OnceCell，但我们能保证 set_super 只调一次。
-        // 用 unsafe 绕过借用检查。
-        unsafe {
-            let layout = &self.obj_layout as *const ObjLayout as *mut ObjLayout;
-            (*layout).super_layout = super_layout_ptr;
-            (*layout).byte_size = byte_size;
-            (*layout).ptr_count = ptr_count;
-        }
+        self.super_klass.set(s).unwrap()
     }
 }
 
@@ -243,7 +202,7 @@ impl NormalKlass {
     }
 
     /// 返回已 finalize 的 `Fields`。仅在 `set_super` 后可用。
-    pub fn fields(&self) -> &Fields {
+    pub fn get_fields(&self) -> &Fields {
         self.fields.get().expect("fields not finalized yet")
     }
 
@@ -260,17 +219,23 @@ impl NormalKlass {
     /// 沿继承链查找字段（name + descriptor 同时匹配）。
     /// 返回的字段同时覆盖 instance 与 static，调用方按 acc_flags 区分。
     pub fn find_field(&self, fname: &SymbolHandle, fdesc: &SymbolHandle) -> Option<&Field> {
-        let f = self.fields();
-        for field in f.instance_fields.as_ref() {
-            if field.name.equals(fname) && field.desc.raw.equals(fdesc) {
-                return Some(field);
+        let f = self.get_fields();
+        if let Some(x) = f.instance_fields.as_ref() {
+            for field in x.as_ref() {
+                if field.name.equals(fname) && field.desc.raw.equals(fdesc) {
+                    return Some(field);
+                }
             }
         }
-        for field in f.static_fields.as_ref() {
-            if field.name.equals(fname) && field.desc.raw.equals(fdesc) {
-                return Some(field);
+        
+        if let Some(x) = f.static_fields.as_ref() {
+            for field in x.as_ref() {
+                if field.name.equals(fname) && field.desc.raw.equals(fdesc) {
+                    return Some(field);
+                }
             }
         }
+        
         // 沿继承链向上。
         match self.get_super() {
             Some(s) => s.find_field(fname, fdesc),
