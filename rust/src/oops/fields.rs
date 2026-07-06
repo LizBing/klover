@@ -1,4 +1,4 @@
-use std::{array, marker::PhantomData, ptr};
+use std::{array, cell::OnceCell, marker::PhantomData, ptr};
 
 use crate::{
     class_loader::ms_api::{MSAllocator, MSBox},
@@ -145,7 +145,7 @@ impl Fields {
     }
     
 
-    pub fn build(infos: &[FieldInfo], cp_slice: &[Option<CPEntry>], msa: &MSAllocator) -> ResolveResult<Self> {
+    pub fn build(infos: &[FieldInfo], cp_slice: &[OnceCell<CPEntry>], msa: &MSAllocator) -> ResolveResult<Self> {
         let mut instance_buckets = array::from_fn(|_| Vec::new());
         let mut static_buckets = array::from_fn(|_| Vec::new());
 

@@ -23,7 +23,7 @@ pub struct Field {
 }
 
 impl Field {
-    pub(super) fn from(info: &FieldInfo, cp: &[Option<CPEntry>]) -> ResolveResult<Self> {
+    pub(super) fn from(info: &FieldInfo, cp: &[OnceCell<CPEntry>]) -> ResolveResult<Self> {
         let acc_flags = AccFlags::from_bits_truncate(info.acc_flags);
         let name = get_utf8(cp, info.name_idx as usize)?;
         let raw_desc = get_utf8(cp, info.desc_idx as usize)?;

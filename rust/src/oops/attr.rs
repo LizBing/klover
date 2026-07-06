@@ -1,3 +1,5 @@
+use std::cell::OnceCell;
+
 use crate::{
     class_loader::ms_api::{MSAllocator, MSBox, MSRef},
     class_parser::attr_info::{CodeAttrInfo, ExceptionTableEntryInfo},
@@ -18,7 +20,7 @@ pub struct ExceptionTableEntry {
 }
 
 impl ExceptionTableEntry {
-    fn from(info: &ExceptionTableEntryInfo, cp: &[Option<CPEntry>]) -> ResolveResult<Self> {
+    fn from(info: &ExceptionTableEntryInfo, cp: &[OnceCell<CPEntry>]) -> ResolveResult<Self> {
         let catch_type = if info.catch_type == 0 {
             None // catch all
         } else {
@@ -69,7 +71,7 @@ pub struct CodeAttr {
 impl CodeAttr {
     pub fn from(
         info: &CodeAttrInfo,
-        cp: &[Option<CPEntry>],
+        cp: &[OnceCell<CPEntry>],
         msa: &MSAllocator,
     ) -> ResolveResult<Self> {
         let code = unsafe {
@@ -111,15 +113,13 @@ pub enum ConstantValueAttr {
 }
 
 impl ConstantValueAttr {
-    pub fn from(cp_idx: usize, cp: &[Option<CPEntry>]) -> ResolveResult<Self> {
-        let entry = unsafe { cp[cp_idx].as_ref().unwrap_unchecked() };
-
-        match entry {
-            CPEntry::Integer(value) => Ok(Self::Integer(*value)),
-            CPEntry::Float(value) => Ok(Self::Float(*value)),
-            CPEntry::Long(value) => Ok(Self::Long(*value)),
-            CPEntry::Double(value) => Ok(Self::Double(*value)),
-            CPEntry::StringConstant(entry) => Ok(Self::String(entry.into())),
+    pub fn from(cp_idx: usize, cp: &[OnceCell<CPEntry>]) -> ResolveResult<Self> {
+        match cp[cp_idx].get() {
+            Some(CPEntry::Integer(value)) => Ok(Self::Integer(*value)),
+            Some(CPEntry::Float(value)) => Ok(Self::Float(*value)),
+            Some(CPEntry::Long(value)) => Ok(Self::Long(*value)),
+            Some(CPEntry::Double(value)) => Ok(Self::Double(*value)),
+            Some(CPEntry::StringConstant(entry)) => Ok(Self::String(entry.into())),
 
             _ => Err(ResolveError::MismatchCPType),
         }

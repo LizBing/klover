@@ -464,9 +464,9 @@ impl CPEntry {
     }
 }
 
-pub fn get_utf8(cp: &[Option<CPEntry>], idx: usize) -> ResolveResult<SymbolHandle> {
-    match unsafe { cp[idx].as_ref().unwrap_unchecked() } {
-        CPEntry::Utf8(handle) => Ok(handle.clone()),
+pub fn get_utf8(cp: &[OnceCell<CPEntry>], idx: usize) -> ResolveResult<SymbolHandle> {
+    match cp[idx].get() {
+        Some(CPEntry::Utf8(handle)) => Ok(handle.clone()),
         _ => Err(ResolveError::MismatchCPType),
     }
 }

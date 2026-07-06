@@ -66,13 +66,13 @@ fn build_cp<'a>(
     Ok(cp)
 }
 
-pub fn cp_slice_get(cp_slice: &[Option<CPEntry>], idx: usize) -> Option<&CPEntry> {
-    cp_slice[idx].as_ref()
+pub fn cp_slice_get(cp_slice: &[OnceCell<CPEntry>], idx: usize) -> Option<&CPEntry> {
+    cp_slice[idx].get()
 }
 
 fn build_interfaces(
     parsed_ifaces: &[u16],
-    cp_slice: &[Option<CPEntry>],
+    cp_slice: &[OnceCell<CPEntry>],
     msa: &MSAllocator,
 ) -> ResolveResult<MSBox<[MSRef<ClassCPEntry>]>> {
     let iface_len = parsed_ifaces.len();
@@ -90,7 +90,7 @@ fn build_interfaces(
 
 fn build_methods(
     parsed_methods: &[MethodInfo],
-    cp_slice: &[Option<CPEntry>],
+    cp_slice: &[OnceCell<CPEntry>],
     msa: &MSAllocator,
 ) -> ResolveResult<MSBox<[Method]>> {
     let methods_len = parsed_methods.len();
@@ -191,8 +191,8 @@ impl NormalKlass {
 }
 
 impl NormalKlass {
-    pub fn cp_get(&self, idx: usize) -> &CPEntry {
-        unsafe { self.constant_pool.as_ref()[idx].as_ref().unwrap_unchecked() }
+    pub fn cp_get(&self, idx: usize) -> Option<&CPEntry> {
+        cp_slice_get(&self.constant_pool, idx)
     }
 
     pub fn find_method(&self, mname: &SymbolHandle, mdesc: &SymbolHandle) -> Option<&Method> {
