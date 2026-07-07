@@ -2,50 +2,17 @@ use std::{cell::OnceCell, mem, sync::OnceLock};
 
 use crate::{
     class_loader::ms_api::MSRef, class_parser::cp_info::ConstantPoolInfo, gc_bindings::oop_handle::{KLASS_OOP_STORAGE_ID, OOPHandle}, oops::{
-        desc::MethodDesc,
-        field::Field,
-        klass::Klass,
-        method::Method,
-        resolve_error::{ResolveError, ResolveResult},
-        symbol_table::{SymbolHandle, SymbolTable},
+        desc::MethodDesc, field::Field, klass::Klass, method::Method, normal_klass::NormalKlass, resolve_error::{ResolveError, ResolveResult}, symbol_table::{SymbolHandle, SymbolTable}
     }
 };
 
 #[derive(Debug)]
 pub struct CPRefEntry<T> {
-    class_name: SymbolHandle,
-    name: SymbolHandle,
-    desc: SymbolHandle,
+    pub class_name: SymbolHandle,
+    pub name: SymbolHandle,
+    pub desc: SymbolHandle,
 
-    resolved: OnceLock<MSRef<T>>,
-}
-
-impl<T> CPRefEntry<T> {
-    /// 声明该引用的类的内部名（例如 `java/lang/String`）。
-    pub fn class_name(&self) -> &SymbolHandle {
-        &self.class_name
-    }
-
-    /// 字段或方法名。
-    pub fn name(&self) -> &SymbolHandle {
-        &self.name
-    }
-
-    /// 字段或方法描述符。
-    pub fn desc(&self) -> &SymbolHandle {
-        &self.desc
-    }
-
-    /// 已解析出的目标（字段 / 方法）。  未解析时返回 `None`。
-    pub fn resolved(&self) -> Option<&MSRef<T>> {
-        self.resolved.get()
-    }
-
-    /// 尝试记录解析结果。  返回 `Ok(())` 表示首次设置成功；
-    /// `Err(value)` 表示已经被别人先解析过，返回传入的值供调用者丢弃。
-    pub fn try_resolve(&self, value: MSRef<T>) -> Result<(), MSRef<T>> {
-        self.resolved.set(value)
-    }
+    pub resolved: OnceLock<(MSRef<NormalKlass>, MSRef<T>)>,
 }
 
 fn resolve_name_and_type(

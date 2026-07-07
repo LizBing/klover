@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 use std::ptr::null;
 
+use crate::interpreter::instructions;
 use crate::oops::acc_flags::AccFlags;
 use crate::oops::cp_entry::CPEntry;
 use crate::oops::desc::FieldDesc;
@@ -156,138 +157,7 @@ impl Interpreter {
         method: &Method,
         args: &[StackSlot],
     ) -> InvokeResult {
-        let code = method.code.as_ref().ok_or(InvokeError::NoCode)?;
-        let max_locals = code.max_locals as usize;
-        let max_stack = code.max_stack as usize;
-
-        // 局部变量区：实参 + 编译器补充的额外局部变量槽。
-        let arg_slot_count = Self::arg_slot_count(&method);
-        // 实例方法隐含一个 this 参数。
-        let expected = if method.acc_flags.contains(AccFlags::ACC_STATIC) {
-            arg_slot_count
-        } else {
-            arg_slot_count + 1
-        };
-        if args.len() != expected {
-            return Err(InvokeError::ArgCountMismatch {
-                expected,
-                actual: args.len(),
-            });
-        }
-        if args.len() > max_locals {
-            return Err(InvokeError::ArgCountMismatch {
-                expected: max_locals,
-                actual: args.len(),
-            });
-        }
-
-        let total_slots = max_locals + max_stack;
-        let base = match self.frames.last() {
-            None => 0,
-            Some(parent) => parent.base + parent.total_slots,
-        };
-        if base + total_slots > self.stack.len() {
-            return Err(InvokeError::StackOverflow);
-        }
-
-        // 1. 写入实参到 locals[0..args.len())，剩余槽清零。
-        let locals = &mut self.stack[base..base + max_locals];
-        for (i, a) in args.iter().enumerate() {
-            locals[i] = *a;
-        }
-        for slot in locals[args.len()..].iter_mut() {
-            *slot = 0;
-        }
-
-        // 2. 设置 sp。
-        let stack_ptr = self.stack.as_mut_ptr();
-        let expr_base = base + max_locals;
-        let sp = unsafe { stack_ptr.add(expr_base + max_stack) };
-
-        // 3. 设置 pc。
-        let pc = code.code.as_ptr() as *mut u8;
-
-        // 4. 记录帧并切换寄存器。
-        self.frames.push(FrameRecord { base, total_slots });
-        let bp = unsafe { stack_ptr.add(base) };
-        let saved = std::mem::replace(
-            &mut self.regs,
-            Registers {
-                __: PhantomData,
-                bp,
-                sp,
-                pc,
-                klass,
-                method,
-            },
-        );
-
-        // 5. 跑循环。  循环是为了处理“被调用方法抛异常 → 当前帧捕获 → 继续执行 → 可能又抛”的情况。
-        let mut flow = self.run_loop();
-
-        // 6. 恢复调用者帧的寄存器（不弹帧，下面查找还要用调用者帧的信息）。
-        self.regs = saved;
-
-        loop {
-            match flow {
-                Flow::Continue => {
-                    // 不应发生（方法以 return 结尾），当作 void 返回。
-                    self.frames.pop();
-                    return Ok(InvokeOutcome::Returned(None));
-                }
-                Flow::Return(v) => {
-                    self.frames.pop();
-                    return Ok(InvokeOutcome::Returned(v));
-                }
-                Flow::Throw(exc_nptr) => {
-                    // 被调用方法抛出异常且未自身捕获。
-                    // 在调用者帧的 exception_table 里查找 handler。
-                    // 调用者帧的 pc 已经是 invoke 指令之后的位置。
-                    let caller_method = self.regs.method;
-                    let caller_code = match unsafe { (*caller_method).code.as_ref() } {
-                        Some(c) => c,
-                        None => {
-                            self.frames.pop();
-                            return Ok(InvokeOutcome::Thrown(exc_nptr));
-                        }
-                    };
-                    let code_start = caller_code.code.as_ptr() as usize;
-                    let throw_bci = (self.regs.pc as usize).saturating_sub(code_start);
-
-                    match Self::find_exception_handler_in(
-                        caller_code,
-                        self.regs.klass,
-                        throw_bci,
-                        exc_nptr,
-                    ) {
-                        Some(handler_pc) => {
-                            // 调用者帧能处理：清空操作数栈，push 异常，跳 handler。
-                            let f = self.frames.last().unwrap();
-                            let caller_base = f.base;
-                            // max_locals 在调用者帧创建时就确定了；调用者帧的 FrameRecord 不存
-                            // max_locals，但我们能从当前 method 拿到。
-                            let caller_max_locals = caller_code.max_locals as usize;
-                            let caller_max_stack = caller_code.max_stack as usize;
-                            let stack_ptr = self.stack.as_mut_ptr();
-                            // 清栈：sp 重置到空栈位置。
-                            self.regs.sp = unsafe {
-                                stack_ptr.add(caller_base + caller_max_locals + caller_max_stack)
-                            };
-                            self.push_slot(exc_nptr as i32);
-                            self.regs.pc = unsafe { (code_start + handler_pc as usize) as *mut u8 };
-                            // 继续跑调用者帧。
-                            flow = self.run_loop();
-                            // 回到 loop 开头，处理这次 run_loop 的 flow。
-                        }
-                        None => {
-                            // 调用者也无法处理，继续向上抛。
-                            self.frames.pop();
-                            return Ok(InvokeOutcome::Thrown(exc_nptr));
-                        }
-                    }
-                }
-            }
-        }
+        unimplemented!()
     }
 
     /// 调用一个 `ACC_STATIC` 方法。
@@ -339,80 +209,11 @@ impl Interpreter {
             .sum()
     }
 
-    /// 在方法的 exception_table 里查找匹配的 handler。
-    ///
-    /// `throw_bci` 是异常抛出点的字节码偏移。
-    /// `exc_nptr` 是异常对象的 narrow ptr。
-    ///
-    /// 返回 `handler_pc`（如果找到）。
-    fn find_exception_handler_in(
-        code: &CodeAttr,
-        caller_klass: *const NormalKlass,
-        throw_bci: usize,
-        exc_nptr: u32,
-    ) -> Option<u16> {
-        use crate::gc_bindings::oop_codec::{decode_oop, klass_from_markword};
-        use crate::oops::klass::Klass;
-
-        // 解异常对象的运行时类型。
-        let exc_ptr = decode_oop(exc_nptr);
-        let exc_markword = unsafe { (*exc_ptr).markword };
-        let exc_klass_ref = unsafe { klass_from_markword(exc_markword) };
-        let exc_normal = match &*exc_klass_ref {
-            Klass::Normal(n) => n,
-            _ => return None, // 数组异常对象不支持（MVP）
-        };
-
-        let caller = unsafe { &*caller_klass };
-
-        for entry in code.exception_table.as_ref() {
-            if (throw_bci as u16) >= entry.start_pc() && (throw_bci as u16) < entry.end_pc() {
-                match entry.catch_type() {
-                    None => {
-                        // catch all（finally）。
-                        return Some(entry.handler_pc());
-                    }
-                    Some(catch_cp_ref) => {
-                        // 解析 catch_type 指向的类。
-                        let catch_name = catch_cp_ref.name.utf8();
-                        // 用 caller 的 CLD 加载。
-                        let msa = match caller.cld {
-                            Some(cld) => unsafe { &(*cld.as_ptr()).ms_allocator },
-                            None => crate::class_loader::bootstrap_cld::BootstrapCLD::bs_msa(),
-                        };
-                        let _ = msa; // TODO: catch_type 应该已经是解析过的 ClassCPEntry
-                        // ClassCPEntry.resolved 存的是 MSRef<Klass>。
-                        if let Some(target_klass) = catch_cp_ref.resolved.get() {
-                            if let Some(target_normal) = target_klass.as_normal() {
-                                if exc_normal.is_subclass_of(target_normal) {
-                                    return Some(entry.handler_pc());
-                                }
-                            }
-                        } else {
-                            // 还没解析，走 load_class_by_caller。
-                            let target_klass = crate::class_loader::resolve::load_class_by_caller(
-                                caller, catch_name,
-                            )
-                            .ok()?;
-                            let _ = catch_cp_ref.resolved.set(target_klass.clone());
-                            if let Some(target_normal) = target_klass.as_normal() {
-                                if exc_normal.is_subclass_of(target_normal) {
-                                    return Some(entry.handler_pc());
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        None
-    }
-
     fn run_loop(&mut self) -> Flow {
         loop {
             let opcode = unsafe { *self.regs.pc } as usize;
             self.regs.pc = unsafe { self.regs.pc.add(1) };
-            let handler = super::instructions::instruction_table()[opcode];
+            let handler = instructions::instruction_table()[opcode];
             match handler(self) {
                 Flow::Continue => {}
                 other => return other,
