@@ -19,7 +19,7 @@ impl Method {
         let mut code = None;
         for n in &info.attrs {
             match n {
-                AttrInfo::Code { info } => code = Some(CodeAttr::from(info, cp, msa)?),
+                AttrInfo::Code(info) => code = Some(CodeAttr::from(info, cp, msa)?),
                 _ => continue
             }
         }

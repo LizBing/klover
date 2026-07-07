@@ -50,10 +50,46 @@ impl CodeAttrInfo {
     }
 }
 
+fn read_u16_vec(rd: &mut ClassReader, count: usize) -> ParseResult<Vec<u16>> {
+    let mut res = Vec::new();
+
+    for _ in 0..count {
+        res.push(rd.read_u16()?);
+    }
+
+    Ok(res)
+}
+
+pub struct BootstrapMethodInfo {
+    pub bs_method_ref: u16,
+    pub bs_arguments: Vec<u16>
+}
+
+impl BootstrapMethodInfo {
+    fn read(rd: &mut ClassReader) -> ParseResult<Self> {
+        let bs_method_ref = rd.read_u16()?;
+        let count = rd.read_u16()?;
+        let bs_arguments = read_u16_vec(rd, count as usize)?;
+
+        Ok(Self {
+            bs_method_ref,
+            bs_arguments
+        })
+    }
+}
+
 pub enum AttrInfo {
     ConstantValue { cp_idx: u16 },
     
-    Code { info: CodeAttrInfo },
+    Code(CodeAttrInfo),
+
+    PermittedSubclasses { cp_idxes: Vec<u16> },
+
+    BootstrapMethods(Vec<BootstrapMethodInfo>),
+
+    NestHost { cp_idx: u16 },
+
+    NestMembers { cp_idxes: Vec<u16> },
 }
 
 impl AttrInfo {
@@ -72,7 +108,35 @@ impl AttrInfo {
 
         match name.as_str() {
             "ConstantValue" => Ok(Some(Self::ConstantValue { cp_idx: pl_rd.read_u16()? })),
-            "Code" => Ok(Some(Self::Code { info: CodeAttrInfo::read(&mut pl_rd, cp)? })),
+            
+            "Code" => Ok(Some(Self::Code(CodeAttrInfo::read(&mut pl_rd, cp)?))),
+            
+            "PermittedSubclasses" => {
+                let count = pl_rd.read_u16()?;
+                let res = read_u16_vec(&mut pl_rd, count as usize)?;
+
+                Ok(Some(Self::PermittedSubclasses { cp_idxes: res }))
+            }
+
+            "BootstrapMethods" => {
+                let count = pl_rd.read_u16()?;
+                let mut methods = Vec::new();
+
+                for _ in 0..count {
+                    methods.push(BootstrapMethodInfo::read(&mut pl_rd)?);
+                }
+
+                Ok(Some(Self::BootstrapMethods(methods)))
+            }
+
+            "NestHost" => Ok(Some(Self::NestHost { cp_idx: pl_rd.read_u16()? })),
+
+            "NestMembers" => {
+                let count = pl_rd.read_u16()?;
+                let res = read_u16_vec(&mut pl_rd, count as usize)?;
+
+                Ok(Some(Self::PermittedSubclasses { cp_idxes: res }))
+            }
 
             _ => Ok(None)
         }
