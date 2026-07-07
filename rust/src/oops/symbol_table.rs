@@ -6,7 +6,7 @@ use std::{
 
 use parking_lot::Mutex;
 
-pub(super) struct Symbol {
+struct Symbol {
     next: *mut Symbol,
     ref_cnt: AtomicU32,
 
@@ -14,17 +14,17 @@ pub(super) struct Symbol {
 }
 
 impl Symbol {
-    pub fn utf8(&self) -> &str {
+    fn utf8(&self) -> &str {
         &self.utf8
     }
 }
 
 impl Symbol {
-    pub fn inc_ref_cnt(&self) {
+    fn inc_ref_cnt(&self) {
         self.ref_cnt.fetch_add(1, Ordering::Relaxed);
     }
 
-    pub fn dec_ref_cnt(&self) {
+    fn dec_ref_cnt(&self) {
         self.ref_cnt.fetch_sub(1, Ordering::Release);
     }
 
@@ -39,7 +39,6 @@ struct Bucket {
 }
 
 unsafe impl Send for Bucket {}
-
 unsafe impl Sync for Bucket {}
 
 impl Bucket {
@@ -116,7 +115,7 @@ impl SymbolTable {
 
 #[derive(Debug)]
 pub struct SymbolHandle {
-    pub(super) symbol: NonNull<Symbol>,
+    symbol: NonNull<Symbol>,
 }
 
 impl Clone for SymbolHandle {

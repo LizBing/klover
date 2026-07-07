@@ -9,8 +9,8 @@
 //!     指向 metaspace 内的 `Klass`。  统一走 `MSRef::encode` / `decode`。
 
 use crate::class_loader::ms_api::MSRef;
+use crate::gc_bindings::oop_handle::ObjDesc;
 use crate::oops::klass::Klass;
-use crate::oops::oop_handle::ObjDesc;
 
 /// Java 堆的虚拟内存基址（与 C 层 `GCHEAP_BASE` 一致）。
 pub const GCHEAP_BASE: usize = 1usize << 44;

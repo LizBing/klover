@@ -1,4 +1,4 @@
-use crate::oops::{desc::{FieldDesc, FieldElemType}, oop_handle::{NObjPtr, OOPHandle}, symbol_table::SymbolHandle};
+use crate::{gc_bindings::oop_handle::{NObjPtr, OOPHandle}, oops::{desc::{FieldDesc, FieldElemType}, symbol_table::SymbolHandle}};
 
 /// 数组元素的固定布局：
 ///   markword(8) + length(4) + padding(4) + elements(...)
@@ -23,7 +23,7 @@ impl ArrayKlass {
     pub fn element_size(&self) -> usize {
         if self.desc.dimensions > 1 {
             // 元素是子数组引用。
-            return std::mem::size_of::<crate::oops::oop_handle::NObjPtr>();
+            return size_of::<NObjPtr>();
         }
         // dimensions == 1：剥掉一维，看 elem 自身大小。
         match self.desc.elem {

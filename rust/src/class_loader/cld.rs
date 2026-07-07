@@ -1,4 +1,4 @@
-use std::{ops::Deref, ptr::NonNull, sync::atomic::Ordering};
+use std::{ops::Deref, ptr::NonNull};
 
 use dashmap::{DashMap, mapref::entry::Entry};
 
@@ -8,15 +8,12 @@ use crate::{
         cld_map,
         load_error::{LoadError, LoadResult},
         ms_api::{MSAllocator, MSBox, MSRef},
-    },
-    class_parser::{class_file::ClassFile, cp_info::ConstantPoolInfo},
-    oops::{
+    }, class_parser::{class_file::ClassFile, cp_info::ConstantPoolInfo}, gc_bindings::oop_handle::{CLD_MIRROR_STORAGE_ID, OOPHandle}, oops::{
         klass::Klass,
         normal_klass::NormalKlass,
-        oop_handle::{CLD_MIRROR_STORAGE_ID, OOPHandle},
         resolve_error::ResolveError,
         symbol_table::{SymbolHandle, SymbolTable},
-    },
+    }
 };
 
 // ── ClassLoaderData ─────────────────────────────────────────────────────
@@ -110,6 +107,7 @@ impl ClassLoaderData {
 
                 let super_normal = super_klass.as_normal().unwrap();
                 normal.set_super(Some(super_normal.into()));
+                normal.cal_object_layout();
             }
 
             None => {

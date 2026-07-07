@@ -1,17 +1,14 @@
 use std::{cell::OnceCell, mem, sync::OnceLock};
 
 use crate::{
-    class_loader::ms_api::MSRef,
-    class_parser::cp_info::ConstantPoolInfo,
-    oops::{
+    class_loader::ms_api::MSRef, class_parser::cp_info::ConstantPoolInfo, gc_bindings::oop_handle::{KLASS_OOP_STORAGE_ID, OOPHandle}, oops::{
         desc::MethodDesc,
         field::Field,
         klass::Klass,
         method::Method,
-        oop_handle::{KLASS_OOP_STORAGE_ID, OOPHandle},
         resolve_error::{ResolveError, ResolveResult},
         symbol_table::{SymbolHandle, SymbolTable},
-    },
+    }
 };
 
 #[derive(Debug)]
@@ -372,10 +369,6 @@ impl CPEntry {
     ) -> ResolveResult<()> {
         let info = &parsed_cp[idx];
 
-        if cp[idx].get().is_some() {
-            return Ok(())
-        }
-
         let res = match info {
             ConstantPoolInfo::ClassInfo { name_index } => {
                 let name = resolve_symbol(*name_index as usize, cp, parsed_cp)?;
@@ -458,7 +451,7 @@ impl CPEntry {
             ConstantPoolInfo::Unusable => return Ok(()),
         };
 
-        cp[idx].set(res).unwrap();
+        cp[idx].get_or_init(|| res);
 
         Ok(())
     }

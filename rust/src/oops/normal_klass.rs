@@ -12,15 +12,16 @@ use crate::{
         class_file::ClassFile, cp_info::ConstantPoolInfo,
         method_info::MethodInfo,
     },
-    gc_bindings::obj_layout::ObjLayout,
+    gc_bindings::{obj_layout::ObjLayout, oop_handle::{KLASS_OOP_STORAGE_ID, OOPHandle}},
     oops::{
-        acc_flags::AccFlags, cp_entry::{CPEntry, ClassCPEntry}, field::Field, fields::Fields, klass::Klass, method::Method, oop_handle::{KLASS_OOP_STORAGE_ID, OOPHandle}, resolve_error::{ResolveError, ResolveResult}, symbol_table::SymbolHandle
-    },
+        acc_flags::AccFlags, 
+        cp_entry::{CPEntry, ClassCPEntry},
+        field::Field,
+        fields::Fields,
+        klass::Klass,
+        method::Method, resolve_error::{ResolveError, ResolveResult}, symbol_table::SymbolHandle,
+    }
 };
-
-
-/// 对象头大小（markword）。
-const HEADER_BYTES: usize = 8;
 
 #[derive(Debug)]
 pub struct NormalKlass {
@@ -158,7 +159,7 @@ impl NormalKlass {
         };
 
         let boxed = MSBox::new(msa, Klass::Normal(klass));
-        this_entry.resolved.set((&boxed).into());
+        this_entry.resolved.set((&boxed).into()).unwrap();
 
         Ok((boxed, super_entry))
     }

@@ -4,11 +4,6 @@ use super::{
 };
 
 #[derive(Debug)]
-pub enum ReferenceKind {
-    Kind(u8),
-}
-
-#[derive(Debug)]
 pub enum ConstantPoolInfo {
     ClassInfo {
         name_index: u16, // Utf8Info

@@ -40,8 +40,10 @@ pub struct ClassFile {
     pub attrs: Vec<AttrInfo>,
 }
 
-fn verify_version(minor: u16, major: u16) -> bool {
-    (major < 45 || major > 69) || (major >= 56 && (minor != 0 && minor != 65535))
+fn is_version_valid(minor: u16, major: u16) -> bool {
+    if major >= 56 && (minor != 0 && minor != 65535) { return false }
+    
+    major >= 45 && major <= 69
 }
 
 fn read_cp(rd: &mut ClassReader) -> ParseResult<Vec<ConstantPoolInfo>> {
@@ -131,7 +133,7 @@ impl ClassFile {
 
         let minor = rd.read_u16()?;
         let major = rd.read_u16()?;
-        if verify_version(minor, major) {
+        if !is_version_valid(minor, major) {
             return Err(ParseError::InvalidVersion { minor, major });
         }
 

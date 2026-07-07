@@ -5,11 +5,12 @@
 //! 返回指向 `ObjDesc` 的裸指针——对象 markword 已写好，payload 已清零。
 
 use crate::gc_bindings::obj_layout::ObjLayout;
-use crate::oops::{klass::Klass, oop_handle::ObjDesc};
+use crate::gc_bindings::oop_handle::ObjDesc;
+use crate::oops::klass::Klass;
 use std::ffi::c_void;
 
 unsafe extern "C" {
-    fn gc_init(xmx: usize);
+    pub fn gc_init(xmx: usize);
     fn gcheap_alloc(klass: *const c_void, word_size: usize) -> *mut ObjDesc;
 }
 

@@ -7,17 +7,14 @@ use crate::{
         class_path::ClassPath,
         load_error::{LoadError, LoadResult},
         ms_api::{MSAllocator, MSBox, MSRef},
-    },
-    class_parser::class_file::ClassFile,
-    oops::{
+    }, class_parser::class_file::ClassFile, gc_bindings::oop_handle::{KLASS_OOP_STORAGE_ID, OOPHandle}, oops::{
         array_klass::ArrayKlass,
         desc::FieldDesc,
         klass::Klass,
         normal_klass::NormalKlass,
-        oop_handle::{KLASS_OOP_STORAGE_ID, OOPHandle},
         prim_klass::PrimKlass,
         symbol_table::{SymbolHandle, SymbolTable},
-    },
+    }
 };
 
 pub struct BootstrapCLD {
@@ -58,10 +55,8 @@ impl BootstrapCLD {
 
 impl BootstrapCLD {
     pub fn find_class(name: &str) -> LoadResult<MSRef<Klass>> {
-        if let Some(x) = name.chars().next() {
-            if x == '[' {
-                return Self::find_array_klass(name);
-            }
+        if name.starts_with('[') {
+            return Self::find_array_klass(name);
         }
 
         if let Some(x) = Self::find_prim_klass(name) {
@@ -187,13 +182,15 @@ impl BootstrapCLD {
         match super_entry {
             Some(x) => {
                 let super_klass = Self::find_normal_klass(x.name.utf8())?;
-                x.resolved.set(super_klass.clone());
+                x.resolved.set(super_klass.clone()).unwrap();
                 let super_normal = super_klass.as_normal().unwrap();
                 normal.set_super(Some(super_normal.into()));
             }
 
             None => normal.set_super(None),
         }
+
+        normal.cal_object_layout();
 
         let res = (&klass).into();
         vacant.insert(klass);

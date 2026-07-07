@@ -1,14 +1,11 @@
 use std::{array, cell::OnceCell, marker::PhantomData, ptr};
 
 use crate::{
-    class_loader::ms_api::{MSAllocator, MSBox},
-    class_parser::field_info::FieldInfo,
-    oops::{
+    class_loader::ms_api::{MSAllocator, MSBox}, class_parser::field_info::FieldInfo, gc_bindings::oop_handle::NObjPtr, oops::{
         acc_flags::AccFlags,
         cp_entry::CPEntry,
         desc::FieldDesc,
         field::Field,
-        oop_handle::NObjPtr,
         resolve_error::ResolveResult
     }
 };
@@ -66,7 +63,7 @@ impl Fields {
     }
 
     // returns: (byte size, fields, ptrs count)
-    fn build_catagory(buckets: &mut [Vec<Field>; 5], msa: &MSAllocator) -> (usize, Option<MSBox<[Field]>>, usize) {
+    fn build_category(buckets: &mut [Vec<Field>; 5], msa: &MSAllocator) -> (usize, Option<MSBox<[Field]>>, usize) {
         let mut byte_size = 0;
         let mut ptrs_count = 0;
         let mut fields_buf = Vec::new();
@@ -161,8 +158,8 @@ impl Fields {
             bucket.push(f);
         }
 
-        let (instance_size, instance_fields, instance_ptrs_count) = Self::build_catagory(&mut instance_buckets, msa);
-        let (s_size, static_fields, static_ptrs_count) = Self::build_catagory(&mut static_buckets, msa);
+        let (instance_size, instance_fields, instance_ptrs_count) = Self::build_category(&mut instance_buckets, msa);
+        let (s_size, static_fields, static_ptrs_count) = Self::build_category(&mut static_buckets, msa);
 
         let static_storage = if s_size == 0 {
             None

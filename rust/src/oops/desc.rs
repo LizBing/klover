@@ -4,13 +4,11 @@ use std::{
 };
 
 use crate::{
-    class_loader::ms_api::MSRef,
-    oops::{
+    class_loader::ms_api::MSRef, gc_bindings::oop_handle::NObjPtr, oops::{
         klass::Klass,
-        oop_handle::NObjPtr,
         resolve_error::{ResolveError, ResolveResult},
         symbol_table::{SymbolHandle, SymbolTable},
-    },
+    }
 };
 
 #[derive(Debug)]

@@ -127,7 +127,7 @@ impl MSAllocator {
     }
 
     pub fn calloc<T>(&self, count: usize) -> &mut [MaybeUninit<T>] {
-        let size = size_of::<T>();
+        let size = size_of::<T>() * count;
         let mem = if size < BUMP_THRESHOLD {
             self.bump_alloc(size)
         } else {
