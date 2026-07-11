@@ -10,6 +10,8 @@ pub enum ResolveError {
     ClassNotFound,
     MethodNotFound,
     FieldNotFound,
+
+    DuplicatedAttr
 }
 
 pub type ResolveResult<T> = Result<T, ResolveError>;

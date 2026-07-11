@@ -39,10 +39,10 @@ pub struct NormalKlass {
     
     // attributes
 
-    permitted_subclasses: Option<MSBox<[MSRef<ClassCPEntry>]>>,
-    bootstrap_methods: Option<MSBox<[BootstrapMethod]>>,
-    nest_host: Option<MSRef<ClassCPEntry>>,
-    nest_members: Option<MSBox<[MSRef<ClassCPEntry>]>>
+    pub permitted_subclasses: Option<MSBox<[MSRef<ClassCPEntry>]>>,
+    pub bootstrap_methods: Option<MSBox<[BootstrapMethod]>>,
+    pub nest_host: Option<MSRef<ClassCPEntry>>,
+    pub nest_members: Option<MSBox<[MSRef<ClassCPEntry>]>>
 }
 
 fn build_cp<'a>(
@@ -143,27 +143,30 @@ impl NormalKlass {
             None => None,
         };
 
-        let mut permitted_subclasses = None;
-        let mut bsms = None;
-        let mut nest_host = None;
-        let mut nest_members = None;
+        let mut permitted_subclasses = OnceCell::new();
+        let mut bsms = OnceCell::new();
+        let mut nest_host = OnceCell::new();
+        let mut nest_members = OnceCell::new();
         
         for info in cf.attrs {
             match info {
                 AttrInfo::PermittedSubclasses { cp_idxes } =>
-                    permitted_subclasses = Some(build_permitted_subclasses(&cp_idxes, &cp, msa)?),
+                    permitted_subclasses.set(build_permitted_subclasses(&cp_idxes, &cp, msa)?)
+                        .map_err(|_| ResolveError::DuplicatedAttr)?,
 
                 AttrInfo::BootstrapMethods(x) =>
-                    bsms = Some(build_bs_methods(&x, &cp, msa)?),
+                    bsms.set(build_bs_methods(&x, &cp, msa)?)
+                        .map_err(|_| ResolveError::DuplicatedAttr)?,
 
                 AttrInfo::NestHost { cp_idx } =>
-                    nest_host = match cp[cp_idx as usize].get() {
-                        Some(CPEntry::Class(x)) => Some(x.into()),
+                    nest_host.set(match cp[cp_idx as usize].get() {
+                        Some(CPEntry::Class(x)) => x.into(),
                         _ => return Err(ResolveError::MismatchCPType)
-                    },
+                    }).map_err(|_| ResolveError::DuplicatedAttr)?,
 
                 AttrInfo::NestMembers { cp_idxes } =>
-                    nest_members = Some(build_nest_members(&cp_idxes, &cp, msa)?),
+                    nest_members.set(build_nest_members(&cp_idxes, &cp, msa)?)
+                        .map_err(|_| ResolveError::DuplicatedAttr)?,
 
                 // ignore other attributes
                 _ => continue,
@@ -182,10 +185,10 @@ impl NormalKlass {
             methods,
             obj_layout: OnceCell::new(),
 
-            permitted_subclasses,
-            bootstrap_methods: bsms,
-            nest_host,
-            nest_members
+            permitted_subclasses: permitted_subclasses.take(),
+            bootstrap_methods: bsms.take(),
+            nest_host: nest_host.take(),
+            nest_members: nest_members.take()
         };
 
         let boxed = MSBox::new(msa, Klass::Normal(klass));
