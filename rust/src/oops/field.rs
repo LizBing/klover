@@ -36,6 +36,7 @@ impl Field {
                     constant_value = Some(ConstantValue::build(*cp_idx as usize, cp)?)
                 }
 
+                // ignore other attributes
                 _ => continue,
             }
         }

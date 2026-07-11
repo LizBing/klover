@@ -8,9 +8,9 @@ use crate::{
         cld::ClassLoaderData,
         ms_api::{MSAllocator, MSBox, MSRef},
     }, class_parser::{
-        attr_info::AttrInfo, class_file::ClassFile, cp_info::ConstantPoolInfo, method_info::MethodInfo,
+        class_file::ClassFile, cp_info::ConstantPoolInfo, method_info::MethodInfo,
     }, gc_bindings::{obj_layout::ObjLayout, oop_handle::{KLASS_OOP_STORAGE_ID, OOPHandle}}, oops::{
-        acc_flags::AccFlags, attr::{BootstrapMethod, build_bs_methods, build_nest_members, build_permitted_subclasses}, cp_entry::{CPEntry, ClassCPEntry}, field::Field, fields::Fields, klass::Klass, method::Method, resolve_error::{ResolveError, ResolveResult}, symbol_table::SymbolHandle,
+        acc_flags::AccFlags, attr::KlassAttrs, cp_entry::{CPEntry, ClassCPEntry}, field::Field, fields::Fields, klass::Klass, method::Method, resolve_error::{ResolveError, ResolveResult}, symbol_table::SymbolHandle,
     }
 };
 
@@ -37,12 +37,7 @@ pub struct NormalKlass {
     /// 对象内存布局描述。`set_super init_fieds` 后可用。
     obj_layout: OnceCell<ObjLayout>,
     
-    // attributes
-
-    pub permitted_subclasses: Option<MSBox<[MSRef<ClassCPEntry>]>>,
-    pub bootstrap_methods: Option<MSBox<[BootstrapMethod]>>,
-    pub nest_host: Option<MSRef<ClassCPEntry>>,
-    pub nest_members: Option<MSBox<[MSRef<ClassCPEntry>]>>
+    attrs: KlassAttrs,
 }
 
 fn build_cp<'a>(
@@ -143,35 +138,7 @@ impl NormalKlass {
             None => None,
         };
 
-        let mut permitted_subclasses = OnceCell::new();
-        let mut bsms = OnceCell::new();
-        let mut nest_host = OnceCell::new();
-        let mut nest_members = OnceCell::new();
-        
-        for info in cf.attrs {
-            match info {
-                AttrInfo::PermittedSubclasses { cp_idxes } =>
-                    permitted_subclasses.set(build_permitted_subclasses(&cp_idxes, &cp, msa)?)
-                        .map_err(|_| ResolveError::DuplicatedAttr)?,
-
-                AttrInfo::BootstrapMethods(x) =>
-                    bsms.set(build_bs_methods(&x, &cp, msa)?)
-                        .map_err(|_| ResolveError::DuplicatedAttr)?,
-
-                AttrInfo::NestHost { cp_idx } =>
-                    nest_host.set(match cp[cp_idx as usize].get() {
-                        Some(CPEntry::Class(x)) => x.into(),
-                        _ => return Err(ResolveError::MismatchCPType)
-                    }).map_err(|_| ResolveError::DuplicatedAttr)?,
-
-                AttrInfo::NestMembers { cp_idxes } =>
-                    nest_members.set(build_nest_members(&cp_idxes, &cp, msa)?)
-                        .map_err(|_| ResolveError::DuplicatedAttr)?,
-
-                // ignore other attributes
-                _ => continue,
-            }
-        }
+        let attrs = KlassAttrs::build(&cf.attrs, &cp, msa)?;
 
         let klass = Self {
             mirror: OOPHandle::new(KLASS_OOP_STORAGE_ID),
@@ -185,10 +152,7 @@ impl NormalKlass {
             methods,
             obj_layout: OnceCell::new(),
 
-            permitted_subclasses: permitted_subclasses.take(),
-            bootstrap_methods: bsms.take(),
-            nest_host: nest_host.take(),
-            nest_members: nest_members.take()
+            attrs
         };
 
         let boxed = MSBox::new(msa, Klass::Normal(klass));

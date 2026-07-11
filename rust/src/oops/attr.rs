@@ -1,7 +1,7 @@
 use std::cell::OnceCell;
 
 use crate::{
-    class_loader::ms_api::{MSAllocator, MSBox, MSRef}, class_parser::attr_info::{BootstrapMethodInfo, CodeAttrInfo, ExceptionTableEntryInfo}, oops::{
+    class_loader::ms_api::{MSAllocator, MSBox, MSRef}, class_parser::attr_info::{AttrInfo, BootstrapMethodInfo, CodeAttrInfo, ExceptionTableEntryInfo}, oops::{
         cp_entry::{CPEntry, ClassCPEntry, Loadable, MethodHandleEntry, StringCPEntry}, normal_klass::cp_slice_get, resolve_error::{ResolveError, ResolveResult}, symbol_table::SymbolHandle,
     },
 };
@@ -206,4 +206,53 @@ pub fn build_nest_members(idxes: &[u16], cp: &[OnceCell<CPEntry>], msa: &MSAlloc
     }
 
     unsafe { Ok(MSBox::from_raw(uninit.assume_init_mut())) }
+}
+
+#[derive(Debug)]
+pub struct KlassAttrs {
+    pub permitted_subclasses: Option<MSBox<[MSRef<ClassCPEntry>]>>,
+    pub bootstrap_methods: Option<MSBox<[BootstrapMethod]>>,
+    pub nest_host: Option<MSRef<ClassCPEntry>>,
+    pub nest_members: Option<MSBox<[MSRef<ClassCPEntry>]>>
+}
+
+impl KlassAttrs {
+    pub fn build(parsed: &[AttrInfo], cp: &[OnceCell<CPEntry>], msa: &MSAllocator) -> ResolveResult<Self> {
+        let mut permitted_subclasses = OnceCell::new();
+        let mut bsms = OnceCell::new();
+        let mut nest_host = OnceCell::new();
+        let mut nest_members = OnceCell::new();
+        
+        for info in parsed {
+            match info {
+                AttrInfo::PermittedSubclasses { cp_idxes } =>
+                    permitted_subclasses.set(build_permitted_subclasses(&cp_idxes, &cp, msa)?)
+                        .map_err(|_| ResolveError::DuplicatedAttr)?,
+
+                AttrInfo::BootstrapMethods(x) =>
+                    bsms.set(build_bs_methods(&x, &cp, msa)?)
+                        .map_err(|_| ResolveError::DuplicatedAttr)?,
+
+                AttrInfo::NestHost { cp_idx } =>
+                    nest_host.set(match cp[*cp_idx as usize].get() {
+                        Some(CPEntry::Class(x)) => x.into(),
+                        _ => return Err(ResolveError::MismatchCPType)
+                    }).map_err(|_| ResolveError::DuplicatedAttr)?,
+
+                AttrInfo::NestMembers { cp_idxes } =>
+                    nest_members.set(build_nest_members(&cp_idxes, &cp, msa)?)
+                        .map_err(|_| ResolveError::DuplicatedAttr)?,
+
+                // ignore other attributes
+                _ => continue,
+            }
+        }
+
+        Ok(Self {
+            permitted_subclasses: permitted_subclasses.take(),
+            bootstrap_methods: bsms.take(),
+            nest_host: nest_host.take(),
+            nest_members: nest_members.take()
+        })
+    }
 }
