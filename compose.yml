@@ -1,0 +1,24 @@
+services:
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: klover-dev
+
+    working_dir: /workspace
+
+    volumes:
+      - .:/workspace
+
+      # Rust 缓存
+      - cargo-registry:/usr/local/cargo/registry
+      - cargo-git:/usr/local/cargo/git
+
+    stdin_open: true
+    tty: true
+
+volumes:
+  cargo-registry:
+  cargo-git:
+

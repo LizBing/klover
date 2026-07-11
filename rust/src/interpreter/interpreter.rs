@@ -5,7 +5,7 @@ use crate::interpreter::instructions;
 use crate::oops::acc_flags::AccFlags;
 use crate::oops::cp_entry::CPEntry;
 use crate::oops::desc::FieldDesc;
-use crate::oops::{attr::CodeAttr, method::Method, normal_klass::NormalKlass};
+use crate::oops::{attr::Code, method::Method, normal_klass::NormalKlass};
 
 /// 一个 JVM 栈槽。  long / double 占据两个相邻槽（高 32 位在低地址）。
 pub type StackSlot = i32;
@@ -68,7 +68,7 @@ pub(super) struct Registers {
 }
 
 impl Registers {
-    pub fn code(&self) -> &CodeAttr {
+    pub fn code(&self) -> &Code {
         unsafe { (*self.method).code.as_ref().expect("no code") }
     }
 

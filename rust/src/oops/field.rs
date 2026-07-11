@@ -4,7 +4,7 @@ use crate::{
     class_parser::{attr_info::AttrInfo, field_info::FieldInfo},
     oops::{
         acc_flags::AccFlags,
-        attr::ConstantValueAttr,
+        attr::ConstantValue,
         cp_entry::{CPEntry, get_utf8},
         desc::FieldDesc,
         resolve_error::ResolveResult,
@@ -19,7 +19,7 @@ pub struct Field {
     pub desc: FieldDesc,
     offs: OnceCell<usize>,
 
-    pub constant_value: Option<ConstantValueAttr>,
+    pub constant_value: Option<ConstantValue>,
 }
 
 impl Field {
@@ -33,7 +33,7 @@ impl Field {
         for n in &info.attrs {
             match n {
                 AttrInfo::ConstantValue { cp_idx } => {
-                    constant_value = Some(ConstantValueAttr::from(*cp_idx as usize, cp)?)
+                    constant_value = Some(ConstantValue::build(*cp_idx as usize, cp)?)
                 }
 
                 _ => continue,

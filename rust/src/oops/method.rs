@@ -1,13 +1,13 @@
 use std::cell::OnceCell;
 
-use crate::{class_loader::ms_api::MSAllocator, class_parser::{attr_info::AttrInfo, method_info::MethodInfo}, oops::{acc_flags::AccFlags, attr::CodeAttr, cp_entry::{CPEntry, get_utf8}, desc::MethodDesc, resolve_error::ResolveResult, symbol_table::SymbolHandle}};
+use crate::{class_loader::ms_api::MSAllocator, class_parser::{attr_info::AttrInfo, method_info::MethodInfo}, oops::{acc_flags::AccFlags, attr::Code, cp_entry::{CPEntry, get_utf8}, desc::MethodDesc, resolve_error::ResolveResult, symbol_table::SymbolHandle}};
 
 #[derive(Debug)]
 pub struct Method {
     pub acc_flags: AccFlags,
     pub name: SymbolHandle,
     pub desc: MethodDesc,
-    pub code: Option<CodeAttr>
+    pub code: Option<Code>
 }
 
 impl Method {
@@ -19,7 +19,7 @@ impl Method {
         let mut code = None;
         for n in &info.attrs {
             match n {
-                AttrInfo::Code(info) => code = Some(CodeAttr::from(info, cp, msa)?),
+                AttrInfo::Code(info) => code = Some(Code::build(info, cp, msa)?),
                 _ => continue
             }
         }

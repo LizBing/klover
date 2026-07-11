@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use crate::class_parser::{class_file::read_attrs, class_reader::ClassReader, cp_info::ConstantPoolInfo, parse_error::{ParseError, ParseResult}};
 
 pub struct ExceptionTableEntryInfo {
@@ -61,6 +63,8 @@ fn read_u16_vec(rd: &mut ClassReader, count: usize) -> ParseResult<Vec<u16>> {
 }
 
 pub struct BootstrapMethodInfo {
+    __: PhantomData<()>,
+    
     pub bs_method_ref: u16,
     pub bs_arguments: Vec<u16>
 }
@@ -72,6 +76,8 @@ impl BootstrapMethodInfo {
         let bs_arguments = read_u16_vec(rd, count as usize)?;
 
         Ok(Self {
+            __: PhantomData,
+            
             bs_method_ref,
             bs_arguments
         })

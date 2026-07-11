@@ -6,3 +6,4 @@ void gc_init(size_t xmx) {
     gcheap_init(xmx);
     init_oop_storages();
 }
+

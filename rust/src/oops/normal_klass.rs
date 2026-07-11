@@ -7,19 +7,10 @@ use crate::{
         bootstrap_cld::BootstrapCLD,
         cld::ClassLoaderData,
         ms_api::{MSAllocator, MSBox, MSRef},
-    },
-    class_parser::{
-        class_file::ClassFile, cp_info::ConstantPoolInfo,
-        method_info::MethodInfo,
-    },
-    gc_bindings::{obj_layout::ObjLayout, oop_handle::{KLASS_OOP_STORAGE_ID, OOPHandle}},
-    oops::{
-        acc_flags::AccFlags, 
-        cp_entry::{CPEntry, ClassCPEntry},
-        field::Field,
-        fields::Fields,
-        klass::Klass,
-        method::Method, resolve_error::{ResolveError, ResolveResult}, symbol_table::SymbolHandle,
+    }, class_parser::{
+        attr_info::AttrInfo, class_file::ClassFile, cp_info::ConstantPoolInfo, method_info::MethodInfo,
+    }, gc_bindings::{obj_layout::ObjLayout, oop_handle::{KLASS_OOP_STORAGE_ID, OOPHandle}}, oops::{
+        acc_flags::AccFlags, attr::{BootstrapMethod, build_bs_methods, build_nest_members, build_permitted_subclasses}, cp_entry::{CPEntry, ClassCPEntry}, field::Field, fields::Fields, klass::Klass, method::Method, resolve_error::{ResolveError, ResolveResult}, symbol_table::SymbolHandle,
     }
 };
 
@@ -45,6 +36,13 @@ pub struct NormalKlass {
 
     /// 对象内存布局描述。`set_super init_fieds` 后可用。
     obj_layout: OnceCell<ObjLayout>,
+    
+    // attributes
+
+    permitted_subclasses: Option<MSBox<[MSRef<ClassCPEntry>]>>,
+    bootstrap_methods: Option<MSBox<[BootstrapMethod]>>,
+    nest_host: Option<MSRef<ClassCPEntry>>,
+    nest_members: Option<MSBox<[MSRef<ClassCPEntry>]>>
 }
 
 fn build_cp<'a>(
@@ -145,6 +143,33 @@ impl NormalKlass {
             None => None,
         };
 
+        let mut permitted_subclasses = None;
+        let mut bsms = None;
+        let mut nest_host = None;
+        let mut nest_members = None;
+        
+        for info in cf.attrs {
+            match info {
+                AttrInfo::PermittedSubclasses { cp_idxes } =>
+                    permitted_subclasses = Some(build_permitted_subclasses(&cp_idxes, &cp, msa)?),
+
+                AttrInfo::BootstrapMethods(x) =>
+                    bsms = Some(build_bs_methods(&x, &cp, msa)?),
+
+                AttrInfo::NestHost { cp_idx } =>
+                    nest_host = match cp[cp_idx as usize].get() {
+                        Some(CPEntry::Class(x)) => Some(x.into()),
+                        _ => return Err(ResolveError::MismatchCPType)
+                    },
+
+                AttrInfo::NestMembers { cp_idxes } =>
+                    nest_members = Some(build_nest_members(&cp_idxes, &cp, msa)?),
+
+                // ignore other attributes
+                _ => continue,
+            }
+        }
+
         let klass = Self {
             mirror: OOPHandle::new(KLASS_OOP_STORAGE_ID),
             acc_flags,
@@ -155,7 +180,12 @@ impl NormalKlass {
             interfaces,
             fields,
             methods,
-            obj_layout: OnceCell::new()
+            obj_layout: OnceCell::new(),
+
+            permitted_subclasses,
+            bootstrap_methods: bsms,
+            nest_host,
+            nest_members
         };
 
         let boxed = MSBox::new(msa, Klass::Normal(klass));

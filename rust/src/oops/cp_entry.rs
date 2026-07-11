@@ -2,7 +2,7 @@ use std::{cell::OnceCell, mem, sync::OnceLock};
 
 use crate::{
     class_loader::ms_api::MSRef, class_parser::cp_info::ConstantPoolInfo, gc_bindings::oop_handle::{KLASS_OOP_STORAGE_ID, OOPHandle}, oops::{
-        desc::MethodDesc, field::Field, klass::Klass, method::Method, normal_klass::NormalKlass, resolve_error::{ResolveError, ResolveResult}, symbol_table::{SymbolHandle, SymbolTable}
+        attr::BootstrapMethod, desc::MethodDesc, field::Field, klass::Klass, method::Method, normal_klass::NormalKlass, resolve_error::{ResolveError, ResolveResult}, symbol_table::{SymbolHandle, SymbolTable}
     }
 };
 
@@ -228,6 +228,15 @@ pub struct StringCPEntry {
 }
 
 #[derive(Debug)]
+pub struct DynamicEntry {
+    pub bs_method_attr_index: usize,
+    pub bs_method: OnceCell<MSRef<BootstrapMethod>>,
+    
+    pub name: SymbolHandle,
+    pub desc: MethodDesc,
+}
+
+#[derive(Debug)]
 pub enum CPEntry {
     Class(ClassCPEntry),
 
@@ -256,13 +265,10 @@ pub enum CPEntry {
 
     MethodHandle(MethodHandleEntry),
 
-    MethodType {
-        raw: SymbolHandle,
-        desc: MethodDesc,
-    },
+    MethodType(MethodDesc),
 
     // Ignore for now.
-    Dynamic {},
+    Dynamic(DynamicEntry),
 
     // Ignore for now.
     InvokeDynamic {},
@@ -395,13 +401,18 @@ impl CPEntry {
 
             ConstantPoolInfo::MethodTypeInfo { desc_index } => {
                 let raw = resolve_symbol(*desc_index as usize, cp, parsed_cp)?;
-                Self::MethodType {
-                    raw: raw.clone(),
-                    desc: MethodDesc::from(raw.utf8())?,
-                }
+                Self::MethodType(MethodDesc::from(raw.utf8())?)
             }
 
-            ConstantPoolInfo::DynamicInfo { .. } => Self::Dynamic {},
+            ConstantPoolInfo::DynamicInfo { bs_method_attr_index, name_and_type_index } => {
+                let (name, raw_desc) = resolve_name_and_type(*name_and_type_index as usize, cp, parsed_cp)?;
+                Self::Dynamic(DynamicEntry {
+                    bs_method_attr_index: *bs_method_attr_index as usize,
+                    bs_method: OnceCell::new(),
+                    name,
+                    desc: MethodDesc::from(raw_desc.utf8())?
+                })
+            }
 
             ConstantPoolInfo::InvokeDynamicInfo { .. } => Self::InvokeDynamic {},
 
@@ -429,4 +440,17 @@ pub fn get_utf8(cp: &[OnceCell<CPEntry>], idx: usize) -> ResolveResult<SymbolHan
         Some(CPEntry::Utf8(handle)) => Ok(handle.clone()),
         _ => Err(ResolveError::MismatchCPType),
     }
+}
+
+#[derive(Debug)]
+pub enum Loadable {
+    Integer(i32),
+    Float(f32),
+    Long(i64),
+    Double(f64),
+    Class(MSRef<ClassCPEntry>),
+    StringLoadable(MSRef<StringCPEntry>),
+    MethodHandle(MSRef<MethodHandleEntry>),
+    MethodType(MethodDesc),
+    Dynamic(MSRef<DynamicEntry>)
 }

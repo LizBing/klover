@@ -1,6 +1,5 @@
 use std::{
-    mem::size_of,
-    sync::OnceLock,
+    marker::PhantomData, mem::size_of, sync::OnceLock,
 };
 
 use crate::{
@@ -11,7 +10,7 @@ use crate::{
     }
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum FieldElemType {
     Boolean,
     Byte,
@@ -28,7 +27,7 @@ pub enum FieldElemType {
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FieldDesc {
     /// 原始描述符字符串（如 `I` / `Ljava/lang/String;` / `[I`），
     /// intern 后可直接指针比较，供 `find_field` 使用。
@@ -113,14 +112,16 @@ impl FieldDesc {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ReturnDesc {
     Void,
     Type(FieldDesc),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MethodDesc {
+    __: PhantomData<()>,
+    
     pub raw: SymbolHandle,
     pub ret_desc: ReturnDesc,
     pub params_desc: Vec<FieldDesc>,
@@ -167,6 +168,8 @@ impl MethodDesc {
         };
 
         Ok(MethodDesc {
+            __: PhantomData,
+            
             raw: SymbolTable::intern(utf8),
             ret_desc,
             params_desc,
