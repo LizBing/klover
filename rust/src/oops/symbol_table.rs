@@ -27,10 +27,6 @@ impl Symbol {
     fn dec_ref_cnt(&self) {
         self.ref_cnt.fetch_sub(1, Ordering::Release);
     }
-
-    fn is_recyclable(&self) -> bool {
-        self.ref_cnt.load(Ordering::Acquire) == 0
-    }
 }
 
 #[derive(Debug)]
@@ -62,15 +58,7 @@ impl Bucket {
                         };
                     }
 
-                    if (*iter).is_recyclable() {
-                        let n = iter;
-                        iter = (*iter).next;
-
-                        // Drop here.
-                        let _ = Box::from_raw(n);
-                    } else {
-                        iter = (*iter).next;
-                    }
+                    iter = (*iter).next;
                 }
             } else {
                 break;
