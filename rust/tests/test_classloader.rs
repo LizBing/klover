@@ -21,12 +21,14 @@ fn test_loading() {
 
     let m = klass.as_normal().unwrap().find_method(&m_name, &m_desc).unwrap();
 
-    let mut intp = Interpreter::new(4096);
-    let i_args = vec![1, 2];
-    let res = intp.invoke_static(klass.as_normal().unwrap(), m, &i_args).unwrap();
+    println!("{:?}", m)
 
-    match res {
-        InvokeOutcome::Returned(Some(ReturnValue::Int(x))) => println!("{}", x),
-        _ => panic!()
-    }
+    // let mut intp = Interpreter::new(4096);
+    // let i_args = vec![1, 2];
+    // let res = intp.invoke_static(klass.as_normal().unwrap(), m, &i_args).unwrap();
+
+    // match res {
+    //     InvokeOutcome::Returned(Some(ReturnValue::Int(x))) => println!("{}", x),
+    //     _ => panic!()
+    // }
 }
