@@ -7,12 +7,18 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub struct CPRefEntry<T> {
+pub enum ResolvedRef {
+    Field(MSRef<NormalKlass>, MSRef<Field>),
+    Method(MSRef<NormalKlass>, MSRef<Method>)
+}
+
+#[derive(Debug)]
+pub struct CPRefEntry {
     pub class_name: SymbolHandle,
     pub name: SymbolHandle,
     pub desc: SymbolHandle,
 
-    pub resolved: OnceLock<(MSRef<NormalKlass>, MSRef<T>)>,
+    pub resolved: OnceLock<ResolvedRef>,
 }
 
 fn resolve_name_and_type(
@@ -48,8 +54,8 @@ fn resolve_name_and_type(
     }
 }
 
-impl<T> CPRefEntry<T> {
-    fn from(
+impl CPRefEntry {
+    fn build(
         info: &ConstantPoolInfo,
         cp: &[OnceCell<CPEntry>],
         parsed_cp: &[ConstantPoolInfo],
@@ -110,59 +116,48 @@ impl<T> CPRefEntry<T> {
 
 #[derive(Debug)]
 pub enum MethodHandleEntry {
-    RefGetField(MSRef<CPRefEntry<Field>>),
-    RefGetStatic(MSRef<CPRefEntry<Field>>),
-    RefPutField(MSRef<CPRefEntry<Field>>),
-    RefPutStatic(MSRef<CPRefEntry<Field>>),
+    RefGetField(MSRef<CPRefEntry>),
+    RefGetStatic(MSRef<CPRefEntry>),
+    RefPutField(MSRef<CPRefEntry>),
+    RefPutStatic(MSRef<CPRefEntry>),
 
-    RefInvokeVirtual(MSRef<CPRefEntry<Method>>),
-    RefInvokeStatic(MSRef<CPRefEntry<Method>>),
-    RefInvokeSpecial(MSRef<CPRefEntry<Method>>),
-    RefNewInvokeSpecial(MSRef<CPRefEntry<Method>>),
-    RefInvokeInterface(MSRef<CPRefEntry<Method>>),
+    RefInvokeVirtual(MSRef<CPRefEntry>),
+    RefInvokeStatic(MSRef<CPRefEntry>),
+    RefInvokeSpecial(MSRef<CPRefEntry>),
+    RefNewInvokeSpecial(MSRef<CPRefEntry>),
+    RefInvokeInterface(MSRef<CPRefEntry>),
 }
 
-fn resolve_method_handle_entry<T>(
+fn resolve_method_handle_entry(
     idx: usize,
     cp: &[OnceCell<CPEntry>],
     parsed_cp: &[ConstantPoolInfo],
-) -> ResolveResult<MSRef<CPRefEntry<T>>> {
+) -> ResolveResult<MSRef<CPRefEntry>> {
     if let None = cp[idx].get() {
         let info = &parsed_cp[idx];
-        let entry = CPRefEntry::<T>::from(info, cp, parsed_cp)?;
+        let entry = CPRefEntry::build(info, cp, parsed_cp)?;
 
         let res = match info {
-            ConstantPoolInfo::FieldrefInfo { .. } => CPEntry::FieldRef(unsafe {
-                mem::transmute_copy::<CPRefEntry<T>, CPRefEntry<Field>>(&entry)
-            }),
-            ConstantPoolInfo::MethodrefInfo { .. } => CPEntry::MethodRef(unsafe {
-                mem::transmute_copy::<CPRefEntry<T>, CPRefEntry<Method>>(&entry)
-            }),
-            ConstantPoolInfo::InterfaceMethodrefInfo { .. } => {
-                CPEntry::InterfaceMethodRef(unsafe {
-                    std::mem::transmute_copy::<CPRefEntry<T>, CPRefEntry<Method>>(&entry)
-                })
-            }
+            ConstantPoolInfo::FieldrefInfo { .. } => CPEntry::FieldRef(entry),
+            
+            ConstantPoolInfo::MethodrefInfo { .. } => CPEntry::MethodRef(entry),
+            
+            ConstantPoolInfo::InterfaceMethodrefInfo { .. } => CPEntry::InterfaceMethodRef(entry),
             _ => return Err(ResolveError::MismatchCPType),
         };
 
         cp[idx].set(res).unwrap();
-
-        mem::forget(entry);
     }
     
     let entry = match cp[idx].get().unwrap() {
-        CPEntry::FieldRef(x) => x as *const CPRefEntry<Field> as *const CPRefEntry<T>,
-        CPEntry::MethodRef(x) => x as *const CPRefEntry<Method> as *const CPRefEntry<T>,
-
-        CPEntry::InterfaceMethodRef(x) => {
-            x as *const CPRefEntry<Method> as *const CPRefEntry<T>
-        }
+        CPEntry::FieldRef(x) => x,
+        CPEntry::MethodRef(x) => x,
+        CPEntry::InterfaceMethodRef(x) => x,
 
         _ => return Err(ResolveError::MismatchCPType),
     };
 
-    unsafe { Ok((&*entry).into()) }
+    Ok(entry.into())
 }
 
 impl MethodHandleEntry {
@@ -174,39 +169,39 @@ impl MethodHandleEntry {
     ) -> ResolveResult<Self> {
         match ref_kind {
             1 => {
-                let entry = resolve_method_handle_entry::<Field>(ref_index, cp, parsed_cp)?;
+                let entry = resolve_method_handle_entry(ref_index, cp, parsed_cp)?;
                 Ok(Self::RefGetField(entry))
             }
             2 => {
-                let entry = resolve_method_handle_entry::<Field>(ref_index, cp, parsed_cp)?;
+                let entry = resolve_method_handle_entry(ref_index, cp, parsed_cp)?;
                 Ok(Self::RefGetStatic(entry))
             }
             3 => {
-                let entry = resolve_method_handle_entry::<Field>(ref_index, cp, parsed_cp)?;
+                let entry = resolve_method_handle_entry(ref_index, cp, parsed_cp)?;
                 Ok(Self::RefPutField(entry))
             }
             4 => {
-                let entry = resolve_method_handle_entry::<Field>(ref_index, cp, parsed_cp)?;
+                let entry = resolve_method_handle_entry(ref_index, cp, parsed_cp)?;
                 Ok(Self::RefPutStatic(entry))
             }
             5 => {
-                let entry = resolve_method_handle_entry::<Method>(ref_index, cp, parsed_cp)?;
+                let entry = resolve_method_handle_entry(ref_index, cp, parsed_cp)?;
                 Ok(Self::RefInvokeVirtual(entry))
             }
             6 => {
-                let entry = resolve_method_handle_entry::<Method>(ref_index, cp, parsed_cp)?;
+                let entry = resolve_method_handle_entry(ref_index, cp, parsed_cp)?;
                 Ok(Self::RefInvokeStatic(entry))
             }
             7 => {
-                let entry = resolve_method_handle_entry::<Method>(ref_index, cp, parsed_cp)?;
+                let entry = resolve_method_handle_entry(ref_index, cp, parsed_cp)?;
                 Ok(Self::RefInvokeSpecial(entry))
             }
             8 => {
-                let entry = resolve_method_handle_entry::<Method>(ref_index, cp, parsed_cp)?;
+                let entry = resolve_method_handle_entry(ref_index, cp, parsed_cp)?;
                 Ok(Self::RefNewInvokeSpecial(entry))
             }
             9 => {
-                let entry = resolve_method_handle_entry::<Method>(ref_index, cp, parsed_cp)?;
+                let entry = resolve_method_handle_entry(ref_index, cp, parsed_cp)?;
                 Ok(Self::RefInvokeInterface(entry))
             }
 
@@ -240,11 +235,11 @@ pub struct DynamicEntry {
 pub enum CPEntry {
     Class(ClassCPEntry),
 
-    FieldRef(CPRefEntry<Field>),
+    FieldRef(CPRefEntry),
 
-    MethodRef(CPRefEntry<Method>),
+    MethodRef(CPRefEntry),
 
-    InterfaceMethodRef(CPRefEntry<Method>),
+    InterfaceMethodRef(CPRefEntry),
 
     StringConstant(StringCPEntry),
 
@@ -352,17 +347,17 @@ impl CPEntry {
             }
 
             ConstantPoolInfo::FieldrefInfo { .. } => {
-                let entry = CPRefEntry::from(info, cp, parsed_cp)?;
+                let entry = CPRefEntry::build(info, cp, parsed_cp)?;
                 Self::FieldRef(entry)
             }
 
             ConstantPoolInfo::MethodrefInfo { .. } => {
-                let entry = CPRefEntry::from(info, cp, parsed_cp)?;
+                let entry = CPRefEntry::build(info, cp, parsed_cp)?;
                 Self::MethodRef(entry)
             }
 
             ConstantPoolInfo::InterfaceMethodrefInfo { .. } => {
-                let entry = CPRefEntry::from(info, cp, parsed_cp)?;
+                let entry = CPRefEntry::build(info, cp, parsed_cp)?;
                 Self::InterfaceMethodRef(entry)
             }
 
