@@ -11,7 +11,9 @@ pub enum ResolveError {
     MethodNotFound,
     FieldNotFound,
 
-    DuplicatedAttr
+    DuplicatedAttr,
+
+    WrongRefType
 }
 
 pub type ResolveResult<T> = Result<T, ResolveError>;

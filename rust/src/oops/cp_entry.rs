@@ -1,24 +1,24 @@
-use std::{cell::OnceCell, mem, sync::OnceLock};
+use std::{cell::OnceCell, mem, ptr::NonNull, sync::OnceLock};
 
 use crate::{
-    class_loader::ms_api::MSRef, class_parser::cp_info::ConstantPoolInfo, gc_bindings::oop_handle::{KLASS_OOP_STORAGE_ID, OOPHandle}, oops::{
+    class_loader::{cld::ClassLoaderData, ms_api::MSRef}, class_parser::cp_info::ConstantPoolInfo, gc_bindings::oop_handle::{KLASS_OOP_STORAGE_ID, OOPHandle}, oops::{
         attr::BootstrapMethod, desc::MethodDesc, field::Field, klass::Klass, method::Method, normal_klass::NormalKlass, resolve_error::{ResolveError, ResolveResult}, symbol_table::{SymbolHandle, SymbolTable}
     }
 };
 
 #[derive(Debug)]
-pub enum ResolvedRef {
+enum ResolvedRef {
     Field(MSRef<NormalKlass>, MSRef<Field>),
     Method(MSRef<NormalKlass>, MSRef<Method>)
 }
 
 #[derive(Debug)]
 pub struct CPRefEntry {
-    pub class_name: SymbolHandle,
-    pub name: SymbolHandle,
-    pub desc: SymbolHandle,
+    class_name: SymbolHandle,
+    name: SymbolHandle,
+    desc: SymbolHandle,
 
-    pub resolved: OnceLock<ResolvedRef>,
+    resolved: OnceLock<ResolvedRef>,
 }
 
 fn resolve_name_and_type(
@@ -111,6 +111,20 @@ impl CPRefEntry {
 
             _ => unreachable!(),
         }
+    }
+}
+
+impl CPRefEntry {
+    pub fn get_fieldref(&self, cld: Option<&ClassLoaderData>) -> ResolveResult<(MSRef<NormalKlass>, MSRef<Field>)> {
+        unimplemented!()
+    }
+    
+    pub fn get_methodref(&self, cld: Option<&ClassLoaderData>) -> ResolveResult<(MSRef<NormalKlass>, MSRef<Method>)> {
+        unimplemented!()
+    }
+    
+    pub fn get_interface_methodref(&self, cld: Option<&ClassLoaderData>) -> ResolveResult<(MSRef<NormalKlass>, MSRef<Method>)> {
+        unimplemented!()
     }
 }
 
@@ -212,23 +226,41 @@ impl MethodHandleEntry {
 
 #[derive(Debug)]
 pub struct ClassCPEntry {
-    pub name: SymbolHandle,
-    pub resolved: OnceLock<MSRef<Klass>>,
+    name: SymbolHandle,
+    resolved: OnceLock<MSRef<Klass>>,
+}
+
+impl ClassCPEntry {
+    pub fn get(&self, cld: Option<&ClassLoaderData>) -> MSRef<Klass> {
+        unimplemented!()
+    }
 }
 
 #[derive(Debug)]
 pub struct StringCPEntry {
-    pub raw: SymbolHandle,
-    pub resolved: OOPHandle,
+    raw: SymbolHandle,
+    resolved: OOPHandle,
+}
+
+impl StringCPEntry {
+    pub fn get(&self) -> &OOPHandle {
+        unimplemented!()
+    }
 }
 
 #[derive(Debug)]
 pub struct DynamicEntry {
-    pub bs_method_attr_index: usize,
-    pub bs_method: OnceCell<MSRef<BootstrapMethod>>,
+    bs_method_attr_index: usize,
+    bs_method: OnceCell<MSRef<BootstrapMethod>>,
     
-    pub name: SymbolHandle,
-    pub desc: MethodDesc,
+    name: SymbolHandle,
+    desc: MethodDesc,
+}
+
+impl DynamicEntry {
+    pub fn get(&self, bsms: &[BootstrapMethod]) -> MSRef<BootstrapMethod> {
+        unimplemented!()
+    }
 }
 
 #[derive(Debug)]

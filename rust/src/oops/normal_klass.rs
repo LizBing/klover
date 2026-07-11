@@ -15,16 +15,13 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub struct NormalKlass {
-    pub mirror: OOPHandle,
+pub struct UnlinkedNormalKlass {
+    acc_flags: AccFlags,
 
-    pub acc_flags: AccFlags,
-
-    pub this_klass: MSRef<ClassCPEntry>,
-    super_klass: OnceCell<Option<MSRef<NormalKlass>>>, // resolve in cld callsite
+    this_klass: MSRef<ClassCPEntry>,
 
     // Points to rust memory space.
-    pub cld: Option<NonNull<ClassLoaderData>>,
+    cld: Option<NonNull<ClassLoaderData>>,
 
     constant_pool: MSBox<[OnceCell<CPEntry>]>,
 
@@ -34,9 +31,6 @@ pub struct NormalKlass {
 
     methods: MSBox<[Method]>,
 
-    /// 对象内存布局描述。`set_super init_fieds` 后可用。
-    obj_layout: OnceCell<ObjLayout>,
-    
     attrs: KlassAttrs,
 }
 
@@ -97,11 +91,11 @@ fn build_methods(
     unsafe { Ok(MSBox::from_raw(uninit.assume_init_mut())) }
 }
 
-impl NormalKlass {
+impl UnlinkedNormalKlass {
     pub fn build(
         cf: ClassFile,
         cld: Option<&ClassLoaderData>,
-    ) -> ResolveResult<(MSBox<Klass>, Option<MSRef<ClassCPEntry>>)> {
+    ) -> ResolveResult<(Self, Option<MSRef<ClassCPEntry>>)> {
         let msa = match cld {
             Some(x) => &x.ms_allocator,
             None => BootstrapCLD::bs_msa(),
@@ -140,123 +134,51 @@ impl NormalKlass {
 
         let attrs = KlassAttrs::build(&cf.attrs, &cp, msa)?;
 
-        let klass = Self {
-            mirror: OOPHandle::new(KLASS_OOP_STORAGE_ID),
+        Ok((Self {
             acc_flags,
             this_klass: this_entry.clone(),
-            super_klass: OnceCell::new(),
             cld: cld_ptr,
             constant_pool: cp,
             interfaces,
             fields,
             methods,
-            obj_layout: OnceCell::new(),
-
             attrs
-        };
-
-        let boxed = MSBox::new(msa, Klass::Normal(klass));
-        this_entry.resolved.set((&boxed).into()).unwrap();
-
-        Ok((boxed, super_entry))
+        }, super_entry))
     }
-    
-    // callsite: cld
-    pub fn set_super(&self, s: Option<MSRef<NormalKlass>>) {
-        self.super_klass.set(s).unwrap()
-    }
-    
-    // After 'set_super()'
-    pub fn cal_object_layout(&self) {
-        let (super_layout, super_size) = match self.get_super() {
-            Some(super_ref) => {
-                let super_layout = super_ref.get_obj_layout();
-                (super_layout as *const _, super_layout.byte_size)
-            }
-            None => (null(), 0)
-        };
+}    
 
-        let fields = &self.fields;
-        
-        let layout = ObjLayout {
-            super_layout,
-            byte_size: super_size + fields.instance_size,
-            ptrs_count: fields.instance_ptrs_count
-        };
+#[derive(Debug)]
+pub struct NormalKlass {
+    acc_flags: AccFlags,
 
-        self.obj_layout.set(layout).unwrap()
-    }
+    this_klass: MSRef<ClassCPEntry>,
+
+    // Points to rust memory space.
+    cld: Option<NonNull<ClassLoaderData>>,
+
+    constant_pool: MSBox<[OnceCell<CPEntry>]>,
+
+    interfaces: MSBox<[MSRef<ClassCPEntry>]>,
+
+    fields: Fields,
+
+    methods: MSBox<[Method]>,
+
+    attrs: KlassAttrs,
+
+    super_klass: Option<MSRef<ClassCPEntry>>,
+
+    obj_layout: ObjLayout,
 }
 
 impl NormalKlass {
-    pub fn cp_get(&self, idx: usize) -> Option<&CPEntry> {
-        cp_slice_get(&self.constant_pool, idx)
-    }
-
-    pub fn find_method(&self, mname: &SymbolHandle, mdesc: &SymbolHandle) -> Option<&Method> {
-        for n in self.methods.as_ref() {
-            if n.name.equals(mname) && n.desc.raw.equals(mdesc) {
-                return Some(n);
-            }
-        }
-
-        None
-    }
-
-    /// 沿继承链查找字段（name + descriptor 同时匹配）。
-    /// 返回的字段同时覆盖 instance 与 static，调用方按 acc_flags 区分。
-    pub fn find_field(&self, fname: &SymbolHandle, fdesc: &SymbolHandle) -> Option<&Field> {
-        let f = &self.fields;
-        
-        if let Some(x) = f.instance_fields.as_ref() {
-            for field in x.as_ref() {
-                if field.name.equals(fname) && field.desc.raw.equals(fdesc) {
-                    return Some(field);
-                }
-            }
-        }
-        
-        if let Some(x) = f.static_fields.as_ref() {
-            for field in x.as_ref() {
-                if field.name.equals(fname) && field.desc.raw.equals(fdesc) {
-                    return Some(field);
-                }
-            }
-        }
-        
-        // 沿继承链向上。
-        match self.get_super() {
-            Some(s) => s.find_field(fname, fdesc),
-            None => None,
-        }
+    pub fn link(unlinked: UnlinkedNormalKlass, super_klass: &NormalKlass) -> ResolveResult<MSBox<Self>> {
+        unimplemented!()
     }
 }
 
 impl NormalKlass {
     pub fn get_obj_layout(&self) -> &ObjLayout {
-        self.obj_layout.get().expect("Obj layout hasn't been initialized.")
-    }
-    
-    pub fn get_super(&self) -> Option<&NormalKlass> {
-        match self.super_klass.get().expect("Super hasn't been set.") {
-            Some(x) => Some(x.deref()),
-            None => None,
-        }
-    }
-
-    /// 判断 `self` 是否是 `target` 的子类（或就是 `target` 本身）。
-    ///
-    /// 沿继承链向上，用 MSRef 指针相等判断。  仅支持普通类；
-    /// 接口关系（implements）不走继承链，MVP 不支持。
-    pub fn is_subclass_of(&self, target: &NormalKlass) -> bool {
-        let self_ref = crate::class_loader::ms_api::MSRef::from(self as &NormalKlass);
-        let target_ref = crate::class_loader::ms_api::MSRef::from(target as &NormalKlass);
-        if self_ref.equals(&target_ref) {
-            return true;
-        }
-        match self.get_super() {
-            Some(s) => s.is_subclass_of(target),
-            None => false,
-        }
+        unimplemented!()
     }
 }
