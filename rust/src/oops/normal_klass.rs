@@ -1,5 +1,5 @@
 use std::{
-    cell::OnceCell, ops::Deref, ptr::{NonNull, null}
+    boxed, cell::OnceCell, ops::Deref, ptr::{NonNull, null}
 };
 
 use crate::{
@@ -9,8 +9,8 @@ use crate::{
         ms_api::{MSAllocator, MSBox, MSRef},
     }, class_parser::{
         class_file::ClassFile, cp_info::ConstantPoolInfo, method_info::MethodInfo,
-    }, gc_bindings::{obj_layout::ObjLayout, oop_handle::{KLASS_OOP_STORAGE_ID, OOPHandle}}, oops::{
-        acc_flags::AccFlags, attr::KlassAttrs, cp_entry::{CPEntry, ClassCPEntry}, field::Field, fields::Fields, klass::Klass, method::Method, resolve_error::{ResolveError, ResolveResult}, symbol_table::SymbolHandle,
+    }, gc_bindings::obj_layout::ObjLayout, oops::{
+        acc_flags::AccFlags, cp_entry::{CPEntry, ClassCPEntry}, field::Field, fields::Fields, klass::Klass, method::Method, resolve_error::{ResolveError, ResolveResult}, symbol_table::SymbolHandle,
     }
 };
 
@@ -19,9 +19,7 @@ pub struct UnlinkedNormalKlass {
     acc_flags: AccFlags,
 
     this_klass: MSRef<ClassCPEntry>,
-
-    // Points to rust memory space.
-    cld: Option<NonNull<ClassLoaderData>>,
+    pub super_klass: Option<MSRef<ClassCPEntry>>,
 
     constant_pool: MSBox<[OnceCell<CPEntry>]>,
 
@@ -30,8 +28,6 @@ pub struct UnlinkedNormalKlass {
     fields: Fields,
 
     methods: MSBox<[Method]>,
-
-    attrs: KlassAttrs,
 }
 
 fn build_cp<'a>(
@@ -68,7 +64,7 @@ fn build_interfaces(
 
     for (i, idx) in parsed_ifaces.iter().enumerate() {
         match cp_slice_get(cp_slice, *idx as usize) {
-            Some(CPEntry::Class(entry)) => uninit[i].write(entry.into()),
+            Some(CPEntry::Class(entry)) => unsafe { uninit[i].write(MSRef::from_raw(entry.into())) },
             _ => return Err(ResolveError::MismatchCPType),
         };
     }
@@ -95,7 +91,7 @@ impl UnlinkedNormalKlass {
     pub fn build(
         cf: ClassFile,
         cld: Option<&ClassLoaderData>,
-    ) -> ResolveResult<(Self, Option<MSRef<ClassCPEntry>>)> {
+    ) -> ResolveResult<Self> {
         let msa = match cld {
             Some(x) => &x.ms_allocator,
             None => BootstrapCLD::bs_msa(),
@@ -106,7 +102,7 @@ impl UnlinkedNormalKlass {
         let cp = build_cp(&cf.constant_pool, msa)?;
 
         let this_entry: MSRef<ClassCPEntry> = match cp_slice_get(&cp, cf.this_class as usize) {
-            Some(CPEntry::Class(entry)) => entry.into(),
+            Some(CPEntry::Class(entry)) => unsafe { MSRef::from_raw(entry.into()) },
             _ => return Err(ResolveError::MismatchCPType),
         };
 
@@ -115,7 +111,7 @@ impl UnlinkedNormalKlass {
         } else {
             Some(
                 match cp_slice_get(&cp, cf.super_index as usize) {
-                    Some(CPEntry::Class(entry)) => entry.into(),
+                    Some(CPEntry::Class(entry)) => unsafe { MSRef::from_raw(entry.into()) },
                     _ => return Err(ResolveError::MismatchCPType),
                 }
             )
@@ -127,23 +123,15 @@ impl UnlinkedNormalKlass {
 
         let methods = build_methods(&cf.methods, &cp, msa)?;
 
-        let cld_ptr = match cld {
-            Some(x) => unsafe { Some(NonNull::new_unchecked(x as *const _ as *mut _)) },
-            None => None,
-        };
-
-        let attrs = KlassAttrs::build(&cf.attrs, &cp, msa)?;
-
-        Ok((Self {
+        Ok(Self {
             acc_flags,
             this_klass: this_entry.clone(),
-            cld: cld_ptr,
+            super_klass: super_entry,
             constant_pool: cp,
             interfaces,
             fields,
             methods,
-            attrs
-        }, super_entry))
+        })
     }
 }    
 
@@ -152,6 +140,7 @@ pub struct NormalKlass {
     acc_flags: AccFlags,
 
     this_klass: MSRef<ClassCPEntry>,
+    super_klass: Option<MSRef<NormalKlass>>,
 
     // Points to rust memory space.
     cld: Option<NonNull<ClassLoaderData>>,
@@ -164,16 +153,62 @@ pub struct NormalKlass {
 
     methods: MSBox<[Method]>,
 
-    attrs: KlassAttrs,
-
-    super_klass: Option<MSRef<ClassCPEntry>>,
-
     obj_layout: ObjLayout,
 }
 
 impl NormalKlass {
-    pub fn link(unlinked: UnlinkedNormalKlass, super_klass: &NormalKlass) -> ResolveResult<MSBox<Self>> {
-        unimplemented!()
+    pub fn link(unlinked: UnlinkedNormalKlass, cld: Option<&ClassLoaderData>) -> ResolveResult<MSBox<Klass>> {
+        let msa = match cld {
+            Some(x) => unsafe { &x.ms_allocator },
+            None => BootstrapCLD::bs_msa()
+        };
+        
+        let obj_layout;
+        let super_klass;
+        match unlinked.super_klass {
+            Some(x) => {
+                let super_ref = x.get(cld)?;
+                let super_normal = super_ref.as_normal().unwrap();
+                super_klass = unsafe { Some(MSRef::from_raw(super_normal.into())) };
+
+                obj_layout = ObjLayout {
+                    super_layout: &super_normal.obj_layout,
+                    byte_size: super_normal.obj_layout.byte_size + unlinked.fields.instance_size,
+                    ptrs_count: unlinked.fields.instance_ptrs_count
+                }
+            }
+
+            None => {
+                super_klass = None;
+                obj_layout = ObjLayout {
+                    super_layout: null(),
+                    byte_size: unlinked.fields.instance_size,
+                    ptrs_count: unlinked.fields.instance_ptrs_count
+                }
+            }
+        }
+
+        let cld_ptr = match cld {
+            Some(x) => Some(x.into()),
+            None => None
+        };
+                
+        let klass = Self {
+            acc_flags: unlinked.acc_flags,
+            this_klass: unlinked.this_klass,
+            super_klass,
+            cld: cld_ptr,
+            constant_pool: unlinked.constant_pool,
+            interfaces: unlinked.interfaces,
+            fields: unlinked.fields,
+            methods: unlinked.methods,
+            obj_layout
+        };
+
+        let boxed = MSBox::new(msa, Klass::Normal(klass));
+        boxed.as_normal().unwrap().this_klass.set((&boxed).into());
+
+        Ok(boxed)
     }
 }
 

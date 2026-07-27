@@ -8,12 +8,14 @@ services:
 
     working_dir: /workspace
 
+    environment:
+      KLOVER_CORE_DIR: /workspace/build/core
+      CARGO_TARGET_DIR: /workspace/build/cargo
+
     volumes:
       - .:/workspace
-
-      # Rust 缓存
-      - cargo-registry:/usr/local/cargo/registry
-      - cargo-git:/usr/local/cargo/git
+      - cargo-registry:/root/.cargo/registry
+      - cargo-git:/root/.cargo/git
 
     stdin_open: true
     tty: true
@@ -21,4 +23,3 @@ services:
 volumes:
   cargo-registry:
   cargo-git:
-

@@ -2,11 +2,6 @@ use crate::class_parser::{attr_info::AttrInfo, class_file::read_attrs, cp_info::
 
 use super::{class_reader::ClassReader, parse_error::ParseResult};
 
-/// Parsed field metadata — names resolved to `SymbolHandle`, attributes parsed.
-///
-/// This is the parsed, ready-to-use representation within a [`ClassFile`].
-/// The runtime counterpart (offset, storage layout, etc.) will be a separate
-/// `Field` type allocated in metaspace alongside `Klass`.
 pub struct FieldInfo {
     pub acc_flags: u16,
     pub name_idx: u16,

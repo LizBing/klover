@@ -3,10 +3,6 @@ FROM ubuntu:24.04
 ARG DEBIAN_FRONTEND=noninteractive
 ARG RUST_VERSION=1.96.1
 
-# -----------------------------------------------------------------------------
-# System packages
-# -----------------------------------------------------------------------------
-
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         build-essential \
@@ -21,40 +17,28 @@ RUN apt-get update && \
         git \
         curl \
         wget \
-        unzip \
-        zip \
-        less \
-        vim \
         ca-certificates \
         python3 \
-        python3-pip \
         xz-utils \
-        openjdk-25-jdk && \
+        openjdk-21-jdk-headless && \
     rm -rf /var/lib/apt/lists/*
 
-# -----------------------------------------------------------------------------
-# Rust
-# -----------------------------------------------------------------------------
-
-RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
+RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain ${RUST_VERSION}
 
 ENV PATH="/root/.cargo/bin:${PATH}"
 
-RUN rustup toolchain install ${RUST_VERSION} && \
-    rustup default ${RUST_VERSION} && \
-    rustup component add rustfmt clippy
+RUN rustup component add rustfmt clippy && \
+    cargo install cargo-watch
 
-RUN cargo install cargo-watch
+# Resolve JAVA_HOME for both amd64 and arm64 package layouts.
+RUN JH="$(dirname "$(dirname "$(readlink -f "$(command -v javac)")")")" && \
+    printf '%s\n' "export JAVA_HOME=${JH}" "export PATH=\"\${JAVA_HOME}/bin:\${PATH}\"" \
+      > /etc/profile.d/java.sh
 
-# JDK 25 is installed via apt-get above
-ENV JAVA_HOME=/usr/lib/jvm/java-25-openjdk-arm64
-ENV PATH="${JAVA_HOME}/bin:${PATH}"
+ENV PATH="/root/.cargo/bin:${PATH}"
 
-# -----------------------------------------------------------------------------
-# Workspace
-# -----------------------------------------------------------------------------
+# Classfiles: `make classes` uses javac --release 8.
 
 WORKDIR /workspace
 
 CMD ["/bin/bash"]
-

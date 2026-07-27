@@ -9,10 +9,7 @@ use crate::{
         load_error::{LoadError, LoadResult},
         ms_api::{MSAllocator, MSBox, MSRef},
     }, class_parser::{class_file::ClassFile, cp_info::ConstantPoolInfo}, gc_bindings::oop_handle::{CLD_MIRROR_STORAGE_ID, OOPHandle}, oops::{
-        klass::Klass,
-        normal_klass::NormalKlass,
-        resolve_error::ResolveError,
-        symbol_table::{SymbolHandle, SymbolTable},
+        klass::Klass, normal_klass::{NormalKlass, UnlinkedNormalKlass}, resolve_error::ResolveError, symbol_table::{SymbolHandle, SymbolTable},
     }
 };
 
@@ -38,8 +35,7 @@ impl Drop for ClassLoaderData {
 }
 
 impl ClassLoaderData {
-    // ── 构造 ───────────────────────────────────────────────────────────
-
+    // ── 构造 ──────────────────────────────────────────────────────────
     pub fn new(debug_name: Option<String>) -> NonNull<Self> {
         let cld = Box::new(Self {
             next: std::ptr::null_mut(),
@@ -57,13 +53,7 @@ impl ClassLoaderData {
 }
 
 impl ClassLoaderData {
-    /// 从 `&MSBox<Klass>` 通过 Deref 获取 `NonNull<Klass>`，不转移所有权。
-    fn klass_ptr(mb: &MSBox<Klass>) -> NonNull<Klass> {
-        let r: &Klass = mb;
-        unsafe { NonNull::new_unchecked(r as *const Klass as *mut Klass) }
-    }
-
-    pub fn define_class(&self, bytes: &[u8]) -> LoadResult<NonNull<Klass>> {
+    pub fn define_class(&self, bytes: &[u8]) -> LoadResult<MSRef<Klass>> {
         let cf = match ClassFile::from(bytes) {
             Ok(x) => x,
             Err(e) => return Err(LoadError::Parse(e)),
@@ -94,39 +84,25 @@ impl ClassLoaderData {
             Entry::Vacant(v) => v,
         };
 
-        let (klass, super_entry) = match NormalKlass::build(cf, Some(&self)) {
+        let unlinked = match UnlinkedNormalKlass::build(cf, Some(&self)) {
             Ok(x) => x,
             Err(e) => return Err(LoadError::Resolve(e)),
         };
-        let normal = unsafe { klass.as_normal().unwrap_unchecked() };
 
-        match super_entry {
-            Some(x) => {
-                let super_klass = self.load_class(x.name.utf8())?;
-                x.resolved.set(super_klass.clone()).unwrap();
+        let normal = NormalKlass::link(unlinked, Some(self))
+            .map_err(|e| LoadError::Resolve(e))?;
 
-                let super_normal = super_klass.as_normal().unwrap();
-                normal.set_super(Some(super_normal.into()));
-                normal.cal_object_layout();
-            }
+        let res = (&normal).into();
+        vacant.insert(normal);
 
-            None => {
-                return Err(LoadError::NoSuper {
-                    class_name: name_utf8,
-                });
-            }
-        }
-
-        let r = vacant.insert(klass);
-
-        Ok(Self::klass_ptr(r.deref()))
+        Ok(res)
     }
 
-    pub fn find_loaded_class(&self, name: &str) -> Option<NonNull<Klass>> {
+    pub fn find_loaded_class(&self, name: &str) -> Option<MSRef<Klass>> {
         let sym = SymbolTable::intern(name);
 
         match self.klasses.get(&sym) {
-            Some(x) => Some(Self::klass_ptr(x.deref())),
+            Some(x) => Some(x.deref().into()),
             None => None,
         }
     }

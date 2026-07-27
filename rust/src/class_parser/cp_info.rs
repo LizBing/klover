@@ -49,35 +49,9 @@ pub enum ConstantPoolInfo {
         desc_index: u16, // Utf8Info
     },
 
+    // best-effort UTF-8
     Utf8Info {
         utf8: String,
-    },
-
-    MethodHandleInfo {
-        ref_kind: u8,
-        ref_index: u16,
-    },
-
-    MethodTypeInfo {
-        desc_index: u16, // Utf8Info
-    },
-
-    DynamicInfo {
-        bs_method_attr_index: u16,
-        name_and_type_index: u16, // NameAndTypeInfo
-    },
-
-    InvokeDynamicInfo {
-        bs_method_attr_index: u16,
-        name_and_type_index: u16, // NameAndTypeInfo
-    },
-
-    ModuleInfo {
-        name_index: u16, // Utf8Info
-    },
-
-    PackageInfo {
-        name_index: u16, // Utf8Info
     },
 
     /// JVM spec 4.4.5: Long and Double occupy two consecutive slots.
@@ -134,27 +108,9 @@ impl ConstantPoolInfo {
 
                 Self::Utf8Info { utf8 }
             },
-            15 => Self::MethodHandleInfo {
-                ref_kind: rd.read_u8()?,
-                ref_index: rd.read_u16()?,
-            },
-            16 => Self::MethodTypeInfo {
-                desc_index: rd.read_u16()?,
-            },
-            17 => Self::DynamicInfo {
-                bs_method_attr_index: rd.read_u16()?,
-                name_and_type_index: rd.read_u16()?,
-            },
-            18 => Self::InvokeDynamicInfo {
-                bs_method_attr_index: rd.read_u16()?,
-                name_and_type_index: rd.read_u16()?,
-            },
-            19 => Self::ModuleInfo {
-                name_index: rd.read_u16()?,
-            },
-            20 => Self::PackageInfo {
-                name_index: rd.read_u16()?,
-            },
+
+            // Ignore for now.
+            15 | 16 | 18 => return Err(ParseError::UnsupportedCPTag(tag)),
 
             _ => return Err(ParseError::InvalidCPTag(tag)),
         };

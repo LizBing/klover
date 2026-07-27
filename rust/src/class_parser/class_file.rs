@@ -9,12 +9,6 @@ use crate::class_parser::{
 
 const VALID_MAGIC: u32 = 0xCAFEBABE;
 
-/// A preliminarily parsed class file, ready for Klass construction.
-///
-/// Constructed directly from raw `.class` bytes via [`ClassFile::from`].
-/// All symbolic references (class names, field/method names and descriptors,
-/// attribute names) are resolved to [`SymbolHandle`] via the global symbol
-/// table during parsing.  The raw constant pool is preserved for runtime use.
 pub struct ClassFile {
     pub minor_version: u16,
     pub major_version: u16,
@@ -27,23 +21,15 @@ pub struct ClassFile {
     /// `cp[n]` directly corresponds to JVM CP entry `n`.
     pub constant_pool: Vec<ConstantPoolInfo>,
 
-    /// Resolved interface names.
     pub interfaces: Vec<u16>,
-
-    /// Parsed field metadata.
     pub fields: Vec<FieldInfo>,
-    
-    /// Parsed method metadata (including Code, if present).
     pub methods: Vec<MethodInfo>,
 
-    /// Resolved class-level attributes.
     pub attrs: Vec<AttrInfo>,
 }
 
 fn is_version_valid(minor: u16, major: u16) -> bool {
-    if major >= 56 && (minor != 0 && minor != 65535) { return false }
-    
-    major >= 45 && major <= 69
+    major >= 45 && major <= 52 && minor == 0
 }
 
 fn read_cp(rd: &mut ClassReader) -> ParseResult<Vec<ConstantPoolInfo>> {
@@ -73,7 +59,6 @@ fn read_cp(rd: &mut ClassReader) -> ParseResult<Vec<ConstantPoolInfo>> {
 }
 
 fn read_interfaces(rd: &mut ClassReader) -> ParseResult<Vec<u16>> {
-    // -- interfaces (resolve immediately) --
     let iface_count = rd.read_u16()?;
     let mut interfaces = Vec::with_capacity(iface_count as usize);
     for _ in 0..iface_count {
@@ -117,11 +102,6 @@ fn read_methods(rd: &mut ClassReader, cp: &[ConstantPoolInfo]) -> ParseResult<Ve
 }
 
 impl ClassFile {
-    /// Parse a `.class` file from raw bytes.
-    ///
-    /// Validates magic number, version, and structural integrity,
-    /// then resolves all symbolic references against the constant pool
-    /// and interns names into the global symbol table.
     pub fn from(stream: &[u8]) -> ParseResult<Self> {
         let mut rd = ClassReader::new(stream);
 
@@ -142,17 +122,13 @@ impl ClassFile {
         // -- access flags --
         let acc_flags = rd.read_u16()?;
 
-        // -- this class, super class (resolve immediately) --
         let this_class = rd.read_u16()?;
         let super_index = rd.read_u16()?;
 
         let interfaces = read_interfaces(&mut rd)?;
-
         let fields = read_fields(&mut rd, &cp)?;
-        
         let methods = read_methods(&mut rd, &cp)?;
         
-        // -- class-level attributes (read & resolve immediately) --
         let attrs = read_attrs(&mut rd, &cp)?;
 
         Ok(Self {

@@ -82,5 +82,5 @@ pub fn markword_read_lock_value(raw: u64) -> u32 {
 pub unsafe fn klass_from_markword(raw: u64) -> MSRef<Klass> {
     let cp = markword_read_klass_cp(raw);
     // SAFETY: 调用方保证 markword 来自合法分配的对象。
-    unsafe { MSRef::decode(cp) }
+    unsafe { MSRef::decode(cp).expect("Klass ptr not set") }
 }

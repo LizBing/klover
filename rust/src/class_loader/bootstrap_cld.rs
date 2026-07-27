@@ -8,12 +8,7 @@ use crate::{
         load_error::{LoadError, LoadResult},
         ms_api::{MSAllocator, MSBox, MSRef},
     }, class_parser::class_file::ClassFile, gc_bindings::oop_handle::{KLASS_OOP_STORAGE_ID, OOPHandle}, oops::{
-        array_klass::ArrayKlass,
-        desc::FieldDesc,
-        klass::Klass,
-        normal_klass::NormalKlass,
-        prim_klass::PrimKlass,
-        symbol_table::{SymbolHandle, SymbolTable},
+        array_klass::ArrayKlass, desc::FieldDesc, klass::Klass, normal_klass::{NormalKlass, UnlinkedNormalKlass}, prim_klass::PrimKlass, symbol_table::{SymbolHandle, SymbolTable},
     }
 };
 
@@ -173,27 +168,14 @@ impl BootstrapCLD {
             Err(e) => return Err(LoadError::Parse(e)),
         };
 
-        let (klass, super_entry) = match NormalKlass::build(cf, None) {
-            Ok(x) => x,
-            Err(e) => return Err(LoadError::Resolve(e)),
-        };
-        let normal = unsafe { klass.as_normal().unwrap_unchecked() };
+        let unlinked = UnlinkedNormalKlass::build(cf, None)
+            .map_err(|e| LoadError::Resolve(e))?;
+        
+        let normal = NormalKlass::link(unlinked, None)
+            .map_err(|e| LoadError::Resolve(e))?;
 
-        match super_entry {
-            Some(x) => {
-                let super_klass = Self::find_normal_klass(x.name.utf8())?;
-                x.resolved.set(super_klass.clone()).unwrap();
-                let super_normal = super_klass.as_normal().unwrap();
-                normal.set_super(Some(super_normal.into()));
-            }
-
-            None => normal.set_super(None),
-        }
-
-        normal.cal_object_layout();
-
-        let res = (&klass).into();
-        vacant.insert(klass);
+        let res = (&normal).into();
+        vacant.insert(normal);
 
         Ok(res)
     }

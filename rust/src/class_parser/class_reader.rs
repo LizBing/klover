@@ -16,15 +16,13 @@ impl<'a> ClassReader<'a> {
 
 impl ClassReader<'_> {
     pub fn read_u8(&mut self) -> ParseResult<u8> {
-        let res = match self.stream.get(self.pos) {
-            Some(x) => Ok(*x),
-            None => Err(super::parse_error::ParseError::EOF),
-        };
-
+        let x = self.stream.get(self.pos).copied().ok_or(ParseError::EOF)?;
+        
         self.pos += 1;
-
-        res
+        
+        Ok(x)
     }
+
 
     pub fn read_u16(&mut self) -> ParseResult<u16> {
         Ok(u16::from_be_bytes([self.read_u8()?, self.read_u8()?]))
@@ -92,5 +90,9 @@ impl ClassReader<'_> {
         self.pos += len;
 
         Ok(res)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.stream.len() == self.pos
     }
 }

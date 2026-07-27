@@ -5,7 +5,10 @@ pub enum ParseError {
     InvalidVersion { minor: u16, major: u16 },
     InvalidCPTag(u8),
     InvalidUtf8(Vec<u8>),
-    InvalidCPType
+    InvalidCPType,
+    InvalidCPIndex,
+    UnsupportedCPTag(u8),
+    InvalidAttrLen(usize),
 }
 
 pub type ParseResult<T> = Result<T, ParseError>;

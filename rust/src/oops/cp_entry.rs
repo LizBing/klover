@@ -1,8 +1,8 @@
-use std::{cell::OnceCell, mem, ptr::NonNull, sync::OnceLock};
+use std::{cell::OnceCell, sync::OnceLock};
 
 use crate::{
     class_loader::{cld::ClassLoaderData, ms_api::MSRef}, class_parser::cp_info::ConstantPoolInfo, gc_bindings::oop_handle::{KLASS_OOP_STORAGE_ID, OOPHandle}, oops::{
-        attr::BootstrapMethod, desc::MethodDesc, field::Field, klass::Klass, method::Method, normal_klass::NormalKlass, resolve_error::{ResolveError, ResolveResult}, symbol_table::{SymbolHandle, SymbolTable}
+        desc::MethodDesc, field::Field, klass::Klass, method::Method, normal_klass::NormalKlass, resolve_error::{ResolveError, ResolveResult}, symbol_table::{SymbolHandle, SymbolTable}
     }
 };
 
@@ -129,109 +129,17 @@ impl CPRefEntry {
 }
 
 #[derive(Debug)]
-pub enum MethodHandleEntry {
-    RefGetField(MSRef<CPRefEntry>),
-    RefGetStatic(MSRef<CPRefEntry>),
-    RefPutField(MSRef<CPRefEntry>),
-    RefPutStatic(MSRef<CPRefEntry>),
-
-    RefInvokeVirtual(MSRef<CPRefEntry>),
-    RefInvokeStatic(MSRef<CPRefEntry>),
-    RefInvokeSpecial(MSRef<CPRefEntry>),
-    RefNewInvokeSpecial(MSRef<CPRefEntry>),
-    RefInvokeInterface(MSRef<CPRefEntry>),
-}
-
-fn resolve_method_handle_entry(
-    idx: usize,
-    cp: &[OnceCell<CPEntry>],
-    parsed_cp: &[ConstantPoolInfo],
-) -> ResolveResult<MSRef<CPRefEntry>> {
-    if let None = cp[idx].get() {
-        let info = &parsed_cp[idx];
-        let entry = CPRefEntry::build(info, cp, parsed_cp)?;
-
-        let res = match info {
-            ConstantPoolInfo::FieldrefInfo { .. } => CPEntry::FieldRef(entry),
-            
-            ConstantPoolInfo::MethodrefInfo { .. } => CPEntry::MethodRef(entry),
-            
-            ConstantPoolInfo::InterfaceMethodrefInfo { .. } => CPEntry::InterfaceMethodRef(entry),
-            _ => return Err(ResolveError::MismatchCPType),
-        };
-
-        cp[idx].set(res).unwrap();
-    }
-    
-    let entry = match cp[idx].get().unwrap() {
-        CPEntry::FieldRef(x) => x,
-        CPEntry::MethodRef(x) => x,
-        CPEntry::InterfaceMethodRef(x) => x,
-
-        _ => return Err(ResolveError::MismatchCPType),
-    };
-
-    Ok(entry.into())
-}
-
-impl MethodHandleEntry {
-    fn from(
-        ref_kind: u8,
-        ref_index: usize,
-        cp: &[OnceCell<CPEntry>],
-        parsed_cp: &[ConstantPoolInfo],
-    ) -> ResolveResult<Self> {
-        match ref_kind {
-            1 => {
-                let entry = resolve_method_handle_entry(ref_index, cp, parsed_cp)?;
-                Ok(Self::RefGetField(entry))
-            }
-            2 => {
-                let entry = resolve_method_handle_entry(ref_index, cp, parsed_cp)?;
-                Ok(Self::RefGetStatic(entry))
-            }
-            3 => {
-                let entry = resolve_method_handle_entry(ref_index, cp, parsed_cp)?;
-                Ok(Self::RefPutField(entry))
-            }
-            4 => {
-                let entry = resolve_method_handle_entry(ref_index, cp, parsed_cp)?;
-                Ok(Self::RefPutStatic(entry))
-            }
-            5 => {
-                let entry = resolve_method_handle_entry(ref_index, cp, parsed_cp)?;
-                Ok(Self::RefInvokeVirtual(entry))
-            }
-            6 => {
-                let entry = resolve_method_handle_entry(ref_index, cp, parsed_cp)?;
-                Ok(Self::RefInvokeStatic(entry))
-            }
-            7 => {
-                let entry = resolve_method_handle_entry(ref_index, cp, parsed_cp)?;
-                Ok(Self::RefInvokeSpecial(entry))
-            }
-            8 => {
-                let entry = resolve_method_handle_entry(ref_index, cp, parsed_cp)?;
-                Ok(Self::RefNewInvokeSpecial(entry))
-            }
-            9 => {
-                let entry = resolve_method_handle_entry(ref_index, cp, parsed_cp)?;
-                Ok(Self::RefInvokeInterface(entry))
-            }
-
-            _ => Err(ResolveError::UnknownRefKind { kind: ref_kind }),
-        }
-    }
-}
-
-#[derive(Debug)]
 pub struct ClassCPEntry {
     name: SymbolHandle,
     resolved: OnceLock<MSRef<Klass>>,
 }
 
 impl ClassCPEntry {
-    pub fn get(&self, cld: Option<&ClassLoaderData>) -> MSRef<Klass> {
+    pub fn set(&self, klass: MSRef<Klass>) {
+        self.resolved.set(klass).unwrap()
+    }
+    
+    pub fn get(&self, cld: Option<&ClassLoaderData>) -> ResolveResult<MSRef<Klass>> {
         unimplemented!()
     }
 }
@@ -244,21 +152,6 @@ pub struct StringCPEntry {
 
 impl StringCPEntry {
     pub fn get(&self) -> &OOPHandle {
-        unimplemented!()
-    }
-}
-
-#[derive(Debug)]
-pub struct DynamicEntry {
-    bs_method_attr_index: usize,
-    bs_method: OnceCell<MSRef<BootstrapMethod>>,
-    
-    name: SymbolHandle,
-    desc: MethodDesc,
-}
-
-impl DynamicEntry {
-    pub fn get(&self, bsms: &[BootstrapMethod]) -> MSRef<BootstrapMethod> {
         unimplemented!()
     }
 }
@@ -290,23 +183,8 @@ pub enum CPEntry {
 
     Utf8(SymbolHandle),
 
-    MethodHandle(MethodHandleEntry),
-
-    MethodType(MethodDesc),
-
-    // Ignore for now.
-    Dynamic(DynamicEntry),
-
     // Ignore for now.
     InvokeDynamic {},
-
-    Module {
-        name: SymbolHandle,
-    },
-
-    Package {
-        name: SymbolHandle,
-    },
 }
 
 fn resolve_class_symbol(
@@ -418,41 +296,6 @@ impl CPEntry {
                 Self::Utf8(handle)
             }
 
-            ConstantPoolInfo::MethodHandleInfo {
-                ref_kind,
-                ref_index,
-            } => {
-                let entry = MethodHandleEntry::from(*ref_kind, *ref_index as usize, cp, parsed_cp)?;
-                Self::MethodHandle(entry)
-            }
-
-            ConstantPoolInfo::MethodTypeInfo { desc_index } => {
-                let raw = resolve_symbol(*desc_index as usize, cp, parsed_cp)?;
-                Self::MethodType(MethodDesc::from(raw.utf8())?)
-            }
-
-            ConstantPoolInfo::DynamicInfo { bs_method_attr_index, name_and_type_index } => {
-                let (name, raw_desc) = resolve_name_and_type(*name_and_type_index as usize, cp, parsed_cp)?;
-                Self::Dynamic(DynamicEntry {
-                    bs_method_attr_index: *bs_method_attr_index as usize,
-                    bs_method: OnceCell::new(),
-                    name,
-                    desc: MethodDesc::from(raw_desc.utf8())?
-                })
-            }
-
-            ConstantPoolInfo::InvokeDynamicInfo { .. } => Self::InvokeDynamic {},
-
-            ConstantPoolInfo::ModuleInfo { .. } => {
-                let name = resolve_symbol(idx, cp, parsed_cp)?;
-                Self::Module { name }
-            }
-
-            ConstantPoolInfo::PackageInfo { .. } => {
-                let name = resolve_symbol(idx, cp, parsed_cp)?;
-                Self::Package { name }
-            }
-
             ConstantPoolInfo::Unusable => return Ok(()),
         };
 
@@ -477,7 +320,5 @@ pub enum Loadable {
     Double(f64),
     Class(MSRef<ClassCPEntry>),
     StringLoadable(MSRef<StringCPEntry>),
-    MethodHandle(MSRef<MethodHandleEntry>),
     MethodType(MethodDesc),
-    Dynamic(MSRef<DynamicEntry>)
 }

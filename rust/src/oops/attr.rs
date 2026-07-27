@@ -1,8 +1,8 @@
 use std::cell::OnceCell;
 
 use crate::{
-    class_loader::ms_api::{MSAllocator, MSBox, MSRef}, class_parser::attr_info::{AttrInfo, BootstrapMethodInfo, CodeAttrInfo, ExceptionTableEntryInfo}, oops::{
-        cp_entry::{CPEntry, ClassCPEntry, Loadable, MethodHandleEntry, StringCPEntry}, normal_klass::cp_slice_get, resolve_error::{ResolveError, ResolveResult}, symbol_table::SymbolHandle,
+    class_loader::ms_api::{MSAllocator, MSBox, MSRef}, class_parser::attr_info::{CodeAttrInfo, ExceptionTableEntryInfo}, oops::{
+        cp_entry::{CPEntry, ClassCPEntry, StringCPEntry}, normal_klass::cp_slice_get, resolve_error::{ResolveError, ResolveResult},
     },
 };
 
@@ -24,7 +24,7 @@ impl ExceptionTableEntry {
                 Some(CPEntry::Class(entry)) => entry,
                 _ => return Err(ResolveError::MismatchCPType),
             };
-            Some(ct.into())
+            unsafe { Some(MSRef::from_raw(ct.into())) }
         };
 
         Ok(Self {
@@ -115,144 +115,9 @@ impl ConstantValue {
             Some(CPEntry::Float(value)) => Ok(Self::Float(*value)),
             Some(CPEntry::Long(value)) => Ok(Self::Long(*value)),
             Some(CPEntry::Double(value)) => Ok(Self::Double(*value)),
-            Some(CPEntry::StringConstant(entry)) => Ok(Self::String(entry.into())),
+            Some(CPEntry::StringConstant(entry)) => unsafe { Ok(Self::String(MSRef::from_raw(entry.into()))) },
 
             _ => Err(ResolveError::MismatchCPType),
         }
-    }
-}
-
-pub fn build_permitted_subclasses(parsed: &[u16], cp: &[OnceCell<CPEntry>], msa: &MSAllocator) -> ResolveResult<MSBox<[MSRef<ClassCPEntry>]>> {
-    let len = parsed.len();
-    let uninit = msa.calloc(len);
-
-    for i in 0..len {
-        let idx = parsed[i] as usize;
-        let cp_ref = match cp[idx].get() {
-            Some(CPEntry::Class(x)) => x.into(),
-            _ => return Err(ResolveError::MismatchCPType)
-        };
-
-        uninit[i].write(cp_ref);
-    }
-
-    unsafe { Ok(MSBox::from_raw(uninit.assume_init_mut())) }
-}
-
-#[derive(Debug)]
-pub struct BootstrapMethod {
-    bs_method_ref: MSRef<MethodHandleEntry>,
-    args: MSBox<[Loadable]>
-}
-
-impl BootstrapMethod {
-    fn build(info: &BootstrapMethodInfo, cp: &[OnceCell<CPEntry>], msa: &MSAllocator) -> ResolveResult<Self> {
-        let bsm_ref = match cp[info.bs_method_ref as usize].get() {
-            Some(CPEntry::MethodHandle(x)) => x.into(),
-            _ => return Err(ResolveError::MismatchCPType)
-        };
-        
-        let len = info.bs_arguments.len();
-        let uninit = msa.calloc(len);
-
-        for (i, v) in info.bs_arguments.iter().enumerate() {
-            let arg = match cp[*v as usize].get() {
-                Some(CPEntry::Integer(x)) => Loadable::Integer(*x),
-                Some(CPEntry::Float(x)) => Loadable::Float(*x),
-                Some(CPEntry::Long(x)) => Loadable::Long(*x),
-                Some(CPEntry::Double(x)) => Loadable::Double(*x),
-                Some(CPEntry::Class(x)) => Loadable::Class(x.into()),
-                Some(CPEntry::StringConstant(x)) => Loadable::StringLoadable(x.into()),
-                Some(CPEntry::MethodHandle(x)) => Loadable::MethodHandle(x.into()),
-                Some(CPEntry::MethodType(x)) => Loadable::MethodType(x.clone()),
-                Some(CPEntry::Dynamic(x)) => Loadable::Dynamic(x.into()),
-
-                _ => return Err(ResolveError::MismatchCPType),
-            };
-
-            uninit[i].write(arg);
-        }
-
-        Ok(Self {
-            bs_method_ref: bsm_ref,
-            args: unsafe { MSBox::from_raw(uninit.assume_init_mut()) }
-        })
-    }
-}
-
-pub fn build_bs_methods(infos: &[BootstrapMethodInfo], cp: &[OnceCell<CPEntry>], msa: &MSAllocator) -> ResolveResult<MSBox<[BootstrapMethod]>> {
-    let len = infos.len();
-    let uninit = msa.calloc(len);
-
-    for (i, v) in infos.iter().enumerate() {
-        let bsm = BootstrapMethod::build(v, cp, msa)?;
-        uninit[i].write(bsm);
-    }
-
-    unsafe { Ok(MSBox::from_raw(uninit.assume_init_mut())) }
-}
-
-pub fn build_nest_members(idxes: &[u16], cp: &[OnceCell<CPEntry>], msa: &MSAllocator) -> ResolveResult<MSBox<[MSRef<ClassCPEntry>]>> {
-    let len = idxes.len();
-    let uninit = msa.calloc(len);
-
-    for (i, v) in idxes.iter().enumerate() {
-        let cp_ref = match cp[*v as usize].get() {
-            Some(CPEntry::Class(x)) => x.into(),
-            _ => return Err(ResolveError::MismatchCPType)
-        };
-
-        uninit[i].write(cp_ref);
-    }
-
-    unsafe { Ok(MSBox::from_raw(uninit.assume_init_mut())) }
-}
-
-#[derive(Debug)]
-pub struct KlassAttrs {
-    pub permitted_subclasses: Option<MSBox<[MSRef<ClassCPEntry>]>>,
-    pub bootstrap_methods: Option<MSBox<[BootstrapMethod]>>,
-    pub nest_host: Option<MSRef<ClassCPEntry>>,
-    pub nest_members: Option<MSBox<[MSRef<ClassCPEntry>]>>
-}
-
-impl KlassAttrs {
-    pub fn build(parsed: &[AttrInfo], cp: &[OnceCell<CPEntry>], msa: &MSAllocator) -> ResolveResult<Self> {
-        let mut permitted_subclasses = OnceCell::new();
-        let mut bsms = OnceCell::new();
-        let mut nest_host = OnceCell::new();
-        let mut nest_members = OnceCell::new();
-        
-        for info in parsed {
-            match info {
-                AttrInfo::PermittedSubclasses { cp_idxes } =>
-                    permitted_subclasses.set(build_permitted_subclasses(&cp_idxes, &cp, msa)?)
-                        .map_err(|_| ResolveError::DuplicatedAttr)?,
-
-                AttrInfo::BootstrapMethods(x) =>
-                    bsms.set(build_bs_methods(&x, &cp, msa)?)
-                        .map_err(|_| ResolveError::DuplicatedAttr)?,
-
-                AttrInfo::NestHost { cp_idx } =>
-                    nest_host.set(match cp[*cp_idx as usize].get() {
-                        Some(CPEntry::Class(x)) => x.into(),
-                        _ => return Err(ResolveError::MismatchCPType)
-                    }).map_err(|_| ResolveError::DuplicatedAttr)?,
-
-                AttrInfo::NestMembers { cp_idxes } =>
-                    nest_members.set(build_nest_members(&cp_idxes, &cp, msa)?)
-                        .map_err(|_| ResolveError::DuplicatedAttr)?,
-
-                // ignore other attributes
-                _ => continue,
-            }
-        }
-
-        Ok(Self {
-            permitted_subclasses: permitted_subclasses.take(),
-            bootstrap_methods: bsms.take(),
-            nest_host: nest_host.take(),
-            nest_members: nest_members.take()
-        })
     }
 }

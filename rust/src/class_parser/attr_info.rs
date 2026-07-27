@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use crate::class_parser::{class_file::read_attrs, class_reader::ClassReader, cp_info::ConstantPoolInfo, parse_error::{ParseError, ParseResult}};
 
 pub struct ExceptionTableEntryInfo {
@@ -34,10 +32,10 @@ impl CodeAttrInfo {
         let max_locals = rd.read_u16()?;
 
         let code_len = rd.read_u32()?;
-        let code = rd.read(code_len as _)?.to_vec();
+        let code = rd.read(code_len as usize)?.to_vec();
 
         let et_len = rd.read_u16()?;
-        let mut exception_table = Vec::with_capacity(et_len as _);
+        let mut exception_table = Vec::with_capacity(et_len as usize);
         for _ in 0..et_len {
             exception_table.push(ExceptionTableEntryInfo::read(rd)?);
         }
@@ -52,97 +50,41 @@ impl CodeAttrInfo {
     }
 }
 
-fn read_u16_vec(rd: &mut ClassReader, count: usize) -> ParseResult<Vec<u16>> {
-    let mut res = Vec::new();
-
-    for _ in 0..count {
-        res.push(rd.read_u16()?);
-    }
-
-    Ok(res)
-}
-
-pub struct BootstrapMethodInfo {
-    __: PhantomData<()>,
-    
-    pub bs_method_ref: u16,
-    pub bs_arguments: Vec<u16>
-}
-
-impl BootstrapMethodInfo {
-    fn read(rd: &mut ClassReader) -> ParseResult<Self> {
-        let bs_method_ref = rd.read_u16()?;
-        let count = rd.read_u16()?;
-        let bs_arguments = read_u16_vec(rd, count as usize)?;
-
-        Ok(Self {
-            __: PhantomData,
-            
-            bs_method_ref,
-            bs_arguments
-        })
-    }
-}
-
 pub enum AttrInfo {
     ConstantValue { cp_idx: u16 },
     
     Code(CodeAttrInfo),
-
-    PermittedSubclasses { cp_idxes: Vec<u16> },
-
-    BootstrapMethods(Vec<BootstrapMethodInfo>),
-
-    NestHost { cp_idx: u16 },
-
-    NestMembers { cp_idxes: Vec<u16> },
 }
 
 impl AttrInfo {
     pub fn read(rd: &mut ClassReader, cp: &[ConstantPoolInfo]) -> ParseResult<Option<Self>> {
-        let name_idx = rd.read_u16()?;
-        let len = rd.read_u32()?;
-        let payload = rd.read(len as _)?;
+        let name_idx = rd.read_u16()? as usize;
+        let len = rd.read_u32()? as usize;
+        let payload = rd.read(len)?;
+        
+        if name_idx == 0 || name_idx >= cp.len() {
+            return Err(ParseError::InvalidCPIndex)
+        }
 
         let mut pl_rd = ClassReader::new(payload);
 
-        let utf8_info = &cp[name_idx as usize];
+        let utf8_info = &cp[name_idx];
         let name = match utf8_info {
             ConstantPoolInfo::Utf8Info { utf8 } => utf8,
             _ => return Err(ParseError::InvalidCPType)
         };
 
         match name.as_str() {
-            "ConstantValue" => Ok(Some(Self::ConstantValue { cp_idx: pl_rd.read_u16()? })),
-            
-            "Code" => Ok(Some(Self::Code(CodeAttrInfo::read(&mut pl_rd, cp)?))),
-            
-            "PermittedSubclasses" => {
-                let count = pl_rd.read_u16()?;
-                let res = read_u16_vec(&mut pl_rd, count as usize)?;
-
-                Ok(Some(Self::PermittedSubclasses { cp_idxes: res }))
-            }
-
-            "BootstrapMethods" => {
-                let count = pl_rd.read_u16()?;
-                let mut methods = Vec::new();
-
-                for _ in 0..count {
-                    methods.push(BootstrapMethodInfo::read(&mut pl_rd)?);
+            "ConstantValue" => {
+                let cp_idx = pl_rd.read_u16()?;
+                if cp_idx as usize >= len || !pl_rd.is_empty() {
+                    return Err(ParseError::InvalidAttrLen(len))
                 }
 
-                Ok(Some(Self::BootstrapMethods(methods)))
+                Ok(Some(Self::ConstantValue { cp_idx }))
             }
-
-            "NestHost" => Ok(Some(Self::NestHost { cp_idx: pl_rd.read_u16()? })),
-
-            "NestMembers" => {
-                let count = pl_rd.read_u16()?;
-                let res = read_u16_vec(&mut pl_rd, count as usize)?;
-
-                Ok(Some(Self::PermittedSubclasses { cp_idxes: res }))
-            }
+            
+            "Code" => Ok(Some(Self::Code(CodeAttrInfo::read(&mut pl_rd, cp)?))),
 
             _ => Ok(None)
         }

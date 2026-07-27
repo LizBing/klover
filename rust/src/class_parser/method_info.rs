@@ -3,11 +3,6 @@ use crate::class_parser::attr_info::AttrInfo;
 
 use super::{class_reader::ClassReader, parse_error::ParseResult};
 
-/// Parsed method metadata — names resolved to `SymbolHandle`, attributes parsed.
-///
-/// This is the parsed, ready-to-use representation within a [`ClassFile`].
-/// The runtime counterpart (vtable index, entry point, etc.) will be a
-/// separate `Method` type allocated in metaspace alongside `Klass`.
 pub struct MethodInfo {
     pub acc_flags: u16,
     pub name_idx: u16,

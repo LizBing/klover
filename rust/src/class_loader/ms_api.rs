@@ -353,33 +353,31 @@ impl<T> MSRef<T> {
     /// # Safety
     /// `cp` 必须是之前由 `encode` 或 `ms_comp_ptr_encode` 生成的合法值，
     /// 指向 metaspace 内类型为 `T` 的对象。
-    pub unsafe fn decode(cp: CompPtr) -> Self {
+    pub unsafe fn decode(cp: CompPtr) -> Option<Self> {
+        if cp == 0 { return None }
+        
         let ptr = ms_comp_ptr_decode::<T>(cp);
         // SAFETY: 由调用方保证 cp 合法。
-        Self {
+        Some(Self {
             raw: unsafe { NonNull::new_unchecked(ptr) },
-        }
+        })
     }
 
     /// 判断两个 MSRef 是否指向同一个对象（指针相等）。
     pub fn equals<U>(&self, other: &MSRef<U>) -> bool {
         self.raw.as_ptr() as *const () == other.raw.as_ptr() as *const ()
     }
+
+    pub unsafe fn from_raw(ptr: NonNull<T>) -> Self {
+        Self {
+            raw: ptr
+        }
+    }
 }
 
 impl<T> From<&MSBox<T>> for MSRef<T> {
     fn from(value: &MSBox<T>) -> Self {
         Self { raw: value.raw }
-    }
-}
-
-impl<T> From<&T> for MSRef<T> {
-    fn from(value: &T) -> Self {
-        unsafe {
-            Self {
-                raw: NonNull::new_unchecked(value as *const T as *mut T),
-            }
-        }
     }
 }
 
