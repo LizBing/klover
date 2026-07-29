@@ -58,9 +58,9 @@ impl ExceptionTableEntry {
 
 #[derive(Debug)]
 pub struct Code {
-    pub max_stack: u16,
-    pub max_locals: u16,
-    pub code: MSBox<[u8]>,
+    pub max_stack: usize,
+    pub max_locals: usize,
+    pub bytecodes: MSBox<[u8]>,
     pub exception_table: MSBox<[ExceptionTableEntry]>,
 }
 
@@ -91,9 +91,9 @@ impl Code {
         };
 
         Ok(Self {
-            max_stack: info.max_stack,
-            max_locals: info.max_locals,
-            code,
+            max_stack: info.max_stack as usize,
+            max_locals: info.max_locals as usize,
+            bytecodes: code,
             exception_table: et,
         })
     }
