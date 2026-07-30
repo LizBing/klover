@@ -1,8 +1,8 @@
 use crate::{
     engine::{
         engine_error::{ExecError, ExecResult},
-        interpreter::{
-            instructions::{constants::*, control::*, loads::*, math::*},
+        interpreter::instructions::{
+            branches::*, constants::*, control::*, loads::*, math::*, stores::*,
         },
         outcome::StepOutcome,
     },
@@ -69,6 +69,13 @@ impl Interpreter {
             0x28 => dload_n::<2>(frame),
             0x29 => dload_n::<3>(frame),
 
+            // Integer stores.
+            0x36 => istore(frame),
+            0x3b => istore_n::<0>(frame),
+            0x3c => istore_n::<1>(frame),
+            0x3d => istore_n::<2>(frame),
+            0x3e => istore_n::<3>(frame),
+
             // Arithmetic, shifts, bitwise operations, and local increment.
             0x60 => iadd(frame),
             0x61 => ladd(frame),
@@ -108,12 +115,28 @@ impl Interpreter {
             0x83 => lxor(frame),
             0x84 => iinc(frame),
 
+            // Integer comparisons and control flow.
+            0x99 => ifeq(frame),
+            0x9a => ifne(frame),
+            0x9b => iflt(frame),
+            0x9c => ifge(frame),
+            0x9d => ifgt(frame),
+            0x9e => ifle(frame),
+            0x9f => if_icmpeq(frame),
+            0xa0 => if_icmpne(frame),
+            0xa1 => if_icmplt(frame),
+            0xa2 => if_icmpge(frame),
+            0xa3 => if_icmpgt(frame),
+            0xa4 => if_icmple(frame),
+            0xa7 => goto(frame),
+
             // Typed returns used by arithmetic methods.
             0xac => ireturn(frame),
             0xad => lreturn(frame),
             0xae => freturn(frame),
             0xaf => dreturn(frame),
             0xb0 => areturn(frame),
+            0xb1 => return_void(frame),
 
             unsupported => Err(ExecError::UnsupportedOpcode {
                 opcode: unsupported,

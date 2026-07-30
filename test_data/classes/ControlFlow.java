@@ -49,4 +49,26 @@ public class ControlFlow {
             i++;
         }
     }
+
+    public static boolean isZero(int value) { return value == 0; }
+    public static boolean isNonZero(int value) { return value != 0; }
+    public static boolean isNegative(int value) { return value < 0; }
+    public static boolean isNonNegative(int value) { return value >= 0; }
+    public static boolean isPositive(int value) { return value > 0; }
+    public static boolean isNonPositive(int value) { return value <= 0; }
+
+    public static boolean intsEqual(int a, int b) { return a == b; }
+    public static boolean intsNotEqual(int a, int b) { return a != b; }
+    public static boolean intLessThan(int a, int b) { return a < b; }
+    public static boolean intGreaterOrEqual(int a, int b) { return a >= b; }
+    public static boolean intGreaterThan(int a, int b) { return a > b; }
+    public static boolean intLessOrEqual(int a, int b) { return a <= b; }
+
+    public static int indexedStore(int a, int b, int c, int d, int e) {
+        int result = a + e;
+        return result;
+    }
+
+    public static void doNothing() {
+    }
 }

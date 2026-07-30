@@ -23,3 +23,7 @@ pub fn dreturn(f: &mut InterpreterFrame) -> ExecResult<StepOutcome> {
 pub fn areturn(f: &mut InterpreterFrame) -> ExecResult<StepOutcome> {
     Ok(StepOutcome::Return(RetValue::Ref(f.pop()?.as_ref()?)))
 }
+
+pub fn return_void(_: &mut InterpreterFrame) -> ExecResult<StepOutcome> {
+    Ok(StepOutcome::Return(RetValue::Void))
+}
