@@ -1,4 +1,13 @@
-use crate::{engine::{engine_error::{ExecError, ExecResult}, outcome::RetValue, resolved_method::ResolvedMethod, slot::Slot}, oops::{attr::Code, cp_entry::CPEntry}};
+use crate::{
+    engine::{
+        engine_error::{ExecError, ExecResult},
+        interpreter::operand_stack::{OperandStack, StackValue},
+        outcome::RetValue,
+        resolved_method::ResolvedMethod,
+        slot::Slot,
+    },
+    oops::{attr::Code, cp_entry::CPEntry},
+};
 
 
 #[derive(Debug)]
@@ -9,9 +18,8 @@ pub struct InterpreterFrame {
     last_pc: usize,
     
     locals: Box<[Slot]>,
-    opstack: Vec<Slot>,
+    opstack: OperandStack,
 
-    max_stack: usize,
     reserved_slots: usize,
 }
 
@@ -46,8 +54,7 @@ impl InterpreterFrame {
             pc: 0,
             last_pc: 0,
             locals,
-            opstack: Vec::with_capacity(max_stack),
-            max_stack,
+            opstack: OperandStack::new(max_stack),
             reserved_slots: max_locals + max_stack
         })
     }
@@ -69,18 +76,11 @@ impl InterpreterFrame {
 
 impl InterpreterFrame {
     pub fn push(&mut self, slot: Slot) -> ExecResult<()> {
-        if self.opstack.len() >= self.max_stack {
-            return Err(ExecError::OperandStackOverflow);
-        }
-    
-        self.opstack.push(slot);
-        Ok(())
+        self.opstack.push_slot(slot)
     }
     
     pub fn pop(&mut self) -> ExecResult<Slot> {
-        self.opstack
-            .pop()
-            .ok_or(ExecError::OperandStackUnderflow)
+        self.opstack.pop_slot()
     }
     
     pub fn get_local(&self, index: usize) -> ExecResult<Slot> {
@@ -99,61 +99,40 @@ impl InterpreterFrame {
         Ok(())
     }
 
-    fn ensure_stack_capacity(
-        &self,
-        additional: usize,
-    ) -> ExecResult<()> {
-        let new_len = self
-            .opstack
-            .len()
-            .checked_add(additional)
-            .ok_or(ExecError::OperandStackOverflow)?;
-    
-        if new_len > self.max_stack {
-            return Err(ExecError::OperandStackOverflow);
-        }
-    
-        Ok(())
-    }
-
     pub fn push_long(&mut self, value: i64) -> ExecResult<()> {
-        self.ensure_stack_capacity(2)?;
-        self.opstack.push(Slot::long_high(value));
-        self.opstack.push(Slot::long_low(value));
-        Ok(())
+        self.opstack.push_value(StackValue::Category2(
+            Slot::long_high(value),
+            Slot::long_low(value),
+        ))
     }
 
     pub fn pop_long(&mut self) -> ExecResult<i64> {
-        if self.opstack.len() < 2 {
-            return Err(ExecError::OperandStackUnderflow);
-        }
-
-        let high_index = self.opstack.len() - 2;
-        let high = self.opstack[high_index];
-        let low = self.opstack[high_index + 1];
+        let StackValue::Category2(high, low) = self.opstack.top_values(1)?[0] else {
+            return Err(ExecError::InvalidOperandStackShape);
+        };
         let value = Slot::as_long(high, low)?;
-        self.opstack.truncate(high_index);
+        self.opstack.replace_top_values(1, &[])?;
         Ok(value)
     }
 
     pub fn push_double(&mut self, value: f64) -> ExecResult<()> {
-        self.ensure_stack_capacity(2)?;
-        self.opstack.push(Slot::double_high(value));
-        self.opstack.push(Slot::double_low(value));
-        Ok(())
+        self.opstack.push_value(StackValue::Category2(
+            Slot::double_high(value),
+            Slot::double_low(value),
+        ))
     }
 
     pub fn pop_double(&mut self) -> ExecResult<f64> {
-        if self.opstack.len() < 2 {
-            return Err(ExecError::OperandStackUnderflow);
-        }
-
-        let high_index = self.opstack.len() - 2;
-        let high = self.opstack[high_index];
-        let low = self.opstack[high_index + 1];
+        let StackValue::Category2(high, low) = self.opstack.top_values(1)?[0] else {
+            return Err(ExecError::InvalidOperandStackShape);
+        };
         let value = Slot::as_double(high, low)?;
-        self.opstack.truncate(high_index);
+        self.opstack.replace_top_values(1, &[])?;
         Ok(value)
+    }
+
+    pub(crate) fn operand_stack_mut(&mut self) -> &mut OperandStack {
+        &mut self.opstack
     }
     
     pub fn push_return_value(
@@ -265,11 +244,6 @@ impl InterpreterFrame {
 
 impl InterpreterFrame {
     pub fn take_top_slots(&mut self, arg_slots: usize) -> ExecResult<Vec<Slot>> {
-        if arg_slots > self.opstack.len() {
-            return Err(ExecError::OperandStackUnderflow);
-        }
-        
-        let start = self.opstack.len() - arg_slots;
-        Ok(self.opstack.split_off(start))
+        self.opstack.take_top_slots(arg_slots)
     }
 }

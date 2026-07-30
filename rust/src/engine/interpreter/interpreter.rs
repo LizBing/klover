@@ -2,7 +2,7 @@ use crate::{
     engine::{
         engine_error::{ExecError, ExecResult},
         interpreter::instructions::{
-            branches::*, constants::*, control::*, loads::*, math::*, stores::*,
+            branches::*, constants::*, control::*, loads::*, math::*, stack::*, stores::*,
         },
         outcome::StepOutcome,
     },
@@ -50,6 +50,7 @@ impl Interpreter {
             0x16 => lload(frame),
             0x17 => fload(frame),
             0x18 => dload(frame),
+            0x19 => aload(frame),
 
             // Fixed-index loads.
             0x1a => iload_n::<0>(frame),
@@ -68,6 +69,10 @@ impl Interpreter {
             0x27 => dload_n::<1>(frame),
             0x28 => dload_n::<2>(frame),
             0x29 => dload_n::<3>(frame),
+            0x2a => aload_n::<0>(frame),
+            0x2b => aload_n::<1>(frame),
+            0x2c => aload_n::<2>(frame),
+            0x2d => aload_n::<3>(frame),
 
             // Indexed stores.
             0x36 => istore(frame),
@@ -97,6 +102,17 @@ impl Interpreter {
             0x4c => astore_n::<1>(frame),
             0x4d => astore_n::<2>(frame),
             0x4e => astore_n::<3>(frame),
+
+            // Operand stack manipulation.
+            0x57 => pop(frame),
+            0x58 => pop2(frame),
+            0x59 => dup(frame),
+            0x5a => dup_x1(frame),
+            0x5b => dup_x2(frame),
+            0x5c => dup2(frame),
+            0x5d => dup2_x1(frame),
+            0x5e => dup2_x2(frame),
+            0x5f => swap(frame),
 
             // Arithmetic, shifts, bitwise operations, and local increment.
             0x60 => iadd(frame),
@@ -152,7 +168,7 @@ impl Interpreter {
             0xa4 => if_icmple(frame),
             0xa7 => goto(frame),
 
-            // Typed returns used by arithmetic methods.
+            // Method returns.
             0xac => ireturn(frame),
             0xad => lreturn(frame),
             0xae => freturn(frame),

@@ -89,3 +89,10 @@ pub fn expect_double(exit: ThreadExit) -> f64 {
         other => panic!("expected double return, got {other:?}"),
     }
 }
+
+pub fn expect_ref(exit: ThreadExit) -> u32 {
+    match exit {
+        ThreadExit::Returned(RetValue::Ref(value)) => value,
+        other => panic!("expected reference return, got {other:?}"),
+    }
+}

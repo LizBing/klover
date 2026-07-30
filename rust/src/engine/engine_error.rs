@@ -39,6 +39,10 @@ pub enum ExecError {
 
     OperandStackOverflow,
     OperandStackUnderflow,
+    InvalidOperandStackShape,
+    InvalidStackOperation {
+        opcode: u8,
+    },
 
     SlotTypeMismatch {
         expected: SlotKind,

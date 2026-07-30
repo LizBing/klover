@@ -33,6 +33,13 @@ fn dload_at(f: &mut InterpreterFrame, index: usize) -> ExecResult<StepOutcome> {
     Ok(StepOutcome::Continue)
 }
 
+fn aload_at(f: &mut InterpreterFrame, index: usize) -> ExecResult<StepOutcome> {
+    let value = f.get_local(index)?;
+    value.as_ref()?;
+    f.push(value)?;
+    Ok(StepOutcome::Continue)
+}
+
 pub fn iload(f: &mut InterpreterFrame) -> ExecResult<StepOutcome> {
     let index = f.read_u8()? as usize;
     iload_at(f, index)
@@ -53,6 +60,11 @@ pub fn dload(f: &mut InterpreterFrame) -> ExecResult<StepOutcome> {
     dload_at(f, index)
 }
 
+pub fn aload(f: &mut InterpreterFrame) -> ExecResult<StepOutcome> {
+    let index = f.read_u8()? as usize;
+    aload_at(f, index)
+}
+
 pub fn iload_n<const N: usize>(f: &mut InterpreterFrame) -> ExecResult<StepOutcome> {
     iload_at(f, N)
 }
@@ -67,4 +79,8 @@ pub fn fload_n<const N: usize>(f: &mut InterpreterFrame) -> ExecResult<StepOutco
 
 pub fn dload_n<const N: usize>(f: &mut InterpreterFrame) -> ExecResult<StepOutcome> {
     dload_at(f, N)
+}
+
+pub fn aload_n<const N: usize>(f: &mut InterpreterFrame) -> ExecResult<StepOutcome> {
+    aload_at(f, N)
 }

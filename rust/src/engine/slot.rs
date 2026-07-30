@@ -25,6 +25,10 @@ impl Slot {
         kind: SlotKind::Empty,
     };
 
+    pub(crate) fn kind(self) -> SlotKind {
+        self.kind
+    }
+
     pub fn int(value: i32) -> Self {
         Self {
             bits: value as u32,
