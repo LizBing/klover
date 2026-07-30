@@ -13,4 +13,5 @@ pub enum StackError {
     Empty,
 }
 
+
 pub type StackResult<T> = Result<T, StackError>;

@@ -1,7 +1,7 @@
 use std::{cell::OnceCell, sync::OnceLock};
 
 use crate::{
-    class_loader::{cld::ClassLoaderData, ms_api::MSRef}, class_parser::cp_info::ConstantPoolInfo, gc_bindings::oop_handle::{KLASS_OOP_STORAGE_ID, OOPHandle}, oops::{
+    class_loader::{bootstrap_cld::BootstrapCLD, cld::ClassLoaderData, ms_api::MSRef}, class_parser::cp_info::ConstantPoolInfo, gc_bindings::oop_handle::{KLASS_OOP_STORAGE_ID, OOPHandle}, oops::{
         desc::MethodDesc, field::Field, klass::Klass, method::Method, normal_klass::NormalKlass, resolve_error::{ResolveError, ResolveResult}, symbol_table::{SymbolHandle, SymbolTable}
     }
 };
@@ -136,11 +136,39 @@ pub struct ClassCPEntry {
 
 impl ClassCPEntry {
     pub fn set(&self, klass: MSRef<Klass>) {
-        self.resolved.set(klass).unwrap()
+        if let Err(candidate) = self.resolved.set(klass) {
+            let existing = self
+                .resolved
+                .get()
+                .expect("ClassCPEntry initialized concurrently but value is missing");
+
+            assert!(
+                existing.equals(&candidate),
+                "ClassCPEntry resolved to different Klass instances"
+            );
+        }
     }
     
     pub fn get(&self, cld: Option<&ClassLoaderData>) -> ResolveResult<MSRef<Klass>> {
-        unimplemented!()
+        if let Some(x) = self.resolved.get() {
+            return Ok(x.clone());
+        }
+
+        let loaded = match cld {
+            Some(x) => x.load_class(self.name.utf8()),
+            None => BootstrapCLD::find_class(self.name.utf8())
+        }
+        .map_err(|_| ResolveError::ClassNotFound)?;
+
+        if self.resolved.set(loaded.clone()).is_ok() {
+            return Ok(loaded);
+        }
+
+        Ok(self
+            .resolved
+            .get()
+            .expect("resolved class missing after race")
+            .clone())
     }
 }
 

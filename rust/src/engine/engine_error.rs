@@ -1,5 +1,11 @@
 use crate::{engine::slot::{Slot, SlotKind}, runtime::runtime_error::StackError};
 
+impl From<StackError> for ExecError {
+    fn from(value: StackError) -> Self {
+        Self::Stack(value)
+    }
+}
+
 #[derive(Debug)]
 pub enum ExecError {
     Stack(StackError),

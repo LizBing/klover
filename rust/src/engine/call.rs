@@ -1,4 +1,4 @@
-use crate::engine::{interpreter::interpreter_frame::ResolvedMethod, slot::Slot};
+use crate::engine::{resolved_method::ResolvedMethod, slot::Slot};
 
 #[derive(Debug)]
 pub struct Invocation {

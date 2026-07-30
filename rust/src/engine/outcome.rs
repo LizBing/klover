@@ -1,4 +1,4 @@
-use crate::{engine::{interpreter::interpreter_frame::ResolvedMethod, engine_error::JavaExceptionKind}, gc_bindings::oop_handle::NObjPtr};
+use crate::{engine::{engine_error::JavaExceptionKind, resolved_method::ResolvedMethod}, gc_bindings::oop_handle::NObjPtr};
 
 #[derive(Debug)]
 pub enum RetValue {

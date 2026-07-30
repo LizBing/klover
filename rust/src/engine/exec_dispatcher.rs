@@ -1,4 +1,4 @@
-use crate::{engine::{call::Invocation, engine_error::{ExecError, ExecResult}, interpreter::{interpreter::Interpreter, interpreter_frame::{InterpreterFrame, ResolvedMethod}}, outcome::{RunOutcome, StepOutcome, ThreadExit}}, runtime::java_thread::JavaThread};
+use crate::{engine::{call::Invocation, engine_error::{ExecError, ExecResult}, interpreter::{interpreter::Interpreter, interpreter_frame::InterpreterFrame}, outcome::{RunOutcome, StepOutcome, ThreadExit}, resolved_method::ResolvedMethod}, runtime::java_thread::JavaThread};
 
 #[derive(Debug)]
 pub struct ExecDispatcher {

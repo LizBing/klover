@@ -1,20 +1,23 @@
-use std::sync::{LazyLock, OnceLock};
+use std::sync::{Arc, LazyLock, OnceLock};
 
 use dashmap::{DashMap, Entry};
 
 use crate::{
     class_loader::{
-        class_path::ClassPath,
-        load_error::{LoadError, LoadResult},
-        ms_api::{MSAllocator, MSBox, MSRef},
+        class_path::ClassPath, class_slot::{ClassLoadState, ClassSlot}, load_error::{LoadError, LoadResult}, ms_api::{MSAllocator, MSBox, MSRef},
     }, class_parser::class_file::ClassFile, gc_bindings::oop_handle::{KLASS_OOP_STORAGE_ID, OOPHandle}, oops::{
-        array_klass::ArrayKlass, desc::FieldDesc, klass::Klass, normal_klass::{NormalKlass, UnlinkedNormalKlass}, prim_klass::PrimKlass, symbol_table::{SymbolHandle, SymbolTable},
-    }
+        array_klass::ArrayKlass,
+        desc::FieldDesc,
+        klass::Klass,
+        normal_klass::{NormalKlass, UnlinkedNormalKlass},
+        prim_klass::PrimKlass,
+        symbol_table::{SymbolHandle, SymbolTable},
+    },
 };
 
 pub struct BootstrapCLD {
     msa: MSAllocator,
-    klasses: LazyLock<DashMap<SymbolHandle, MSBox<Klass>>>,
+    klasses: LazyLock<DashMap<SymbolHandle, Arc<ClassSlot>>>,
 
     boolean_klass: OnceLock<MSBox<Klass>>,
     byte_klass: OnceLock<MSBox<Klass>>,
@@ -50,15 +53,74 @@ impl BootstrapCLD {
 
 impl BootstrapCLD {
     pub fn find_class(name: &str) -> LoadResult<MSRef<Klass>> {
-        if name.starts_with('[') {
-            return Self::find_array_klass(name);
-        }
-
         if let Some(x) = Self::find_prim_klass(name) {
             return Ok(x);
         }
 
-        Self::find_normal_klass(name)
+        let sym = SymbolTable::intern(name);
+        let (slot, is_leader) = match BSCLD.klasses.entry(sym.clone()) {
+            Entry::Occupied(x) => {
+                let slot = x.get().clone();
+                (slot, false)
+            }
+
+            Entry::Vacant(x) => {
+                let slot = Arc::new(ClassSlot::default());
+                x.insert(slot.clone());
+
+                (slot, true)
+            }
+        };
+
+        let load_res = if is_leader {
+            if name.starts_with('[') {
+                Self::find_array_klass(sym)
+            } else {
+                Self::find_normal_klass(sym)
+            }
+        } else {
+            let mut guard = slot.state.lock();
+            loop {
+                match &*guard {
+                    ClassLoadState::Loading { owner } => {
+                        if owner.eq(&std::thread::current().id()) {
+                            return Err(LoadError::Circularity)
+                        }
+                        slot.completed.wait(&mut guard);
+                    }
+
+                    ClassLoadState::Loaded(klass) => {
+                        return Ok(klass.into());
+                    }
+
+                    ClassLoadState::Failed(e) => return Err(e.clone())
+                }
+            }
+        };
+
+        match load_res {
+            Ok(x) => {
+                let res = (&x).into();
+
+                {
+                    let mut state = slot.state.lock();
+                    *state = ClassLoadState::Loaded(x);
+                }
+                slot.completed.notify_all();
+
+                return Ok(res);
+            }
+
+            Err(e) => {
+                {
+                    let mut state = slot.state.lock();
+                    *state = ClassLoadState::Failed(e.clone());
+                }
+                slot.completed.notify_all();
+
+                return Err(e)
+            }
+        }
     }
 
     fn find_prim_klass(name: &str) -> Option<MSRef<Klass>> {
@@ -118,65 +180,30 @@ impl BootstrapCLD {
         Some(boxed.into())
     }
 
-    fn find_array_klass(name: &str) -> LoadResult<MSRef<Klass>> {
-        let sym = SymbolTable::intern(name);
-        let entry = BSCLD.klasses.entry(sym);
+    fn find_array_klass(sym: SymbolHandle) -> LoadResult<MSBox<Klass>> {
+        let desc = FieldDesc::from(sym.utf8())?;
 
-        let vacant = match entry {
-            Entry::Occupied(x) => {
-                return Ok(x.get().into())
-            }
-            Entry::Vacant(v) => v,
-        };
-
-        let desc = match FieldDesc::from(name) {
-            Ok(x) => x,
-            Err(e) => return Err(LoadError::Resolve(e)),
-        };
-
-        let klass = ArrayKlass {
-            name: name.into(),
+        let klass = Klass::Array(ArrayKlass {
+            name: sym,
             desc,
             mirror: OOPHandle::new(KLASS_OOP_STORAGE_ID),
-        };
+        });
 
-        let boxed = MSBox::new(&BSCLD.msa, Klass::Array(klass));
-        let res = (&boxed).into();
-        vacant.insert(boxed);
+        let boxed = MSBox::new(Self::bs_msa(), klass);
 
-        Ok(res)
+        Ok(boxed)
     }
 
-    fn find_normal_klass(name: &str) -> LoadResult<MSRef<Klass>> {
-        let sym = SymbolTable::intern(name);
-        let entry = BSCLD.klasses.entry(sym);
-
-        let vacant = match entry {
-            Entry::Occupied(x) => {
-                return Ok(x.get().into());
-            }
-            Entry::Vacant(v) => v,
-        };
-
-        let bytes = match ClassPath::read_bs_class(name) {
+    fn find_normal_klass(sym: SymbolHandle) -> LoadResult<MSBox<Klass>> {
+        let bytes = match ClassPath::read_bs_class(sym.utf8()) {
             Some(x) => x,
-            None => return Err(LoadError::NotFound(name.into())),
+            None => return Err(LoadError::NotFound(sym.utf8().into())),
         };
 
-        let cf = match ClassFile::from(&bytes) {
-            Ok(x) => x,
-            Err(e) => return Err(LoadError::Parse(e)),
-        };
+        let cf = ClassFile::from(&bytes)?;
+        let unlinked = UnlinkedNormalKlass::build(cf, None)?;
+        let boxed = NormalKlass::link(unlinked, None)?;
 
-        let unlinked = UnlinkedNormalKlass::build(cf, None)
-            .map_err(|e| LoadError::Resolve(e))?;
-        
-        let normal = NormalKlass::link(unlinked, None)
-            .map_err(|e| LoadError::Resolve(e))?;
-
-        let res = (&normal).into();
-        vacant.insert(normal);
-
-        Ok(res)
+        Ok(boxed)
     }
 }

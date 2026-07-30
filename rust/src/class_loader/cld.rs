@@ -1,16 +1,23 @@
-use std::{ops::Deref, ptr::NonNull};
+use std::{ptr::NonNull, sync::Arc};
 
 use dashmap::{DashMap, mapref::entry::Entry};
 
 use crate::{
     class_loader::{
         bootstrap_cld::BootstrapCLD,
+        class_slot::{ClassLoadState, ClassSlot},
         cld_map,
         load_error::{LoadError, LoadResult},
-        ms_api::{MSAllocator, MSBox, MSRef},
-    }, class_parser::{class_file::ClassFile, cp_info::ConstantPoolInfo}, gc_bindings::oop_handle::{CLD_MIRROR_STORAGE_ID, OOPHandle}, oops::{
-        klass::Klass, normal_klass::{NormalKlass, UnlinkedNormalKlass}, resolve_error::ResolveError, symbol_table::{SymbolHandle, SymbolTable},
-    }
+        ms_api::{MSAllocator, MSRef},
+    },
+    class_parser::{class_file::ClassFile, cp_info::ConstantPoolInfo},
+    gc_bindings::oop_handle::{CLD_MIRROR_STORAGE_ID, OOPHandle},
+    oops::{
+        klass::Klass,
+        normal_klass::{NormalKlass, UnlinkedNormalKlass},
+        resolve_error::ResolveError,
+        symbol_table::{SymbolHandle, SymbolTable},
+    },
 };
 
 // ── ClassLoaderData ─────────────────────────────────────────────────────
@@ -22,7 +29,7 @@ pub struct ClassLoaderData {
     pub debug_name: Option<String>,
 
     pub ms_allocator: MSAllocator,
-    klasses: DashMap<SymbolHandle, MSBox<Klass>>,
+    klasses: DashMap<SymbolHandle, Arc<ClassSlot>>,
 }
 
 unsafe impl Send for ClassLoaderData {}
@@ -72,8 +79,7 @@ impl ClassLoaderData {
         // field desc
         let name = SymbolTable::intern(name_utf8.as_str());
 
-        let entry = self.klasses.entry(name);
-        let vacant = match entry {
+        let slot = match self.klasses.entry(name) {
             Entry::Occupied(_) => {
                 return Err(LoadError::Duplicated {
                     cld_name: self.debug_name.clone(),
@@ -81,29 +87,51 @@ impl ClassLoaderData {
                 });
             }
 
-            Entry::Vacant(v) => v,
+            Entry::Vacant(entry) => {
+                let slot = Arc::new(ClassSlot::default());
+                entry.insert(slot.clone());
+                slot
+            }
         };
 
-        let unlinked = match UnlinkedNormalKlass::build(cf, Some(&self)) {
-            Ok(x) => x,
-            Err(e) => return Err(LoadError::Resolve(e)),
-        };
+        let load_result = UnlinkedNormalKlass::build(cf, Some(self))
+            .map_err(LoadError::from)
+            .and_then(|unlinked| NormalKlass::link(unlinked, Some(self)).map_err(LoadError::from));
 
-        let normal = NormalKlass::link(unlinked, Some(self))
-            .map_err(|e| LoadError::Resolve(e))?;
+        match load_result {
+            Ok(klass) => {
+                let result = (&klass).into();
 
-        let res = (&normal).into();
-        vacant.insert(normal);
+                {
+                    let mut state = slot.state.lock();
+                    *state = ClassLoadState::Loaded(klass);
+                }
+                slot.completed.notify_all();
 
-        Ok(res)
+                Ok(result)
+            }
+
+            Err(error) => {
+                {
+                    let mut state = slot.state.lock();
+                    *state = ClassLoadState::Failed(error.clone());
+                }
+                slot.completed.notify_all();
+
+                Err(error)
+            }
+        }
     }
 
     pub fn find_loaded_class(&self, name: &str) -> Option<MSRef<Klass>> {
         let sym = SymbolTable::intern(name);
 
-        match self.klasses.get(&sym) {
-            Some(x) => Some(x.deref().into()),
-            None => None,
+        let slot = self.klasses.get(&sym).map(|entry| entry.value().clone())?;
+        let state = slot.state.lock();
+
+        match &*state {
+            ClassLoadState::Loaded(klass) => Some(klass.into()),
+            ClassLoadState::Loading { .. } | ClassLoadState::Failed(_) => None,
         }
     }
 }
@@ -115,6 +143,28 @@ impl ClassLoaderData {
     /// 当前实现只是把所有请求委派给 `BootstrapCLD`（尚未支持用户自定义 ClassLoader
     /// 的 `loadClass` 覆盖）。未来接入 native `ClassLoader.loadClass` 时重写。
     pub fn load_class(&self, name: &str) -> LoadResult<MSRef<Klass>> {
+        let sym = SymbolTable::intern(name);
+        let local_slot = self.klasses.get(&sym).map(|entry| entry.value().clone());
+
+        if let Some(slot) = local_slot {
+            let current_thread = std::thread::current().id();
+            let mut state = slot.state.lock();
+
+            loop {
+                match &*state {
+                    ClassLoadState::Loading { owner } => {
+                        if *owner == current_thread {
+                            return Err(LoadError::Circularity);
+                        }
+                        slot.completed.wait(&mut state);
+                    }
+
+                    ClassLoadState::Loaded(klass) => return Ok(klass.into()),
+                    ClassLoadState::Failed(error) => return Err(error.clone()),
+                }
+            }
+        }
+
         // TODO: 真正的双亲委派（调用 self.mirror 对应的 java/lang/ClassLoader.loadClass）。
         BootstrapCLD::find_class(name)
     }

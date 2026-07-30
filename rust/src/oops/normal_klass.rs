@@ -213,7 +213,7 @@ impl NormalKlass {
 }
 
 impl NormalKlass {
-    pub fn get_obj_layout(&self) -> &ObjLayout {
-        unimplemented!()
+    pub fn obj_layout(&self) -> &ObjLayout {
+        &self.obj_layout
     }
 }

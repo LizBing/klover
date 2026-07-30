@@ -1,10 +1,5 @@
-use crate::{class_loader::ms_api::MSRef, engine::{engine_error::{ExecError, ExecResult}, outcome::RetValue, slot::Slot}, oops::{attr::Code, method::Method, normal_klass::NormalKlass}};
+use crate::{engine::{engine_error::{ExecError, ExecResult}, outcome::RetValue, resolved_method::ResolvedMethod, slot::Slot}, oops::{attr::Code, method::Method, normal_klass::NormalKlass}};
 
-#[derive(Debug)]
-pub struct ResolvedMethod {
-    holder: MSRef<NormalKlass>,
-    method: MSRef<Method>
-}
 
 #[derive(Debug)]
 pub struct InterpreterFrame {
@@ -25,21 +20,24 @@ impl InterpreterFrame {
         target: ResolvedMethod,
         args: &[Slot],
     ) -> ExecResult<Self> {
-        let method = target.method.clone();
+        let method = target.method();
         let code = method
             .code
             .as_ref()
             .ok_or(ExecError::MethodHasNoCode)?;
 
-        if args.len() > code.max_locals {
+        let max_stack = code.max_stack;
+        let max_locals = code.max_locals;
+
+        if args.len() > max_locals {
             return Err(ExecError::TooManyArguments {
                 args: args.len(),
-                max_locals: code.max_locals,
+                max_locals,
             });
         }
 
         let mut locals =
-            vec![Slot::EMPTY; code.max_locals].into_boxed_slice();
+            vec![Slot::EMPTY; max_locals].into_boxed_slice();
 
         locals[..args.len()].copy_from_slice(args);
 
@@ -48,16 +46,16 @@ impl InterpreterFrame {
             pc: 0,
             last_pc: 0,
             locals,
-            opstack: Vec::with_capacity(code.max_stack),
-            max_stack: code.max_stack as usize,
-            reserved_slots: code.max_locals + code.max_stack
+            opstack: Vec::with_capacity(max_stack),
+            max_stack,
+            reserved_slots: max_locals + max_stack
         })
     }
 }
 
 impl InterpreterFrame {
     pub fn code(&self) -> &Code {
-        self.target.method.code.as_ref().unwrap()
+        self.target.method().code.as_ref().unwrap()
     }
 
     pub fn reserved_slots(&self) -> usize {
