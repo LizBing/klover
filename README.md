@@ -11,24 +11,30 @@ A small HotSpot-inspired JVM (C core + Rust). MVP target: **JVMS 8** (classfile 
 ## Build
 
 ```bash
-make              # core (CMake) + rust (Cargo)
+make              # Debug: core (CMake) + rust (Cargo)
 make core         # libklover-core → build/core/
-make rust         # klover crate (needs core)
+make rust         # klover crate (automatically builds core)
 make classes      # javac --release 8 → test_data/classes/
-make test         # CTest + cargo test
+make check        # cargo check --all-targets
+make test         # build Java classes, then run CTest + all Rust tests
 make test-c
 make test-rust
+make test-simple  # run the SimpleAddition end-to-end interpreter test
 make clean
 ```
 
 Useful variables:
 
 ```bash
-make BUILD_TYPE=Release
+make BUILD_TYPE=Release  # CMake Release + Cargo --release
 make BUILD_DIR=build
 ```
 
-Rust discovers the C library via `KLOVER_CORE_DIR` (set by the Makefile to `build/core`).  
+The top-level Makefile is the canonical build entry point. It keeps the C and
+Rust build profiles aligned, puts Cargo artifacts under `build/cargo`, and
+prepares Java test classes before Rust integration tests.
+
+Rust discovers the C library via `KLOVER_CORE_DIR` (set by the Makefile to `build/core`).
 You can also build manually:
 
 ```bash

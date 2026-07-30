@@ -4,7 +4,7 @@ pub fn iadd(f: &mut InterpreterFrame) -> ExecResult<StepOutcome> {
     let value2 = f.pop()?.as_int()?;
     let value1 = f.pop()?.as_int()?;
     
-    let result = value1 + value2;
+    let result = value1.wrapping_add(value2);
 
     f.push(Slot::int(result))?;
 

@@ -10,7 +10,7 @@ use crate::{
     }, class_parser::{
         class_file::ClassFile, cp_info::ConstantPoolInfo, method_info::MethodInfo,
     }, gc_bindings::obj_layout::ObjLayout, oops::{
-        acc_flags::AccFlags, cp_entry::{CPEntry, ClassCPEntry}, field::Field, fields::Fields, klass::Klass, method::Method, resolve_error::{ResolveError, ResolveResult}, symbol_table::SymbolHandle,
+        acc_flags::AccFlags, cp_entry::{CPEntry, ClassCPEntry}, field::Field, fields::Fields, klass::Klass, method::Method, resolve_error::{ResolveError, ResolveResult}, symbol_table::SymbolTable,
     }
 };
 
@@ -215,5 +215,24 @@ impl NormalKlass {
 impl NormalKlass {
     pub fn obj_layout(&self) -> &ObjLayout {
         &self.obj_layout
+    }
+}
+
+impl NormalKlass {
+    pub fn find_declared_method(
+        &self,
+        name: &str,
+        desc: &str,
+    ) -> Option<MSRef<Method>> {
+        let name = SymbolTable::intern(name);
+        let desc = SymbolTable::intern(desc);
+
+        let method = self.methods.iter().find(|method| {
+            method.name == name && method.desc.raw == desc
+        })?;
+
+        Some(unsafe {
+            MSRef::from_raw(NonNull::from(method))
+        })
     }
 }

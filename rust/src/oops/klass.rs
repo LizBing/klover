@@ -1,4 +1,4 @@
-use crate::oops::{array_klass::ArrayKlass, normal_klass::NormalKlass, prim_klass::PrimKlass};
+use crate::{class_loader::ms_api::MSRef, oops::{array_klass::ArrayKlass, normal_klass::NormalKlass, prim_klass::PrimKlass}};
 
 #[derive(Debug)]
 pub enum Klass {
@@ -19,6 +19,16 @@ impl Klass {
         match self {
             Self::Array(x) => Some(x),
             _ => None,
+        }
+    }
+}
+
+impl MSRef<Klass> {
+    pub fn as_normal_ref(&self) -> Option<MSRef<NormalKlass>> {
+        let normal = self.as_normal()?;
+
+        unsafe {
+            Some(MSRef::from_raw(normal.into()))
         }
     }
 }

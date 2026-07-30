@@ -3,11 +3,14 @@
 #   make core         — libklover-core (CMake)
 #   make rust         — klover crate (needs core)
 #   make classes      — javac --release 8 → test_data/classes/
-#   make test         — CTest + cargo test
+#   make test         — Java test classes + CTest + cargo test
+#   make test-simple  — run the SimpleAddition end-to-end test
 #   make clean
 
-.PHONY: all core rust classes verify-classes test test-c test-rust clean \
-	compile-commands help
+.DEFAULT_GOAL := all
+
+.PHONY: all core rust classes verify-classes check test test-c test-rust \
+	test-simple clean compile-commands help
 
 BUILD_DIR      ?= build
 BUILD_TYPE     ?= Debug
@@ -17,11 +20,18 @@ CMAKE          ?= cmake
 CARGO          ?= cargo
 JAVAC          ?= javac
 
+# Keep the native and Rust sides on the same build profile.  Debug-like CMake
+# configurations use Cargo's default dev/test profiles; release-like CMake
+# configurations use Cargo's release profile.
+ifneq ($(filter Release RelWithDebInfo MinSizeRel,$(BUILD_TYPE)),)
+CARGO_PROFILE_FLAG := --release
+endif
+
 ROOT           := $(abspath .)
 KLOVER_CORE_DIR := $(abspath $(CORE_DIR))
 
 CMAKE_FLAGS    := -DCMAKE_BUILD_TYPE=$(BUILD_TYPE) -DCMAKE_C_COMPILER=clang
-CARGO_FLAGS    := --manifest-path rust/Cargo.toml
+CARGO_FLAGS    := --manifest-path rust/Cargo.toml $(CARGO_PROFILE_FLAG)
 CARGO_ENV      := KLOVER_CORE_DIR=$(KLOVER_CORE_DIR) CARGO_TARGET_DIR=$(CARGO_TARGET)
 
 NPROC          := $(shell sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)
@@ -31,23 +41,24 @@ OBJECT_JAVA    := java/java.base/java/lang/Object.java
 CLASSES_OUT    := test_data/classes
 
 help:
-	@echo "Targets: all core rust classes verify-classes test test-c test-rust clean compile-commands"
+	@echo "Targets: all core rust classes verify-classes check test test-c test-rust test-simple clean compile-commands"
 	@echo "Vars:    BUILD_DIR=$(BUILD_DIR) BUILD_TYPE=$(BUILD_TYPE)"
 
 all: core rust
 
 # --- C core (CMake) ----------------------------------------------------------
 
-core: $(CORE_DIR)/CMakeCache.txt
-	$(CMAKE) --build $(CORE_DIR) -j$(NPROC)
-
-$(CORE_DIR)/CMakeCache.txt:
+core:
 	$(CMAKE) -S $(ROOT) -B $(CORE_DIR) $(CMAKE_FLAGS)
+	$(CMAKE) --build $(CORE_DIR) -j$(NPROC)
 
 # --- Rust --------------------------------------------------------------------
 
 rust: core
 	$(CARGO_ENV) $(CARGO) build $(CARGO_FLAGS)
+
+check: core
+	$(CARGO_ENV) $(CARGO) check $(CARGO_FLAGS) --all-targets
 
 # --- Java 8 test classes (write back into test_data/classes/) ----------------
 
@@ -68,10 +79,14 @@ verify-classes:
 test-c: core
 	ctest --test-dir $(CORE_DIR) --output-on-failure
 
-test-rust: rust
+test-rust: core classes
 	$(CARGO_ENV) $(CARGO) test $(CARGO_FLAGS)
 
-test: test-c test-rust
+test-simple: core classes
+	$(CARGO_ENV) $(CARGO) test $(CARGO_FLAGS) \
+		--test test_simple_addition -- --nocapture
+
+test: classes test-c test-rust
 
 # --- Misc --------------------------------------------------------------------
 
