@@ -1,4 +1,4 @@
-use crate::{engine::{engine_error::{ExecError, ExecResult}, outcome::RetValue, resolved_method::ResolvedMethod, slot::Slot}, oops::{attr::Code, method::Method, normal_klass::NormalKlass}};
+use crate::{engine::{engine_error::{ExecError, ExecResult}, outcome::RetValue, resolved_method::ResolvedMethod, slot::Slot}, oops::attr::Code};
 
 
 #[derive(Debug)]
@@ -86,6 +86,15 @@ impl InterpreterFrame {
             .ok_or(ExecError::InvalidLocalIndex(index))
     }
 
+    pub fn set_local(&mut self, index: usize, value: Slot) -> ExecResult<()> {
+        let local = self
+            .locals
+            .get_mut(index)
+            .ok_or(ExecError::InvalidLocalIndex(index))?;
+        *local = value;
+        Ok(())
+    }
+
     fn ensure_stack_capacity(
         &self,
         additional: usize,
@@ -101,6 +110,46 @@ impl InterpreterFrame {
         }
     
         Ok(())
+    }
+
+    pub fn push_long(&mut self, value: i64) -> ExecResult<()> {
+        self.ensure_stack_capacity(2)?;
+        self.opstack.push(Slot::long_high(value));
+        self.opstack.push(Slot::long_low(value));
+        Ok(())
+    }
+
+    pub fn pop_long(&mut self) -> ExecResult<i64> {
+        if self.opstack.len() < 2 {
+            return Err(ExecError::OperandStackUnderflow);
+        }
+
+        let high_index = self.opstack.len() - 2;
+        let high = self.opstack[high_index];
+        let low = self.opstack[high_index + 1];
+        let value = Slot::as_long(high, low)?;
+        self.opstack.truncate(high_index);
+        Ok(value)
+    }
+
+    pub fn push_double(&mut self, value: f64) -> ExecResult<()> {
+        self.ensure_stack_capacity(2)?;
+        self.opstack.push(Slot::double_high(value));
+        self.opstack.push(Slot::double_low(value));
+        Ok(())
+    }
+
+    pub fn pop_double(&mut self) -> ExecResult<f64> {
+        if self.opstack.len() < 2 {
+            return Err(ExecError::OperandStackUnderflow);
+        }
+
+        let high_index = self.opstack.len() - 2;
+        let high = self.opstack[high_index];
+        let low = self.opstack[high_index + 1];
+        let value = Slot::as_double(high, low)?;
+        self.opstack.truncate(high_index);
+        Ok(value)
     }
     
     pub fn push_return_value(
@@ -123,21 +172,11 @@ impl InterpreterFrame {
             }
     
             RetValue::Long(value) => {
-                self.ensure_stack_capacity(2)?;
-    
-                self.opstack.push(Slot::long_high(value));
-                self.opstack.push(Slot::long_low(value));
-    
-                Ok(())
+                self.push_long(value)
             }
     
             RetValue::Double(value) => {
-                self.ensure_stack_capacity(2)?;
-    
-                self.opstack.push(Slot::double_high(value));
-                self.opstack.push(Slot::double_low(value));
-    
-                Ok(())
+                self.push_double(value)
             }
         }
     }

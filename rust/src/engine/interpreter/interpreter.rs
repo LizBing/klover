@@ -1,27 +1,100 @@
-use crate::{engine::{engine_error::{ExecError, ExecResult}, interpreter::instructions::{control::ireturn, loads::iload_n, math::iadd}, outcome::StepOutcome}, runtime::java_thread::JavaThread};
+use crate::{
+    engine::{
+        engine_error::{ExecError, ExecResult},
+        interpreter::{
+            instructions::{control::*, loads::*, math::*},
+        },
+        outcome::StepOutcome,
+    },
+    runtime::java_thread::JavaThread,
+};
 
 #[derive(Debug)]
 pub struct Interpreter;
 
 impl Interpreter {
-    pub fn execute_one(&mut self, thrd: &mut JavaThread) -> ExecResult<StepOutcome> {
-        let frame = thrd
+    pub fn execute_one(&mut self, thread: &mut JavaThread) -> ExecResult<StepOutcome> {
+        let frame = thread
             .stack_mut()
             .current_interpreter_mut()
-            .map_err(|e| ExecError::Stack(e))?;
+            .map_err(ExecError::Stack)?;
 
-        let opc = frame.fetch_opcode()?;
+        let opcode = frame.fetch_opcode()?;
 
-        match opc {
-            26 => iload_n::<0>(frame),
-            27 => iload_n::<1>(frame),
-            96 => iadd(frame),
-            172 => ireturn(frame),
+        match opcode {
+            // Indexed loads.
+            0x15 => iload(frame),
+            0x16 => lload(frame),
+            0x17 => fload(frame),
+            0x18 => dload(frame),
+
+            // Fixed-index loads.
+            0x1a => iload_n::<0>(frame),
+            0x1b => iload_n::<1>(frame),
+            0x1c => iload_n::<2>(frame),
+            0x1d => iload_n::<3>(frame),
+            0x1e => lload_n::<0>(frame),
+            0x1f => lload_n::<1>(frame),
+            0x20 => lload_n::<2>(frame),
+            0x21 => lload_n::<3>(frame),
+            0x22 => fload_n::<0>(frame),
+            0x23 => fload_n::<1>(frame),
+            0x24 => fload_n::<2>(frame),
+            0x25 => fload_n::<3>(frame),
+            0x26 => dload_n::<0>(frame),
+            0x27 => dload_n::<1>(frame),
+            0x28 => dload_n::<2>(frame),
+            0x29 => dload_n::<3>(frame),
+
+            // Arithmetic, shifts, bitwise operations, and local increment.
+            0x60 => iadd(frame),
+            0x61 => ladd(frame),
+            0x62 => fadd(frame),
+            0x63 => dadd(frame),
+            0x64 => isub(frame),
+            0x65 => lsub(frame),
+            0x66 => fsub(frame),
+            0x67 => dsub(frame),
+            0x68 => imul(frame),
+            0x69 => lmul(frame),
+            0x6a => fmul(frame),
+            0x6b => dmul(frame),
+            0x6c => idiv(frame),
+            0x6d => ldiv(frame),
+            0x6e => fdiv(frame),
+            0x6f => ddiv(frame),
+            0x70 => irem(frame),
+            0x71 => lrem(frame),
+            0x72 => frem(frame),
+            0x73 => drem(frame),
+            0x74 => ineg(frame),
+            0x75 => lneg(frame),
+            0x76 => fneg(frame),
+            0x77 => dneg(frame),
+            0x78 => ishl(frame),
+            0x79 => lshl(frame),
+            0x7a => ishr(frame),
+            0x7b => lshr(frame),
+            0x7c => iushr(frame),
+            0x7d => lushr(frame),
+            0x7e => iand(frame),
+            0x7f => land(frame),
+            0x80 => ior(frame),
+            0x81 => lor(frame),
+            0x82 => ixor(frame),
+            0x83 => lxor(frame),
+            0x84 => iinc(frame),
+
+            // Typed returns used by arithmetic methods.
+            0xac => ireturn(frame),
+            0xad => lreturn(frame),
+            0xae => freturn(frame),
+            0xaf => dreturn(frame),
 
             unsupported => Err(ExecError::UnsupportedOpcode {
                 opcode: unsupported,
-                bci: frame.last_pc()
-            })
+                bci: frame.last_pc(),
+            }),
         }
     }
 }

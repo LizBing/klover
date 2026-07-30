@@ -86,6 +86,52 @@ impl Slot {
         }
     }
 
+    pub fn as_float(self) -> ExecResult<f32> {
+        match self.kind {
+            SlotKind::Float => Ok(f32::from_bits(self.bits)),
+            actual => Err(ExecError::SlotTypeMismatch {
+                expected: SlotKind::Float,
+                actual,
+            }),
+        }
+    }
+
+    pub fn as_long(high: Self, low: Self) -> ExecResult<i64> {
+        if high.kind != SlotKind::LongHigh {
+            return Err(ExecError::SlotTypeMismatch {
+                expected: SlotKind::LongHigh,
+                actual: high.kind,
+            });
+        }
+        if low.kind != SlotKind::LongLow {
+            return Err(ExecError::SlotTypeMismatch {
+                expected: SlotKind::LongLow,
+                actual: low.kind,
+            });
+        }
+
+        let bits = ((high.bits as u64) << 32) | low.bits as u64;
+        Ok(bits as i64)
+    }
+
+    pub fn as_double(high: Self, low: Self) -> ExecResult<f64> {
+        if high.kind != SlotKind::DoubleHigh {
+            return Err(ExecError::SlotTypeMismatch {
+                expected: SlotKind::DoubleHigh,
+                actual: high.kind,
+            });
+        }
+        if low.kind != SlotKind::DoubleLow {
+            return Err(ExecError::SlotTypeMismatch {
+                expected: SlotKind::DoubleLow,
+                actual: low.kind,
+            });
+        }
+
+        let bits = ((high.bits as u64) << 32) | low.bits as u64;
+        Ok(f64::from_bits(bits))
+    }
+
     pub fn as_ref(self) -> ExecResult<NObjPtr> {
         match self.kind {
             SlotKind::Ref => Ok(self.bits),

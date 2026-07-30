@@ -1,4 +1,4 @@
-use crate::{engine::slot::{Slot, SlotKind}, runtime::runtime_error::StackError};
+use crate::{engine::slot::SlotKind, runtime::runtime_error::StackError};
 
 impl From<StackError> for ExecError {
     fn from(value: StackError) -> Self {
@@ -50,5 +50,7 @@ pub enum ExecError {
 
 pub type ExecResult<T> = Result<T, ExecError>;
 
-#[derive(Debug)]
-pub enum JavaExceptionKind {}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum JavaExceptionKind {
+    ArithmeticException,
+}
