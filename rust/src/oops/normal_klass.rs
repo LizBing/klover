@@ -216,6 +216,10 @@ impl NormalKlass {
     pub fn obj_layout(&self) -> &ObjLayout {
         &self.obj_layout
     }
+
+    pub fn constant_pool_entry(&self, index: usize) -> Option<&CPEntry> {
+        self.constant_pool.get(index)?.get()
+    }
 }
 
 impl NormalKlass {

@@ -2,7 +2,7 @@ use crate::{
     engine::{
         engine_error::{ExecError, ExecResult},
         interpreter::{
-            instructions::{control::*, loads::*, math::*},
+            instructions::{constants::*, control::*, loads::*, math::*},
         },
         outcome::StepOutcome,
     },
@@ -22,6 +22,29 @@ impl Interpreter {
         let opcode = frame.fetch_opcode()?;
 
         match opcode {
+            // Constants and immediate values.
+            0x00 => nop(frame),
+            0x01 => aconst_null(frame),
+            0x02 => iconst_n::<-1>(frame),
+            0x03 => iconst_n::<0>(frame),
+            0x04 => iconst_n::<1>(frame),
+            0x05 => iconst_n::<2>(frame),
+            0x06 => iconst_n::<3>(frame),
+            0x07 => iconst_n::<4>(frame),
+            0x08 => iconst_n::<5>(frame),
+            0x09 => lconst_n::<0>(frame),
+            0x0a => lconst_n::<1>(frame),
+            0x0b => fconst_n::<0>(frame),
+            0x0c => fconst_n::<1>(frame),
+            0x0d => fconst_n::<2>(frame),
+            0x0e => dconst_n::<0>(frame),
+            0x0f => dconst_n::<1>(frame),
+            0x10 => bipush(frame),
+            0x11 => sipush(frame),
+            0x12 => ldc(frame),
+            0x13 => ldc_w(frame),
+            0x14 => ldc2_w(frame),
+
             // Indexed loads.
             0x15 => iload(frame),
             0x16 => lload(frame),
@@ -90,6 +113,7 @@ impl Interpreter {
             0xad => lreturn(frame),
             0xae => freturn(frame),
             0xaf => dreturn(frame),
+            0xb0 => areturn(frame),
 
             unsupported => Err(ExecError::UnsupportedOpcode {
                 opcode: unsupported,

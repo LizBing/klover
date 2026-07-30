@@ -71,6 +71,8 @@ classes:
 verify-classes:
 	@python3 scripts/verify-class-major.py 52 \
 		$(CLASSES_OUT)/ArithmeticOps.class \
+		$(CLASSES_OUT)/ConstantOps.class \
+		$(CLASSES_OUT)/LdcWideOps.class \
 		$(CLASSES_OUT)/SimpleAddition.class \
 		$(CLASSES_OUT)/java/lang/Object.class \
 		$(CLASSES_OUT)/Arith.class

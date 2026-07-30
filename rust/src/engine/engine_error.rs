@@ -29,6 +29,14 @@ pub enum ExecError {
 
     InvalidLocalIndex(usize),
 
+    InvalidConstantPoolIndex(usize),
+    InvalidLdcConstant {
+        index: usize,
+    },
+    UnsupportedLdcConstant {
+        index: usize,
+    },
+
     OperandStackOverflow,
     OperandStackUnderflow,
 

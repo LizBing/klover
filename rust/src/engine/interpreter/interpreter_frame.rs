@@ -1,4 +1,4 @@
-use crate::{engine::{engine_error::{ExecError, ExecResult}, outcome::RetValue, resolved_method::ResolvedMethod, slot::Slot}, oops::attr::Code};
+use crate::{engine::{engine_error::{ExecError, ExecResult}, outcome::RetValue, resolved_method::ResolvedMethod, slot::Slot}, oops::{attr::Code, cp_entry::CPEntry}};
 
 
 #[derive(Debug)]
@@ -60,6 +60,10 @@ impl InterpreterFrame {
 
     pub fn reserved_slots(&self) -> usize {
         self.reserved_slots
+    }
+
+    pub fn constant_pool_entry(&self, index: usize) -> Option<&CPEntry> {
+        self.target.holder().constant_pool_entry(index)
     }
 }
 

@@ -19,3 +19,7 @@ pub fn freturn(f: &mut InterpreterFrame) -> ExecResult<StepOutcome> {
 pub fn dreturn(f: &mut InterpreterFrame) -> ExecResult<StepOutcome> {
     Ok(StepOutcome::Return(RetValue::Double(f.pop_double()?)))
 }
+
+pub fn areturn(f: &mut InterpreterFrame) -> ExecResult<StepOutcome> {
+    Ok(StepOutcome::Return(RetValue::Ref(f.pop()?.as_ref()?)))
+}
