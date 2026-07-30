@@ -69,12 +69,34 @@ impl Interpreter {
             0x28 => dload_n::<2>(frame),
             0x29 => dload_n::<3>(frame),
 
-            // Integer stores.
+            // Indexed stores.
             0x36 => istore(frame),
+            0x37 => lstore(frame),
+            0x38 => fstore(frame),
+            0x39 => dstore(frame),
+            0x3a => astore(frame),
+
+            // Fixed-index stores.
             0x3b => istore_n::<0>(frame),
             0x3c => istore_n::<1>(frame),
             0x3d => istore_n::<2>(frame),
             0x3e => istore_n::<3>(frame),
+            0x3f => lstore_n::<0>(frame),
+            0x40 => lstore_n::<1>(frame),
+            0x41 => lstore_n::<2>(frame),
+            0x42 => lstore_n::<3>(frame),
+            0x43 => fstore_n::<0>(frame),
+            0x44 => fstore_n::<1>(frame),
+            0x45 => fstore_n::<2>(frame),
+            0x46 => fstore_n::<3>(frame),
+            0x47 => dstore_n::<0>(frame),
+            0x48 => dstore_n::<1>(frame),
+            0x49 => dstore_n::<2>(frame),
+            0x4a => dstore_n::<3>(frame),
+            0x4b => astore_n::<0>(frame),
+            0x4c => astore_n::<1>(frame),
+            0x4d => astore_n::<2>(frame),
+            0x4e => astore_n::<3>(frame),
 
             // Arithmetic, shifts, bitwise operations, and local increment.
             0x60 => iadd(frame),

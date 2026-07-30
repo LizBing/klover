@@ -68,3 +68,24 @@ pub fn expect_int(exit: ThreadExit) -> i32 {
         other => panic!("expected int return, got {other:?}"),
     }
 }
+
+pub fn expect_long(exit: ThreadExit) -> i64 {
+    match exit {
+        ThreadExit::Returned(RetValue::Long(value)) => value,
+        other => panic!("expected long return, got {other:?}"),
+    }
+}
+
+pub fn expect_float(exit: ThreadExit) -> f32 {
+    match exit {
+        ThreadExit::Returned(RetValue::Float(value)) => value,
+        other => panic!("expected float return, got {other:?}"),
+    }
+}
+
+pub fn expect_double(exit: ThreadExit) -> f64 {
+    match exit {
+        ThreadExit::Returned(RetValue::Double(value)) => value,
+        other => panic!("expected double return, got {other:?}"),
+    }
+}

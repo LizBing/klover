@@ -74,6 +74,7 @@ verify-classes:
 		$(CLASSES_OUT)/ConstantOps.class \
 		$(CLASSES_OUT)/LdcWideOps.class \
 		$(CLASSES_OUT)/ControlFlow.class \
+		$(CLASSES_OUT)/StoreOps.class \
 		$(CLASSES_OUT)/SimpleAddition.class \
 		$(CLASSES_OUT)/java/lang/Object.class \
 		$(CLASSES_OUT)/Arith.class
