@@ -1,13 +1,13 @@
-use std::{
-    marker::PhantomData, mem::size_of, sync::OnceLock,
-};
+use std::{marker::PhantomData, mem::size_of, sync::OnceLock};
 
 use crate::{
-    class_loader::ms_api::MSRef, gc_bindings::oop_handle::NObjPtr, oops::{
+    class_loader::ms_api::MSRef,
+    gc_bindings::oop_handle::NObjPtr,
+    oops::{
         klass::Klass,
-        resolve_error::{ResolveError, ResolveResult},
+        oops_errors::{ResolveError, ResolveResult},
         symbol_table::{SymbolHandle, SymbolTable},
-    }
+    },
 };
 
 #[derive(Debug, Clone)]
@@ -37,6 +37,19 @@ pub struct FieldDesc {
 }
 
 impl FieldDesc {
+    /// Number of local-variable / operand-stack slots occupied by this type.
+    /// Arrays and object references are always category 1.
+    pub fn slot_count(&self) -> usize {
+        if self.dimensions != 0 {
+            return 1;
+        }
+
+        match self.elem {
+            FieldElemType::Long | FieldElemType::Double => 2,
+            _ => 1,
+        }
+    }
+
     pub fn byte_size(&self) -> usize {
         if self.dimensions != 0 {
             return size_of::<NObjPtr>();
@@ -56,10 +69,15 @@ impl FieldDesc {
     }
 
     pub fn is_ref_type(&self) -> bool {
-        if self.dimensions != 0 { return true };
+        if self.dimensions != 0 {
+            return true;
+        };
 
-        if let FieldElemType::Class { .. } = self.elem { true }
-        else { false }
+        if let FieldElemType::Class { .. } = self.elem {
+            true
+        } else {
+            false
+        }
     }
 }
 
@@ -76,7 +94,7 @@ impl FieldDesc {
         }
 
         if pos >= bytes.len() {
-            return Err(ResolveError::InvalidDesc { raw: utf8.into() });
+            return Err(ResolveError::InvalidDesc(utf8.into()));
         }
 
         let elem = match bytes[pos] {
@@ -94,14 +112,14 @@ impl FieldDesc {
                 let end = bytes[start..]
                     .iter()
                     .position(|&b| b == b';')
-                    .ok_or_else(|| ResolveError::InvalidDesc { raw: utf8.into() })?;
+                    .ok_or_else(|| ResolveError::InvalidDesc(utf8.into()))?;
                 let class_name = &utf8[start..start + end];
                 FieldElemType::Class {
                     name: SymbolTable::intern(class_name),
                     resolved: OnceLock::new(),
                 }
             }
-            _ => return Err(ResolveError::InvalidDesc { raw: utf8.into() }),
+            _ => return Err(ResolveError::InvalidDesc(utf8.into())),
         };
 
         Ok(FieldDesc {
@@ -121,25 +139,32 @@ pub enum ReturnDesc {
 #[derive(Debug, Clone)]
 pub struct MethodDesc {
     __: PhantomData<()>,
-    
+
     pub raw: SymbolHandle,
     pub ret_desc: ReturnDesc,
     pub params_desc: Vec<FieldDesc>,
 }
 
 impl MethodDesc {
+    /// Number of slots consumed by the method parameters.  This deliberately
+    /// excludes the receiver; `invokestatic` has no receiver, while future
+    /// instance-call instructions add one explicitly.
+    pub fn parameter_slot_count(&self) -> usize {
+        self.params_desc.iter().map(FieldDesc::slot_count).sum()
+    }
+
     pub fn from(utf8: &str) -> ResolveResult<Self> {
         let bytes = utf8.as_bytes();
 
         if bytes.is_empty() || bytes[0] != b'(' {
-            return Err(ResolveError::InvalidDesc { raw: utf8.into() });
+            return Err(ResolveError::InvalidDesc(utf8.into()));
         }
 
         // Find the closing ')'.  close_paren_rel is the offset of ')' inside `bytes[1..]`.
         let close_paren_rel = bytes[1..]
             .iter()
             .position(|&b| b == b')')
-            .ok_or_else(|| ResolveError::InvalidDesc { raw: utf8.into() })?;
+            .ok_or_else(|| ResolveError::InvalidDesc(utf8.into()))?;
         // Absolute position of ')' in the full string.
         let close_paren_abs = close_paren_rel + 1;
 
@@ -157,7 +182,7 @@ impl MethodDesc {
         // Parse return descriptor
         let ret_start = close_paren_abs + 1; // skip ')'
         if ret_start >= utf8.len() {
-            return Err(ResolveError::InvalidDesc { raw: utf8.into() });
+            return Err(ResolveError::InvalidDesc(utf8.into()));
         }
 
         let ret_str = &utf8[ret_start..];
@@ -169,7 +194,7 @@ impl MethodDesc {
 
         Ok(MethodDesc {
             __: PhantomData,
-            
+
             raw: SymbolTable::intern(utf8),
             ret_desc,
             params_desc,
@@ -197,5 +222,23 @@ impl MethodDesc {
             }
             _ => pos + 1, // primitive type
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::MethodDesc;
+
+    #[test]
+    fn parameter_slot_count_accounts_for_category_two_values() {
+        assert_eq!(MethodDesc::from("()V").unwrap().parameter_slot_count(), 0);
+        assert_eq!(MethodDesc::from("(II)I").unwrap().parameter_slot_count(), 2);
+        assert_eq!(MethodDesc::from("(JD)V").unwrap().parameter_slot_count(), 4);
+        assert_eq!(
+            MethodDesc::from("(IJLjava/lang/Object;[D)V")
+                .unwrap()
+                .parameter_slot_count(),
+            5
+        );
     }
 }

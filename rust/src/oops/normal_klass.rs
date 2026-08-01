@@ -1,5 +1,8 @@
 use std::{
-    boxed, cell::OnceCell, ops::Deref, ptr::{NonNull, null}
+    boxed,
+    cell::OnceCell,
+    ops::Deref,
+    ptr::{null, NonNull},
 };
 
 use crate::{
@@ -7,11 +10,21 @@ use crate::{
         bootstrap_cld::BootstrapCLD,
         cld::ClassLoaderData,
         ms_api::{MSAllocator, MSBox, MSRef},
-    }, class_parser::{
-        class_file::ClassFile, cp_info::ConstantPoolInfo, method_info::MethodInfo,
-    }, gc_bindings::obj_layout::ObjLayout, oops::{
-        acc_flags::AccFlags, cp_entry::{CPEntry, ClassCPEntry}, field::Field, fields::Fields, klass::Klass, method::Method, resolve_error::{ResolveError, ResolveResult}, symbol_table::SymbolTable,
-    }
+    },
+    class_parser::{class_file::ClassFile, cp_info::ConstantPoolInfo, method_info::MethodInfo},
+    engine::outcome::PendingException,
+    gc_bindings::obj_layout::ObjLayout,
+    oops::{
+        acc_flags::AccFlags,
+        cp_entry::{CPEntry, ClassCPEntry, ResolvedMethodRef},
+        field::Field,
+        fields::Fields,
+        klass::Klass,
+        method::Method,
+        oops_errors::{ClassInitError, ClassInitResult, ResolveError, ResolveResult},
+        symbol_table::{SymbolHandle, SymbolTable},
+    },
+    runtime::java_thread::JavaThreadID,
 };
 
 #[derive(Debug)]
@@ -64,7 +77,9 @@ fn build_interfaces(
 
     for (i, idx) in parsed_ifaces.iter().enumerate() {
         match cp_slice_get(cp_slice, *idx as usize) {
-            Some(CPEntry::Class(entry)) => unsafe { uninit[i].write(MSRef::from_raw(entry.into())) },
+            Some(CPEntry::Class(entry)) => unsafe {
+                uninit[i].write(MSRef::from_raw(entry.into()))
+            },
             _ => return Err(ResolveError::MismatchCPType),
         };
     }
@@ -88,10 +103,7 @@ fn build_methods(
 }
 
 impl UnlinkedNormalKlass {
-    pub fn build(
-        cf: ClassFile,
-        cld: Option<&ClassLoaderData>,
-    ) -> ResolveResult<Self> {
+    pub fn build(cf: ClassFile, cld: Option<&ClassLoaderData>) -> ResolveResult<Self> {
         let msa = match cld {
             Some(x) => &x.ms_allocator,
             None => BootstrapCLD::bs_msa(),
@@ -109,12 +121,10 @@ impl UnlinkedNormalKlass {
         let super_entry = if cf.super_index == 0 {
             None
         } else {
-            Some(
-                match cp_slice_get(&cp, cf.super_index as usize) {
-                    Some(CPEntry::Class(entry)) => unsafe { MSRef::from_raw(entry.into()) },
-                    _ => return Err(ResolveError::MismatchCPType),
-                }
-            )
+            Some(match cp_slice_get(&cp, cf.super_index as usize) {
+                Some(CPEntry::Class(entry)) => unsafe { MSRef::from_raw(entry.into()) },
+                _ => return Err(ResolveError::MismatchCPType),
+            })
         };
 
         let interfaces = build_interfaces(&cf.interfaces, &cp, msa)?;
@@ -133,7 +143,40 @@ impl UnlinkedNormalKlass {
             methods,
         })
     }
-}    
+}
+
+#[derive(Debug)]
+enum ClassInitState {
+    Uninitialized,
+
+    Initializing { owner: JavaThreadID },
+
+    Initialized,
+
+    Erroneous { cause: PendingException },
+}
+
+#[derive(Debug)]
+struct ClassInit {
+    state: parking_lot::Mutex<ClassInitState>,
+    completed: parking_lot::Condvar,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClassInitAction {
+    Initialize,
+    AlreadyInitialized,
+    RecursiveRequest,
+}
+
+impl Default for ClassInit {
+    fn default() -> Self {
+        Self {
+            state: parking_lot::Mutex::new(ClassInitState::Uninitialized),
+            completed: parking_lot::Condvar::new(),
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct NormalKlass {
@@ -154,15 +197,20 @@ pub struct NormalKlass {
     methods: MSBox<[Method]>,
 
     obj_layout: ObjLayout,
+
+    init: ClassInit,
 }
 
 impl NormalKlass {
-    pub fn link(unlinked: UnlinkedNormalKlass, cld: Option<&ClassLoaderData>) -> ResolveResult<MSBox<Klass>> {
+    pub fn link(
+        unlinked: UnlinkedNormalKlass,
+        cld: Option<&ClassLoaderData>,
+    ) -> ResolveResult<MSBox<Klass>> {
         let msa = match cld {
             Some(x) => unsafe { &x.ms_allocator },
-            None => BootstrapCLD::bs_msa()
+            None => BootstrapCLD::bs_msa(),
         };
-        
+
         let obj_layout;
         let super_klass;
         match unlinked.super_klass {
@@ -174,7 +222,7 @@ impl NormalKlass {
                 obj_layout = ObjLayout {
                     super_layout: &super_normal.obj_layout,
                     byte_size: super_normal.obj_layout.byte_size + unlinked.fields.instance_size,
-                    ptrs_count: unlinked.fields.instance_ptrs_count
+                    ptrs_count: unlinked.fields.instance_ptrs_count,
                 }
             }
 
@@ -183,16 +231,16 @@ impl NormalKlass {
                 obj_layout = ObjLayout {
                     super_layout: null(),
                     byte_size: unlinked.fields.instance_size,
-                    ptrs_count: unlinked.fields.instance_ptrs_count
+                    ptrs_count: unlinked.fields.instance_ptrs_count,
                 }
             }
         }
 
         let cld_ptr = match cld {
             Some(x) => Some(x.into()),
-            None => None
+            None => None,
         };
-                
+
         let klass = Self {
             acc_flags: unlinked.acc_flags,
             this_klass: unlinked.this_klass,
@@ -202,13 +250,20 @@ impl NormalKlass {
             interfaces: unlinked.interfaces,
             fields: unlinked.fields,
             methods: unlinked.methods,
-            obj_layout
+            obj_layout,
+            init: ClassInit::default(),
         };
 
         let boxed = MSBox::new(msa, Klass::Normal(klass));
         boxed.as_normal().unwrap().this_klass.set((&boxed).into());
 
         Ok(boxed)
+    }
+}
+
+impl NormalKlass {
+    pub fn is_interface(&self) -> bool {
+        self.acc_flags.contains(AccFlags::ACC_INTERFACE)
     }
 }
 
@@ -220,23 +275,112 @@ impl NormalKlass {
     pub fn constant_pool_entry(&self, index: usize) -> Option<&CPEntry> {
         self.constant_pool.get(index)?.get()
     }
+
+    pub fn cld(&self) -> Option<&ClassLoaderData> {
+        self.cld.map(|x| unsafe { x.as_ref() })
+    }
+
+    pub fn super_klass_ref(&self) -> Option<MSRef<NormalKlass>> {
+        self.super_klass.clone()
+    }
+
+    /// Acquire this class's initialization state for `owner`.
+    ///
+    /// This method only coordinates state and waiters.  Deciding whether and
+    /// how to execute `<clinit>` belongs to the execution engine.
+    pub fn begin_initialization(&self, owner: JavaThreadID) -> ClassInitResult<ClassInitAction> {
+        let mut state = self.init.state.lock();
+        loop {
+            match *state {
+                ClassInitState::Uninitialized => {
+                    *state = ClassInitState::Initializing { owner };
+                    return Ok(ClassInitAction::Initialize);
+                }
+                ClassInitState::Initializing { owner: current } if current == owner => {
+                    return Ok(ClassInitAction::RecursiveRequest);
+                }
+                ClassInitState::Initializing { .. } => self.init.completed.wait(&mut state),
+                ClassInitState::Initialized => {
+                    return Ok(ClassInitAction::AlreadyInitialized);
+                }
+                ClassInitState::Erroneous { .. } => return Err(ClassInitError::Erroneous),
+            }
+        }
+    }
+
+    pub fn complete_initialization(&self, owner: JavaThreadID) -> ClassInitResult<()> {
+        let mut state = self.init.state.lock();
+        match *state {
+            ClassInitState::Initializing { owner: current } if current == owner => {
+                *state = ClassInitState::Initialized;
+            }
+            _ => return Err(ClassInitError::InvalidTransition),
+        }
+        self.init.completed.notify_all();
+        Ok(())
+    }
+
+    /// Release an initialization claim without recording a JVM initialization
+    /// failure.  The engine uses this while executable `<clinit>` frames are
+    /// not available yet, so a future attempt can initialize the class.
+    pub fn abandon_initialization(&self, owner: JavaThreadID) -> ClassInitResult<()> {
+        let mut state = self.init.state.lock();
+        match *state {
+            ClassInitState::Initializing { owner: current } if current == owner => {
+                *state = ClassInitState::Uninitialized;
+            }
+            _ => return Err(ClassInitError::InvalidTransition),
+        }
+        self.init.completed.notify_all();
+        Ok(())
+    }
+
+    pub fn fail_initialization(
+        &self,
+        owner: JavaThreadID,
+        cause: PendingException,
+    ) -> ClassInitResult<()> {
+        let mut state = self.init.state.lock();
+        match *state {
+            ClassInitState::Initializing { owner: current } if current == owner => {
+                *state = ClassInitState::Erroneous { cause };
+            }
+            _ => return Err(ClassInitError::InvalidTransition),
+        }
+        self.init.completed.notify_all();
+        Ok(())
+    }
 }
 
 impl NormalKlass {
-    pub fn find_declared_method(
-        &self,
-        name: &str,
-        desc: &str,
-    ) -> Option<MSRef<Method>> {
+    pub fn find_declared_method(&self, name: &str, desc: &str) -> Option<MSRef<Method>> {
         let name = SymbolTable::intern(name);
         let desc = SymbolTable::intern(desc);
 
-        let method = self.methods.iter().find(|method| {
-            method.name == name && method.desc.raw == desc
-        })?;
+        self.find_declared_method_symbol(&name, &desc)
+    }
 
-        Some(unsafe {
-            MSRef::from_raw(NonNull::from(method))
-        })
+    pub fn find_declared_method_symbol(
+        &self,
+        name: &SymbolHandle,
+        desc: &SymbolHandle,
+    ) -> Option<MSRef<Method>> {
+        let method = self
+            .methods
+            .iter()
+            .find(|method| method.name.equals(name) && method.desc.raw.equals(desc))?;
+
+        Some(unsafe { MSRef::from_raw(NonNull::from(method)) })
+    }
+
+    pub fn resolve_method_ref(&self, index: usize) -> ResolveResult<ResolvedMethodRef> {
+        let entry = self
+            .constant_pool_entry(index)
+            .ok_or(ResolveError::InvalidCPIndex)?;
+
+        match entry {
+            CPEntry::MethodRef(entry) => entry.resolve(self),
+            _ => Err(ResolveError::MismatchCPType),
+        }
     }
 }

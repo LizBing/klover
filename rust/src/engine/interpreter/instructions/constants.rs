@@ -1,6 +1,6 @@
 use crate::{
     engine::{
-        engine_error::{ExecError, ExecResult},
+        exec_error::{ExecError, ExecResult},
         interpreter::interpreter_frame::InterpreterFrame,
         outcome::StepOutcome,
         slot::Slot,

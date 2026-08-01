@@ -1,5 +1,5 @@
 use crate::engine::{
-    engine_error::{ExecError, ExecResult},
+    exec_error::{ExecError, ExecResult},
     slot::{Slot, SlotKind},
 };
 
@@ -180,7 +180,7 @@ impl OperandStack {
         }
     }
 
-    pub(crate) fn take_top_slots(&mut self, slot_count: usize) -> ExecResult<Vec<Slot>> {
+    fn top_slot_start(&self, slot_count: usize) -> ExecResult<usize> {
         if slot_count > self.slots.len() {
             return Err(ExecError::OperandStackUnderflow);
         }
@@ -195,6 +195,17 @@ impl OperandStack {
             }
         }
 
-        Ok(self.slots.split_off(start))
+        Ok(start)
+    }
+
+    pub(crate) fn peek_top_slots(&self, slot_count: usize) -> ExecResult<Vec<Slot>> {
+        let start = self.top_slot_start(slot_count)?;
+        Ok(self.slots[start..].to_vec())
+    }
+
+    pub(crate) fn drop_top_slots(&mut self, slot_count: usize) -> ExecResult<()> {
+        let start = self.top_slot_start(slot_count)?;
+        self.slots.truncate(start);
+        Ok(())
     }
 }

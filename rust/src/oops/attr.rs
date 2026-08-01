@@ -2,7 +2,7 @@ use std::cell::OnceCell;
 
 use crate::{
     class_loader::ms_api::{MSAllocator, MSBox, MSRef}, class_parser::attr_info::{CodeAttrInfo, ExceptionTableEntryInfo}, oops::{
-        cp_entry::{CPEntry, ClassCPEntry, StringCPEntry}, normal_klass::cp_slice_get, resolve_error::{ResolveError, ResolveResult},
+        cp_entry::{CPEntry, ClassCPEntry, StringCPEntry}, normal_klass::cp_slice_get, oops_errors::{ResolveError, ResolveResult},
     },
 };
 

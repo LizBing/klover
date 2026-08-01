@@ -1,5 +1,5 @@
 use crate::engine::{
-    engine_error::ExecResult, interpreter::interpreter_frame::InterpreterFrame,
+    exec_error::ExecResult, interpreter::interpreter_frame::InterpreterFrame,
     outcome::StepOutcome,
 };
 

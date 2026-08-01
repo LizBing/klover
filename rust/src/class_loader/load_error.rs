@@ -1,4 +1,4 @@
-use crate::{class_parser::parse_error::ParseError, oops::resolve_error::ResolveError};
+use crate::{class_parser::parse_error::ParseError, oops::oops_errors::ResolveError};
 
 #[derive(Debug, Clone)]
 pub enum LoadError {

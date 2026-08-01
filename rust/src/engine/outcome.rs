@@ -1,4 +1,7 @@
-use crate::{engine::{engine_error::JavaExceptionKind, resolved_method::ResolvedMethod}, gc_bindings::oop_handle::NObjPtr};
+use crate::{
+    engine::{exec_error::JavaExceptionKind, resolved_method::ResolvedMethod},
+    gc_bindings::oop_handle::NObjPtr,
+};
 
 #[derive(Debug)]
 pub enum RetValue {
@@ -7,7 +10,7 @@ pub enum RetValue {
     Float(f32),
     Long(i64),
     Double(f64),
-    Ref(NObjPtr)
+    Ref(NObjPtr),
 }
 
 #[derive(Debug)]
@@ -20,12 +23,15 @@ pub enum PendingException {
 pub enum StepOutcome {
     Continue,
     Branch(usize),
-    Call {
+    /// The target is resolved, while its arguments still reside on the
+    /// caller's operand stack. The dispatcher initializes the target class
+    /// and materializes an `Invocation` before entering the method.
+    InvokeStatic {
         target: ResolvedMethod,
-        arg_slots: usize
+        arg_slots: usize,
     },
     Return(RetValue),
-    Throw(PendingException)
+    Throw(PendingException),
 }
 
 #[derive(Debug)]

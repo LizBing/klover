@@ -1,4 +1,8 @@
-use crate::{engine::slot::SlotKind, runtime::runtime_error::StackError};
+use crate::{
+    engine::slot::SlotKind,
+    oops::oops_errors::{ClassInitError, ResolveError},
+    runtime::runtime_error::StackError,
+};
 
 impl From<StackError> for ExecError {
     fn from(value: StackError) -> Self {
@@ -6,10 +10,26 @@ impl From<StackError> for ExecError {
     }
 }
 
+impl From<ResolveError> for ExecError {
+    fn from(value: ResolveError) -> Self {
+        Self::Resolve(value)
+    }
+}
+
+impl From<ClassInitError> for ExecError {
+    fn from(value: ClassInitError) -> Self {
+        Self::ClassInitialization(value)
+    }
+}
+
 #[derive(Debug)]
 pub enum ExecError {
     Stack(StackError),
-    
+    Resolve(ResolveError),
+    ClassInitialization(ClassInitError),
+    ClassInitializerNotSupported,
+    IncompatibleStaticCall,
+
     NoCurrentFrame,
     MethodHasNoCode,
 
@@ -57,7 +77,7 @@ pub enum ExecError {
     InvalidProgramCounter {
         target: usize,
         code_len: usize,
-    }
+    },
 }
 
 pub type ExecResult<T> = Result<T, ExecError>;

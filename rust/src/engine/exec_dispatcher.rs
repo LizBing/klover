@@ -1,8 +1,19 @@
-use crate::{engine::{call::Invocation, engine_error::{ExecError, ExecResult}, interpreter::{interpreter::Interpreter, interpreter_frame::InterpreterFrame}, outcome::{RunOutcome, StepOutcome, ThreadExit}, resolved_method::ResolvedMethod}, runtime::java_thread::JavaThread};
+use crate::{
+    engine::{
+        call::Invocation,
+        class_init::ClassInitialization,
+        exec_error::{ExecError, ExecResult},
+        interpreter::{interpreter::Interpreter, interpreter_frame::InterpreterFrame},
+        outcome::{RunOutcome, StepOutcome, ThreadExit},
+        resolved_method::ResolvedMethod,
+    },
+    oops::acc_flags::AccFlags,
+    runtime::java_thread::JavaThread,
+};
 
 #[derive(Debug)]
 pub struct ExecDispatcher {
-    interpreter: Interpreter
+    interpreter: Interpreter,
 }
 
 impl ExecDispatcher {
@@ -17,34 +28,51 @@ impl ExecDispatcher {
         thread: &mut JavaThread,
         invocation: Invocation,
     ) -> ExecResult<()> {
-        let frame = InterpreterFrame::new(
-            invocation.target,
-            &invocation.args,
-        )?;
+        // Root entry has no Java caller. The launcher, JNI boundary, or test
+        // harness has already materialized all arguments in `Invocation`.
+        if invocation
+            .target
+            .method()
+            .acc_flags
+            .contains(AccFlags::ACC_STATIC)
+        {
+            ClassInitialization::ensure_initialized(invocation.target.holder(), thread.id())?;
+        }
 
-        thread.stack_mut().push_interpreter(frame)
+        let frame = Self::build_interpreter_frame(invocation)?;
+
+        thread
+            .stack_mut()
+            .push_interpreter(frame)
             .map_err(|e| ExecError::Stack(e))?;
 
         Ok(())
     }
 
-    fn enter_call(
+    fn enter_static_call(
         &mut self,
         thread: &mut JavaThread,
         target: ResolvedMethod,
         arg_slots: usize,
     ) -> ExecResult<()> {
+        // An internal call has a Java caller, so its arguments have not been
+        // materialized yet and still reside on the caller's operand stack.
+        ClassInitialization::ensure_initialized(target.holder(), thread.id())?;
+
         let args = thread
-            .stack_mut()
-            .current_interpreter_mut()
-            .map_err(|e| ExecError::Stack(e))?
-            .take_top_slots(arg_slots)?;
+            .stack()
+            .current_interpreter()
+            .map_err(ExecError::Stack)?
+            .peek_top_slots(arg_slots)?;
 
-        let frame = InterpreterFrame::new(target, &args)?;
-        thread.stack_mut().push_interpreter(frame)
-            .map_err(|e| ExecError::Stack(e))?;
+        let frame = Self::build_interpreter_frame(Invocation { target, args })?;
 
-        Ok(())
+        thread.stack_mut().push_interpreter_call(frame, arg_slots)
+    }
+
+    /// Shared interpreter-frame construction after arguments are materialized.
+    fn build_interpreter_frame(invocation: Invocation) -> ExecResult<InterpreterFrame> {
+        InterpreterFrame::new(invocation.target, &invocation.args)
     }
 }
 
@@ -66,15 +94,8 @@ impl ExecDispatcher {
                         .set_pc(target)?;
                 }
 
-                StepOutcome::Call {
-                    target,
-                    arg_slots,
-                } => {
-                    self.enter_call(
-                        thread,
-                        target,
-                        arg_slots,
-                    )?;
+                StepOutcome::InvokeStatic { target, arg_slots } => {
+                    self.enter_static_call(thread, target, arg_slots)?;
                 }
 
                 StepOutcome::Return(value) => {
@@ -83,9 +104,7 @@ impl ExecDispatcher {
                     if thread.stack().is_empty() {
                         thread.terminate();
 
-                        return Ok(RunOutcome::Terminated(
-                            ThreadExit::Returned(value),
-                        ));
+                        return Ok(RunOutcome::Terminated(ThreadExit::Returned(value)));
                     }
 
                     thread
@@ -97,10 +116,10 @@ impl ExecDispatcher {
 
                 StepOutcome::Throw(exception) => {
                     thread.terminate();
-                
-                    return Ok(RunOutcome::Terminated(
-                        ThreadExit::UncaughtException(exception),
-                    ));
+
+                    return Ok(RunOutcome::Terminated(ThreadExit::UncaughtException(
+                        exception,
+                    )));
                 }
             }
         }

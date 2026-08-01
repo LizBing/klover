@@ -77,6 +77,9 @@ verify-classes:
 		$(CLASSES_OUT)/ReferenceLoads.class \
 		$(CLASSES_OUT)/StoreOps.class \
 		$(CLASSES_OUT)/SimpleAddition.class \
+		$(CLASSES_OUT)/StaticCallee.class \
+		$(CLASSES_OUT)/StaticCaller.class \
+		$(CLASSES_OUT)/StaticNeedsClinit.class \
 		$(CLASSES_OUT)/java/lang/Object.class \
 		$(CLASSES_OUT)/Arith.class
 

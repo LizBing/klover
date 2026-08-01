@@ -9,5 +9,5 @@ pub mod klass;
 pub mod method;
 pub mod normal_klass;
 pub mod prim_klass;
-pub mod resolve_error;
+pub mod oops_errors;
 pub mod symbol_table;

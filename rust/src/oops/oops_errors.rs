@@ -2,8 +2,8 @@
 pub enum ResolveError {
     MismatchCPType,
     MismatchAttrType,
-    InvalidDesc { raw: String },
-    UnknownRefKind { kind: u8 },
+    InvalidDesc(String),
+    UnknownRefKind(u8),
     NotANormal,
 
     // 运行时解析错误（CP 引用解析阶段）
@@ -13,7 +13,19 @@ pub enum ResolveError {
 
     DuplicatedAttr,
 
-    WrongRefType
+    WrongRefType,
+
+    InvalidCPIndex,
+
+    IllegalMethodName(String),
 }
 
 pub type ResolveResult<T> = Result<T, ResolveError>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClassInitError {
+    Erroneous,
+    InvalidTransition,
+}
+
+pub type ClassInitResult<T> = Result<T, ClassInitError>;

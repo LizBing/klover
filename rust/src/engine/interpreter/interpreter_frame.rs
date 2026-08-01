@@ -1,14 +1,17 @@
 use crate::{
     engine::{
-        engine_error::{ExecError, ExecResult},
+        exec_error::{ExecError, ExecResult},
         interpreter::operand_stack::{OperandStack, StackValue},
         outcome::RetValue,
         resolved_method::ResolvedMethod,
         slot::Slot,
     },
-    oops::{attr::Code, cp_entry::CPEntry},
+    oops::{
+        attr::Code,
+        cp_entry::{CPEntry, ResolvedMethodRef},
+        oops_errors::ResolveResult,
+    },
 };
-
 
 #[derive(Debug)]
 pub struct InterpreterFrame {
@@ -16,7 +19,7 @@ pub struct InterpreterFrame {
 
     pc: usize,
     last_pc: usize,
-    
+
     locals: Box<[Slot]>,
     opstack: OperandStack,
 
@@ -24,15 +27,9 @@ pub struct InterpreterFrame {
 }
 
 impl InterpreterFrame {
-    pub fn new(
-        target: ResolvedMethod,
-        args: &[Slot],
-    ) -> ExecResult<Self> {
+    pub fn new(target: ResolvedMethod, args: &[Slot]) -> ExecResult<Self> {
         let method = target.method();
-        let code = method
-            .code
-            .as_ref()
-            .ok_or(ExecError::MethodHasNoCode)?;
+        let code = method.code.as_ref().ok_or(ExecError::MethodHasNoCode)?;
 
         let max_stack = code.max_stack;
         let max_locals = code.max_locals;
@@ -44,8 +41,7 @@ impl InterpreterFrame {
             });
         }
 
-        let mut locals =
-            vec![Slot::EMPTY; max_locals].into_boxed_slice();
+        let mut locals = vec![Slot::EMPTY; max_locals].into_boxed_slice();
 
         locals[..args.len()].copy_from_slice(args);
 
@@ -55,7 +51,7 @@ impl InterpreterFrame {
             last_pc: 0,
             locals,
             opstack: OperandStack::new(max_stack),
-            reserved_slots: max_locals + max_stack
+            reserved_slots: max_locals + max_stack,
         })
     }
 }
@@ -72,17 +68,21 @@ impl InterpreterFrame {
     pub fn constant_pool_entry(&self, index: usize) -> Option<&CPEntry> {
         self.target.holder().constant_pool_entry(index)
     }
+
+    pub fn resolve_method_ref(&self, index: usize) -> ResolveResult<ResolvedMethodRef> {
+        self.target.holder().resolve_method_ref(index)
+    }
 }
 
 impl InterpreterFrame {
     pub fn push(&mut self, slot: Slot) -> ExecResult<()> {
         self.opstack.push_slot(slot)
     }
-    
+
     pub fn pop(&mut self) -> ExecResult<Slot> {
         self.opstack.pop_slot()
     }
-    
+
     pub fn get_local(&self, index: usize) -> ExecResult<Slot> {
         self.locals
             .get(index)
@@ -134,33 +134,20 @@ impl InterpreterFrame {
     pub(crate) fn operand_stack_mut(&mut self) -> &mut OperandStack {
         &mut self.opstack
     }
-    
-    pub fn push_return_value(
-        &mut self,
-        value: RetValue,
-    ) -> ExecResult<()> {
+
+    pub fn push_return_value(&mut self, value: RetValue) -> ExecResult<()> {
         match value {
             RetValue::Void => Ok(()),
-    
-            RetValue::Int(value) => {
-                self.push(Slot::int(value))
-            }
-    
-            RetValue::Float(value) => {
-                self.push(Slot::float(value))
-            }
-    
-            RetValue::Ref(value) => {
-                self.push(Slot::reference(value))
-            }
-    
-            RetValue::Long(value) => {
-                self.push_long(value)
-            }
-    
-            RetValue::Double(value) => {
-                self.push_double(value)
-            }
+
+            RetValue::Int(value) => self.push(Slot::int(value)),
+
+            RetValue::Float(value) => self.push(Slot::float(value)),
+
+            RetValue::Ref(value) => self.push(Slot::reference(value)),
+
+            RetValue::Long(value) => self.push_long(value),
+
+            RetValue::Double(value) => self.push_double(value),
         }
     }
 }
@@ -176,18 +163,15 @@ impl InterpreterFrame {
 
     pub fn set_pc(&mut self, target: usize) -> ExecResult<()> {
         let code_len = self.code().bytecodes.len();
-    
+
         if target >= code_len {
-            return Err(ExecError::InvalidProgramCounter {
-                target,
-                code_len,
-            });
+            return Err(ExecError::InvalidProgramCounter { target, code_len });
         }
-    
+
         self.pc = target;
         Ok(())
     }
-    
+
     pub fn fetch_opcode(&mut self) -> ExecResult<u8> {
         self.last_pc = self.pc;
         self.read_u8()
@@ -199,9 +183,7 @@ impl InterpreterFrame {
             .bytecodes
             .get(self.pc)
             .copied()
-            .ok_or(ExecError::UnexpectedEndOfCode {
-                bci: self.pc,
-            })?;
+            .ok_or(ExecError::UnexpectedEndOfCode { bci: self.pc })?;
 
         self.pc += 1;
         Ok(value)
@@ -212,10 +194,7 @@ impl InterpreterFrame {
     }
 
     pub fn read_u16(&mut self) -> ExecResult<u16> {
-        Ok(u16::from_be_bytes([
-            self.read_u8()?,
-            self.read_u8()?,
-        ]))
+        Ok(u16::from_be_bytes([self.read_u8()?, self.read_u8()?]))
     }
 
     pub fn read_i16(&mut self) -> ExecResult<i16> {
@@ -223,13 +202,12 @@ impl InterpreterFrame {
     }
 
     pub fn branch_target(&self, offset: i16) -> ExecResult<usize> {
-        let target = self
-            .last_pc
-            .checked_add_signed(offset as isize)
-            .ok_or(ExecError::InvalidBranchTarget {
+        let target = self.last_pc.checked_add_signed(offset as isize).ok_or(
+            ExecError::InvalidBranchTarget {
                 from: self.last_pc,
                 offset: offset as i32,
-            })?;
+            },
+        )?;
 
         if target >= self.code().bytecodes.len() {
             return Err(ExecError::InvalidBranchTarget {
@@ -243,7 +221,11 @@ impl InterpreterFrame {
 }
 
 impl InterpreterFrame {
-    pub fn take_top_slots(&mut self, arg_slots: usize) -> ExecResult<Vec<Slot>> {
-        self.opstack.take_top_slots(arg_slots)
+    pub fn peek_top_slots(&self, arg_slots: usize) -> ExecResult<Vec<Slot>> {
+        self.opstack.peek_top_slots(arg_slots)
+    }
+
+    pub fn drop_top_slots(&mut self, arg_slots: usize) -> ExecResult<()> {
+        self.opstack.drop_top_slots(arg_slots)
     }
 }

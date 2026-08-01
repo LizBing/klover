@@ -1,16 +1,22 @@
-use crate::{class_loader::ms_api::MSRef, oops::{method::Method, normal_klass::NormalKlass}};
+use crate::{
+    class_loader::ms_api::MSRef,
+    oops::{cp_entry::ResolvedMethodRef, method::Method, normal_klass::NormalKlass},
+};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ResolvedMethod {
     holder: MSRef<NormalKlass>,
-    method: MSRef<Method>
+    method: MSRef<Method>,
+}
+
+impl From<ResolvedMethodRef> for ResolvedMethod {
+    fn from(value: ResolvedMethodRef) -> Self {
+        Self::new(value.holder, value.method)
+    }
 }
 
 impl ResolvedMethod {
-    pub fn new(
-        holder: MSRef<NormalKlass>,
-        method: MSRef<Method>,
-    ) -> Self {
+    pub fn new(holder: MSRef<NormalKlass>, method: MSRef<Method>) -> Self {
         Self { holder, method }
     }
 

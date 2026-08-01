@@ -6,7 +6,7 @@ use crate::{
         cp_entry::CPEntry,
         desc::FieldDesc,
         field::Field,
-        resolve_error::ResolveResult
+        oops_errors::ResolveResult
     }
 };
 

@@ -7,6 +7,7 @@ use klover::{
     engine::{
         call::Invocation,
         exec_dispatcher::ExecDispatcher,
+        exec_error::ExecResult,
         outcome::{RetValue, RunOutcome, ThreadExit},
         resolved_method::ResolvedMethod,
         slot::Slot,
@@ -40,6 +41,15 @@ pub fn run(
     descriptor: &str,
     args: Vec<Slot>,
 ) -> ThreadExit {
+    try_run(holder, name, descriptor, args).unwrap()
+}
+
+pub fn try_run(
+    holder: &MSRef<NormalKlass>,
+    name: &str,
+    descriptor: &str,
+    args: Vec<Slot>,
+) -> ExecResult<ThreadExit> {
     let method = holder
         .find_declared_method(name, descriptor)
         .unwrap_or_else(|| panic!("method not found: {name}{descriptor}"));
@@ -50,14 +60,12 @@ pub fn run(
     thread.start().unwrap();
 
     let mut dispatcher = ExecDispatcher::new();
-    dispatcher
-        .enter_root(&mut thread, Invocation { target, args })
-        .unwrap();
+    dispatcher.enter_root(&mut thread, Invocation { target, args })?;
 
     loop {
-        match dispatcher.run_quantum(&mut thread, 64).unwrap() {
+        match dispatcher.run_quantum(&mut thread, 64)? {
             RunOutcome::QuantumExpired => continue,
-            RunOutcome::Terminated(exit) => return exit,
+            RunOutcome::Terminated(exit) => return Ok(exit),
         }
     }
 }

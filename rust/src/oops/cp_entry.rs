@@ -1,24 +1,49 @@
-use std::{cell::OnceCell, sync::OnceLock};
+use std::{cell::OnceCell, ptr::NonNull, sync::OnceLock};
 
 use crate::{
-    class_loader::{bootstrap_cld::BootstrapCLD, cld::ClassLoaderData, ms_api::MSRef}, class_parser::cp_info::ConstantPoolInfo, gc_bindings::oop_handle::{KLASS_OOP_STORAGE_ID, OOPHandle}, oops::{
-        desc::MethodDesc, field::Field, klass::Klass, method::Method, normal_klass::NormalKlass, resolve_error::{ResolveError, ResolveResult}, symbol_table::{SymbolHandle, SymbolTable}
-    }
+    class_loader::{bootstrap_cld::BootstrapCLD, cld::ClassLoaderData, ms_api::MSRef},
+    class_parser::cp_info::ConstantPoolInfo,
+    gc_bindings::oop_handle::{OOPHandle, KLASS_OOP_STORAGE_ID},
+    oops::{
+        desc::MethodDesc,
+        field::Field,
+        klass::Klass,
+        method::Method,
+        normal_klass::NormalKlass,
+        oops_errors::{ResolveError, ResolveResult},
+        symbol_table::{SymbolHandle, SymbolTable},
+    },
 };
 
 #[derive(Debug)]
-enum ResolvedRef {
-    Field(MSRef<NormalKlass>, MSRef<Field>),
-    Method(MSRef<NormalKlass>, MSRef<Method>)
+pub struct SymbolicMemberRef {
+    class: MSRef<ClassCPEntry>,
+    name: SymbolHandle,
+    desc: SymbolHandle,
+}
+
+#[derive(Debug, Clone)]
+pub struct ResolvedFieldRef {
+    pub holder: MSRef<NormalKlass>,
+    pub field: MSRef<Field>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ResolvedMethodRef {
+    pub holder: MSRef<NormalKlass>,
+    pub method: MSRef<Method>,
+}
+
+#[derive(Clone, Debug)]
+pub struct ResolvedInterfaceMethodRef {
+    pub holder: MSRef<NormalKlass>,
+    pub method: MSRef<Method>,
 }
 
 #[derive(Debug)]
-pub struct CPRefEntry {
-    class_name: SymbolHandle,
-    name: SymbolHandle,
-    desc: SymbolHandle,
-
-    resolved: OnceLock<ResolvedRef>,
+pub struct CPRefEntry<R> {
+    symbolic: SymbolicMemberRef,
+    resolved: OnceLock<ResolveResult<R>>,
 }
 
 fn resolve_name_and_type(
@@ -41,10 +66,12 @@ fn resolve_name_and_type(
                 let name = resolve_symbol(*name_index as usize, cp, parsed_cp)?;
                 let desc = resolve_symbol(*desc_index as usize, cp, parsed_cp)?;
 
-                cp[idx].set(CPEntry::NameAndType {
-                    name: name.clone(),
-                    desc: desc.clone(),
-                }).unwrap();
+                cp[idx]
+                    .set(CPEntry::NameAndType {
+                        name: name.clone(),
+                        desc: desc.clone(),
+                    })
+                    .unwrap();
 
                 Ok((name, desc))
             }
@@ -54,7 +81,7 @@ fn resolve_name_and_type(
     }
 }
 
-impl CPRefEntry {
+impl<R> CPRefEntry<R> {
     fn build(
         info: &ConstantPoolInfo,
         cp: &[OnceCell<CPEntry>],
@@ -65,14 +92,14 @@ impl CPRefEntry {
                 class_index,
                 name_and_type_index,
             } => {
-                let class_name = resolve_class_symbol(*class_index as usize, cp, parsed_cp)?;
+                let class = resolve_class_entry(*class_index as usize, cp, parsed_cp)?;
                 let (name, desc) =
                     resolve_name_and_type(*name_and_type_index as usize, cp, parsed_cp)?;
 
+                let symbolic = SymbolicMemberRef { class, name, desc };
+
                 Ok(Self {
-                    class_name,
-                    name,
-                    desc,
+                    symbolic,
                     resolved: OnceLock::new(),
                 })
             }
@@ -81,14 +108,14 @@ impl CPRefEntry {
                 class_index,
                 name_and_type_index,
             } => {
-                let class_name = resolve_class_symbol(*class_index as usize, cp, parsed_cp)?;
+                let class = resolve_class_entry(*class_index as usize, cp, parsed_cp)?;
                 let (name, desc) =
                     resolve_name_and_type(*name_and_type_index as usize, cp, parsed_cp)?;
 
+                let symbolic = SymbolicMemberRef { class, name, desc };
+
                 Ok(Self {
-                    class_name,
-                    name,
-                    desc,
+                    symbolic,
                     resolved: OnceLock::new(),
                 })
             }
@@ -97,14 +124,14 @@ impl CPRefEntry {
                 class_index,
                 name_and_type_index,
             } => {
-                let class_name = resolve_class_symbol(*class_index as usize, cp, parsed_cp)?;
+                let class = resolve_class_entry(*class_index as usize, cp, parsed_cp)?;
                 let (name, desc) =
                     resolve_name_and_type(*name_and_type_index as usize, cp, parsed_cp)?;
 
+                let symbolic = SymbolicMemberRef { class, name, desc };
+
                 Ok(Self {
-                    class_name,
-                    name,
-                    desc,
+                    symbolic,
                     resolved: OnceLock::new(),
                 })
             }
@@ -114,19 +141,57 @@ impl CPRefEntry {
     }
 }
 
-impl CPRefEntry {
-    pub fn get_fieldref(&self, cld: Option<&ClassLoaderData>) -> ResolveResult<(MSRef<NormalKlass>, MSRef<Field>)> {
-        unimplemented!()
+impl CPRefEntry<ResolvedFieldRef> {}
+
+impl CPRefEntry<ResolvedMethodRef> {
+    pub(super) fn resolve(&self, referrer: &NormalKlass) -> ResolveResult<ResolvedMethodRef> {
+        self.resolved
+            .get_or_init(|| self.resolve_slow_path(referrer))
+            .clone()
     }
-    
-    pub fn get_methodref(&self, cld: Option<&ClassLoaderData>) -> ResolveResult<(MSRef<NormalKlass>, MSRef<Method>)> {
-        unimplemented!()
-    }
-    
-    pub fn get_interface_methodref(&self, cld: Option<&ClassLoaderData>) -> ResolveResult<(MSRef<NormalKlass>, MSRef<Method>)> {
-        unimplemented!()
+
+    fn resolve_slow_path(&self, referrer: &NormalKlass) -> ResolveResult<ResolvedMethodRef> {
+        let target = self.symbolic.class.get(referrer.cld())?;
+
+        let mut current = target.as_normal_ref().ok_or(ResolveError::NotANormal)?;
+
+        if current.is_interface() {
+            return Err(ResolveError::WrongRefType);
+        }
+
+        if self.symbolic.name.utf8() == "<clinit>" {
+            return Err(ResolveError::IllegalMethodName("<clinit>".into()));
+        }
+
+        if self.symbolic.name.utf8() == "<init>" {
+            let method = current
+                .find_declared_method_symbol(&self.symbolic.name, &self.symbolic.desc)
+                .ok_or(ResolveError::MethodNotFound)?;
+
+            return Ok(ResolvedMethodRef {
+                holder: current,
+                method,
+            });
+        }
+
+        loop {
+            if let Some(method) =
+                current.find_declared_method_symbol(&self.symbolic.name, &self.symbolic.desc)
+            {
+                return Ok(ResolvedMethodRef {
+                    holder: current,
+                    method,
+                });
+            }
+
+            current = current
+                .super_klass_ref()
+                .ok_or(ResolveError::MethodNotFound)?;
+        }
     }
 }
+
+impl CPRefEntry<ResolvedInterfaceMethodRef> {}
 
 #[derive(Debug)]
 pub struct ClassCPEntry {
@@ -148,7 +213,7 @@ impl ClassCPEntry {
             );
         }
     }
-    
+
     pub fn get(&self, cld: Option<&ClassLoaderData>) -> ResolveResult<MSRef<Klass>> {
         if let Some(x) = self.resolved.get() {
             return Ok(x.clone());
@@ -156,7 +221,7 @@ impl ClassCPEntry {
 
         let loaded = match cld {
             Some(x) => x.load_class(self.name.utf8()),
-            None => BootstrapCLD::find_class(self.name.utf8())
+            None => BootstrapCLD::find_class(self.name.utf8()),
         }
         .map_err(|_| ResolveError::ClassNotFound)?;
 
@@ -188,11 +253,11 @@ impl StringCPEntry {
 pub enum CPEntry {
     Class(ClassCPEntry),
 
-    FieldRef(CPRefEntry),
+    FieldRef(CPRefEntry<ResolvedFieldRef>),
 
-    MethodRef(CPRefEntry),
+    MethodRef(CPRefEntry<ResolvedMethodRef>),
 
-    InterfaceMethodRef(CPRefEntry),
+    InterfaceMethodRef(CPRefEntry<ResolvedInterfaceMethodRef>),
 
     StringConstant(StringCPEntry),
 
@@ -230,16 +295,31 @@ fn resolve_class_symbol(
             ConstantPoolInfo::ClassInfo { name_index } => {
                 let name = resolve_symbol(*name_index as usize, cp, parsed_cp)?;
 
-                cp[idx].set(CPEntry::Class(ClassCPEntry {
-                    name: name.clone(),
-                    resolved: OnceLock::new(),
-                })).unwrap();
+                cp[idx]
+                    .set(CPEntry::Class(ClassCPEntry {
+                        name: name.clone(),
+                        resolved: OnceLock::new(),
+                    }))
+                    .unwrap();
 
                 Ok(name)
             }
 
             _ => Err(ResolveError::MismatchCPType),
         },
+    }
+}
+
+fn resolve_class_entry(
+    index: usize,
+    cp: &[OnceCell<CPEntry>],
+    parsed_cp: &[ConstantPoolInfo],
+) -> ResolveResult<MSRef<ClassCPEntry>> {
+    resolve_class_symbol(index, cp, parsed_cp)?;
+
+    match cp[index].get() {
+        Some(CPEntry::Class(entry)) => unsafe { Ok(MSRef::from_raw(NonNull::from(entry))) },
+        _ => Err(ResolveError::MismatchCPType),
     }
 }
 
@@ -299,12 +379,10 @@ impl CPEntry {
                 Self::InterfaceMethodRef(entry)
             }
 
-            ConstantPoolInfo::StringInfo { string_index } => {
-                Self::StringConstant(StringCPEntry {
-                    raw: resolve_symbol(*string_index as usize, cp, parsed_cp)?,
-                    resolved: OOPHandle::new(KLASS_OOP_STORAGE_ID),
-                })
-            }
+            ConstantPoolInfo::StringInfo { string_index } => Self::StringConstant(StringCPEntry {
+                raw: resolve_symbol(*string_index as usize, cp, parsed_cp)?,
+                resolved: OOPHandle::new(KLASS_OOP_STORAGE_ID),
+            }),
 
             ConstantPoolInfo::IntegerInfo { value } => Self::Integer(*value),
 

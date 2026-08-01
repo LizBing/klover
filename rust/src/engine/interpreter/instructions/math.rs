@@ -1,5 +1,5 @@
 use crate::engine::{
-    engine_error::{ExecResult, JavaExceptionKind},
+    exec_error::{ExecResult, JavaExceptionKind},
     interpreter::interpreter_frame::InterpreterFrame,
     outcome::{PendingException, StepOutcome},
     slot::Slot,

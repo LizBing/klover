@@ -1,4 +1,4 @@
-use crate::{gc_bindings::oop_handle::NObjPtr, engine::engine_error::{ExecError, ExecResult}};
+use crate::{gc_bindings::oop_handle::NObjPtr, engine::exec_error::{ExecError, ExecResult}};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SlotKind {

@@ -15,7 +15,7 @@ use crate::{
     oops::{
         klass::Klass,
         normal_klass::{NormalKlass, UnlinkedNormalKlass},
-        resolve_error::ResolveError,
+        oops_errors::ResolveError,
         symbol_table::{SymbolHandle, SymbolTable},
     },
 };

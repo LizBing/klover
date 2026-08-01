@@ -7,7 +7,7 @@ use crate::{
         attr::ConstantValue,
         cp_entry::{CPEntry, get_utf8},
         desc::FieldDesc,
-        resolve_error::ResolveResult,
+        oops_errors::ResolveResult,
         symbol_table::SymbolHandle,
     },
 };

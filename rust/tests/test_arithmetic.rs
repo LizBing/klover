@@ -4,7 +4,7 @@ use klover::{
     class_loader::{bootstrap_cld::BootstrapCLD, ms_api::MSRef},
     engine::{
         call::Invocation,
-        engine_error::JavaExceptionKind,
+        exec_error::JavaExceptionKind,
         exec_dispatcher::ExecDispatcher,
         outcome::{PendingException, RetValue, RunOutcome, ThreadExit},
         resolved_method::ResolvedMethod,
