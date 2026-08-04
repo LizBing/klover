@@ -38,9 +38,10 @@ fn allocate_slice_from_vec<T>(msa: &MSAllocator, vec: Vec<T>) -> MSBox<[T]> {
     unsafe { MSBox::from_raw(uninit.assume_init_mut()) }
 }
 
-/// 类加载完成、`set_super` 调用后构建的完整字段信息。
+/// 类加载过程中构建的字段信息。
 ///
-/// 此时 instance 字段的 offset 已含父类偏移，可用于 `getfield`/`putfield`。
+/// Instance 字段的 offset 只描述本类声明字段在本类 instance 部分内的局部偏移。
+/// 父类 instance 大小由 `NormalKlass::obj_layout` 组合到完整对象布局中。
 #[derive(Debug)]
 pub struct Fields {
     __: PhantomData<()>,
