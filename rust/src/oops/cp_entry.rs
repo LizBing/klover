@@ -3,7 +3,7 @@ use std::{cell::OnceCell, ptr::NonNull, sync::OnceLock};
 use crate::{
     class_loader::{bootstrap_cld::BootstrapCLD, cld::ClassLoaderData, ms_api::MSRef},
     class_parser::cp_info::ConstantPoolInfo,
-    gc_bindings::oop_handle::{OOPHandle, KLASS_OOP_STORAGE_ID},
+    gc_bindings::oop_handle::{KLASS_OOP_STORAGE_ID, OOPHandle},
     oops::{
         desc::MethodDesc,
         field::Field,
@@ -141,7 +141,59 @@ impl<R> CPRefEntry<R> {
     }
 }
 
-impl CPRefEntry<ResolvedFieldRef> {}
+impl CPRefEntry<ResolvedFieldRef> {
+    pub(super) fn resolve(&self, referrer: &NormalKlass) -> ResolveResult<ResolvedFieldRef> {
+        self.resolved
+            .get_or_init(|| self.resolve_slow_path(referrer))
+            .clone()
+    }
+
+    fn resolve_slow_path(&self, referrer: &NormalKlass) -> ResolveResult<ResolvedFieldRef> {
+        let target = self.symbolic.class.get(referrer.cld())?;
+        let target = target.as_normal_ref().ok_or(ResolveError::NotANormal)?;
+        let mut visited = Vec::new();
+
+        Self::lookup_field(
+            target,
+            &self.symbolic.name,
+            &self.symbolic.desc,
+            &mut visited,
+        )
+        .ok_or(ResolveError::FieldNotFound)
+    }
+
+    /// JVMS 5.4.3.2 field lookup order: the current type, its direct
+    /// superinterfaces recursively, and finally its superclass recursively.
+    /// The returned holder is always the type that actually declares the field.
+    fn lookup_field(
+        current: MSRef<NormalKlass>,
+        name: &SymbolHandle,
+        desc: &SymbolHandle,
+        visited: &mut Vec<MSRef<NormalKlass>>,
+    ) -> Option<ResolvedFieldRef> {
+        // 排除菱形继承
+        if visited.iter().any(|seen| seen.equals(&current)) {
+            return None;
+        }
+        visited.push(current.clone());
+
+        if let Some(field) = current.find_declared_field_symbol(name, desc) {
+            return Some(ResolvedFieldRef {
+                holder: current,
+                field,
+            });
+        }
+
+        for interface in current.direct_interfaces() {
+            if let Some(resolved) = Self::lookup_field(interface.clone(), name, desc, visited) {
+                return Some(resolved);
+            }
+        }
+
+        let super_klass = current.super_klass_ref()?;
+        Self::lookup_field(super_klass, name, desc, visited)
+    }
+}
 
 impl CPRefEntry<ResolvedMethodRef> {
     pub(super) fn resolve(&self, referrer: &NormalKlass) -> ResolveResult<ResolvedMethodRef> {

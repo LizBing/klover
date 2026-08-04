@@ -73,13 +73,18 @@ verify-classes:
 		$(CLASSES_OUT)/ArithmeticOps.class \
 		$(CLASSES_OUT)/ConstantOps.class \
 		$(CLASSES_OUT)/LdcWideOps.class \
+		$(CLASSES_OUT)/NumericConstantValues.class \
 		$(CLASSES_OUT)/ControlFlow.class \
+		$(CLASSES_OUT)/ClassInitScenarios.class \
 		$(CLASSES_OUT)/ReferenceLoads.class \
 		$(CLASSES_OUT)/StoreOps.class \
 		$(CLASSES_OUT)/SimpleAddition.class \
 		$(CLASSES_OUT)/StaticCallee.class \
 		$(CLASSES_OUT)/StaticCaller.class \
+		$(CLASSES_OUT)/StaticFields.class \
+		$(CLASSES_OUT)/InterfaceStaticFields.class \
 		$(CLASSES_OUT)/StaticNeedsClinit.class \
+		$(CLASSES_OUT)/StringConstantValue.class \
 		$(CLASSES_OUT)/java/lang/Object.class \
 		$(CLASSES_OUT)/Arith.class
 

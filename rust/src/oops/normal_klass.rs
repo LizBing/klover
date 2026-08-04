@@ -1,8 +1,6 @@
 use std::{
-    boxed,
     cell::OnceCell,
-    ops::Deref,
-    ptr::{null, NonNull},
+    ptr::{NonNull, null},
 };
 
 use crate::{
@@ -12,11 +10,11 @@ use crate::{
         ms_api::{MSAllocator, MSBox, MSRef},
     },
     class_parser::{class_file::ClassFile, cp_info::ConstantPoolInfo, method_info::MethodInfo},
-    engine::outcome::PendingException,
+    engine::{exec_error::ExecResult, outcome::PendingException, slot::Slot},
     gc_bindings::obj_layout::ObjLayout,
     oops::{
         acc_flags::AccFlags,
-        cp_entry::{CPEntry, ClassCPEntry, ResolvedMethodRef},
+        cp_entry::{CPEntry, ClassCPEntry, ResolvedFieldRef, ResolvedMethodRef},
         field::Field,
         fields::Fields,
         klass::Klass,
@@ -36,7 +34,7 @@ pub struct UnlinkedNormalKlass {
 
     constant_pool: MSBox<[OnceCell<CPEntry>]>,
 
-    interfaces: MSBox<[MSRef<ClassCPEntry>]>,
+    interfaces: Vec<MSRef<ClassCPEntry>>,
 
     fields: Fields,
 
@@ -70,18 +68,35 @@ pub fn cp_slice_get(cp_slice: &[OnceCell<CPEntry>], idx: usize) -> Option<&CPEnt
 fn build_interfaces(
     parsed_ifaces: &[u16],
     cp_slice: &[OnceCell<CPEntry>],
-    msa: &MSAllocator,
-) -> ResolveResult<MSBox<[MSRef<ClassCPEntry>]>> {
-    let iface_len = parsed_ifaces.len();
-    let uninit = msa.calloc(iface_len);
+) -> ResolveResult<Vec<MSRef<ClassCPEntry>>> {
+    let mut ifaces = Vec::with_capacity(parsed_ifaces.len());
 
-    for (i, idx) in parsed_ifaces.iter().enumerate() {
+    for idx in parsed_ifaces {
         match cp_slice_get(cp_slice, *idx as usize) {
             Some(CPEntry::Class(entry)) => unsafe {
-                uninit[i].write(MSRef::from_raw(entry.into()))
+                ifaces.push(MSRef::from_raw(entry.into()));
             },
             _ => return Err(ResolveError::MismatchCPType),
         };
+    }
+
+    Ok(ifaces)
+}
+
+fn link_interfaces(
+    entries: &[MSRef<ClassCPEntry>],
+    cld: Option<&ClassLoaderData>,
+    msa: &MSAllocator,
+) -> ResolveResult<MSBox<[MSRef<NormalKlass>]>> {
+    let uninit = msa.calloc(entries.len());
+
+    for (i, entry) in entries.iter().enumerate() {
+        let klass = entry.get(cld)?;
+        let interface = klass.as_normal_ref().ok_or(ResolveError::NotANormal)?;
+        if !interface.is_interface() {
+            return Err(ResolveError::WrongRefType);
+        }
+        uninit[i].write(interface);
     }
 
     unsafe { Ok(MSBox::from_raw(uninit.assume_init_mut())) }
@@ -127,7 +142,7 @@ impl UnlinkedNormalKlass {
             })
         };
 
-        let interfaces = build_interfaces(&cf.interfaces, &cp, msa)?;
+        let interfaces = build_interfaces(&cf.interfaces, &cp)?;
 
         let fields = Fields::build(&cf.fields, &cp, msa)?;
 
@@ -190,7 +205,7 @@ pub struct NormalKlass {
 
     constant_pool: MSBox<[OnceCell<CPEntry>]>,
 
-    interfaces: MSBox<[MSRef<ClassCPEntry>]>,
+    interfaces: MSBox<[MSRef<NormalKlass>]>,
 
     fields: Fields,
 
@@ -207,7 +222,7 @@ impl NormalKlass {
         cld: Option<&ClassLoaderData>,
     ) -> ResolveResult<MSBox<Klass>> {
         let msa = match cld {
-            Some(x) => unsafe { &x.ms_allocator },
+            Some(x) => &x.ms_allocator,
             None => BootstrapCLD::bs_msa(),
         };
 
@@ -236,6 +251,11 @@ impl NormalKlass {
             }
         }
 
+        // A linked class keeps direct interfaces as resolved metadata references.
+        // Field resolution can then traverse the interface graph without exposing
+        // or re-reading symbolic constant-pool entries.
+        let interfaces = link_interfaces(&unlinked.interfaces, cld, msa)?;
+
         let cld_ptr = match cld {
             Some(x) => Some(x.into()),
             None => None,
@@ -247,7 +267,7 @@ impl NormalKlass {
             super_klass,
             cld: cld_ptr,
             constant_pool: unlinked.constant_pool,
-            interfaces: unlinked.interfaces,
+            interfaces,
             fields: unlinked.fields,
             methods: unlinked.methods,
             obj_layout,
@@ -353,6 +373,42 @@ impl NormalKlass {
 }
 
 impl NormalKlass {
+    pub(crate) fn direct_interfaces(&self) -> &[MSRef<NormalKlass>] {
+        &self.interfaces
+    }
+
+    pub fn find_declared_field_symbol(
+        &self,
+        name: &SymbolHandle,
+        desc: &SymbolHandle,
+    ) -> Option<MSRef<Field>> {
+        let field = self.fields.find_declared(name, desc)?;
+        Some(unsafe { MSRef::from_raw(NonNull::from(field)) })
+    }
+
+    pub fn resolve_field_ref(&self, index: usize) -> ResolveResult<ResolvedFieldRef> {
+        let entry = self
+            .constant_pool_entry(index)
+            .ok_or(ResolveError::InvalidCPIndex)?;
+
+        match entry {
+            CPEntry::FieldRef(entry) => entry.resolve(self),
+            _ => Err(ResolveError::MismatchCPType),
+        }
+    }
+
+    pub fn read_static_field(&self, field: &Field) -> ExecResult<Vec<Slot>> {
+        self.fields.read_static(field)
+    }
+
+    pub fn write_static_field(&self, field: &Field, slots: &[Slot]) -> ExecResult<()> {
+        self.fields.write_static(field, slots)
+    }
+
+    pub fn initialize_static_constant_values(&self) -> ExecResult<()> {
+        self.fields.initialize_constant_values()
+    }
+
     pub fn find_declared_method(&self, name: &str, desc: &str) -> Option<MSRef<Method>> {
         let name = SymbolTable::intern(name);
         let desc = SymbolTable::intern(desc);
