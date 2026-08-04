@@ -1,8 +1,9 @@
-pub mod branches;
 pub mod calls;
+pub mod comparisons;
 pub mod constants;
 pub mod control;
 pub mod loads;
 pub mod math;
+pub mod references;
 pub mod stack;
 pub mod stores;

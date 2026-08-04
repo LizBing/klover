@@ -1,7 +1,7 @@
 mod test_harness;
 
-use klover::engine::{exec_error::ExecError, slot::Slot};
-use test_harness::{expect_int, expect_long, load_class, run, try_run};
+use klover::engine::slot::Slot;
+use test_harness::{expect_int, expect_long, load_class, run};
 
 #[test]
 fn invokestatic_passes_category_one_arguments_and_returns_int() {
@@ -43,11 +43,12 @@ fn invokestatic_accepts_void_return() {
 }
 
 #[test]
-fn invokestatic_does_not_skip_declared_class_initializer() {
+fn invokestatic_runs_declared_class_initializer_before_the_call() {
     let holder = load_class("StaticCaller");
-    let error = try_run(&holder, "callNeedsClinit", "()I", vec![]).unwrap_err();
-
-    assert!(matches!(error, ExecError::ClassInitializerNotSupported));
+    assert_eq!(
+        expect_int(run(&holder, "callNeedsClinit", "()I", vec![])),
+        1
+    );
 }
 
 #[test]
@@ -55,7 +56,6 @@ fn root_static_invocation_uses_the_same_initialization_path() {
     let holder = load_class("StaticNeedsClinit");
 
     for _ in 0..2 {
-        let error = try_run(&holder, "value", "()I", vec![]).unwrap_err();
-        assert!(matches!(error, ExecError::ClassInitializerNotSupported));
+        assert_eq!(expect_int(run(&holder, "value", "()I", vec![])), 1);
     }
 }

@@ -2,7 +2,8 @@ use crate::{
     engine::{
         exec_error::{ExecError, ExecResult},
         interpreter::instructions::{
-            branches::*, calls::*, constants::*, control::*, loads::*, math::*, stack::*, stores::*,
+            calls::*, comparisons::*, constants::*, control::*, loads::*, math::*, references::*,
+            stack::*, stores::*,
         },
         outcome::StepOutcome,
     },
@@ -168,7 +169,9 @@ impl Interpreter {
             0xa4 => if_icmple(frame),
             0xa7 => goto(frame),
 
-            // Method invocation.
+            // Static fields and method invocation.
+            0xb2 => getstatic(frame),
+            0xb3 => putstatic(frame),
             0xb8 => invokestatic(frame),
 
             // Method returns.

@@ -27,7 +27,6 @@ pub enum ExecError {
     Stack(StackError),
     Resolve(ResolveError),
     ClassInitialization(ClassInitError),
-    ClassInitializerNotSupported,
     InvalidClassInitializerReturn,
     InvalidClassInitializationFrameState,
     IncompatibleStaticCall,

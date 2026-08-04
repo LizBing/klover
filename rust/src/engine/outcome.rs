@@ -1,6 +1,7 @@
 use crate::{
     engine::{exec_error::JavaExceptionKind, resolved_method::ResolvedMethod},
     gc_bindings::oop_handle::NObjPtr,
+    oops::cp_entry::ResolvedFieldRef,
 };
 
 #[derive(Debug)]
@@ -13,7 +14,7 @@ pub enum RetValue {
     Ref(NObjPtr),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum PendingException {
     JavaObj(NObjPtr),
     JVMGen(JavaExceptionKind),
@@ -23,6 +24,8 @@ pub enum PendingException {
 pub enum StepOutcome {
     Continue,
     Branch(usize),
+    GetStatic(ResolvedFieldRef),
+    PutStatic(ResolvedFieldRef),
     /// The target is resolved, while its arguments still reside on the
     /// caller's operand stack. The dispatcher initializes the target class
     /// and materializes an `Invocation` before entering the method.

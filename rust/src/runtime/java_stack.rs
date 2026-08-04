@@ -1,5 +1,6 @@
 use crate::{
     engine::{
+        class_init::ClassInitFrame,
         exec_error::{ExecError, ExecResult},
         interpreter::interpreter_frame::InterpreterFrame,
     },
@@ -9,12 +10,16 @@ use crate::{
 #[derive(Debug)]
 pub enum JavaFrame {
     Interpreter(InterpreterFrame),
+    ClassInit(ClassInitFrame),
 }
 
 impl JavaFrame {
     fn reserved_slots(&self) -> usize {
         match self {
             Self::Interpreter(x) => x.reserved_slots(),
+            // Control frames still consume one logical slot so an initialization
+            // cycle cannot bypass the stack limit with zero-sized frames.
+            Self::ClassInit(_) => 1,
         }
     }
 }
@@ -61,6 +66,22 @@ impl JavaStack {
         Ok(())
     }
 
+    pub fn push_class_init(&mut self, frame: ClassInitFrame) -> StackResult<()> {
+        let required = 1;
+        let new_used = self
+            .used_slots
+            .checked_add(required)
+            .ok_or(StackError::Overflow)?;
+
+        if new_used > self.max_slots {
+            return Err(StackError::Overflow);
+        }
+
+        self.used_slots = new_used;
+        self.frames.push(JavaFrame::ClassInit(frame));
+        Ok(())
+    }
+
     /// Commit an already prepared interpreter call. Capacity and caller
     /// operand shape are checked before either stack is mutated.
     pub fn push_interpreter_call(
@@ -97,14 +118,32 @@ impl JavaStack {
     pub fn current_interpreter(&self) -> StackResult<&InterpreterFrame> {
         match self.frames.last() {
             Some(JavaFrame::Interpreter(frame)) => Ok(frame),
-            None => Err(StackError::Empty),
+            _ => Err(StackError::Empty),
         }
     }
 
     pub fn current_interpreter_mut(&mut self) -> StackResult<&mut InterpreterFrame> {
         match self.frames.last_mut() {
             Some(JavaFrame::Interpreter(frame)) => Ok(frame),
-            None => Err(StackError::Empty),
+            _ => Err(StackError::Empty),
+        }
+    }
+
+    pub fn current_is_class_init(&self) -> bool {
+        matches!(self.frames.last(), Some(JavaFrame::ClassInit(_)))
+    }
+
+    pub fn current_class_init(&self) -> StackResult<&ClassInitFrame> {
+        match self.frames.last() {
+            Some(JavaFrame::ClassInit(frame)) => Ok(frame),
+            _ => Err(StackError::Empty),
+        }
+    }
+
+    pub fn current_class_init_mut(&mut self) -> StackResult<&mut ClassInitFrame> {
+        match self.frames.last_mut() {
+            Some(JavaFrame::ClassInit(frame)) => Ok(frame),
+            _ => Err(StackError::Empty),
         }
     }
 }

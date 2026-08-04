@@ -8,7 +8,7 @@ use crate::{
     },
     oops::{
         attr::Code,
-        cp_entry::{CPEntry, ResolvedMethodRef},
+        cp_entry::{CPEntry, ResolvedFieldRef, ResolvedMethodRef},
         oops_errors::ResolveResult,
     },
 };
@@ -71,6 +71,10 @@ impl InterpreterFrame {
 
     pub fn resolve_method_ref(&self, index: usize) -> ResolveResult<ResolvedMethodRef> {
         self.target.holder().resolve_method_ref(index)
+    }
+
+    pub fn resolve_field_ref(&self, index: usize) -> ResolveResult<ResolvedFieldRef> {
+        self.target.holder().resolve_field_ref(index)
     }
 }
 
@@ -227,5 +231,13 @@ impl InterpreterFrame {
 
     pub fn drop_top_slots(&mut self, arg_slots: usize) -> ExecResult<()> {
         self.opstack.drop_top_slots(arg_slots)
+    }
+
+    pub fn push_slots(&mut self, slots: &[Slot]) -> ExecResult<()> {
+        match slots {
+            [slot] => self.opstack.push_slot(*slot),
+            [high, low] => self.opstack.push_value(StackValue::Category2(*high, *low)),
+            _ => Err(ExecError::InvalidFieldValue),
+        }
     }
 }

@@ -24,6 +24,10 @@ impl ResolvedMethod {
         &self.holder
     }
 
+    pub fn holder_ref(&self) -> MSRef<NormalKlass> {
+        self.holder.clone()
+    }
+
     pub fn method(&self) -> &Method {
         &self.method
     }

@@ -1,6 +1,5 @@
 use crate::engine::{
-    exec_error::ExecResult, interpreter::interpreter_frame::InterpreterFrame,
-    outcome::StepOutcome,
+    exec_error::ExecResult, interpreter::interpreter_frame::InterpreterFrame, outcome::StepOutcome,
 };
 
 fn branch_if(f: &mut InterpreterFrame, condition: bool) -> ExecResult<StepOutcome> {
