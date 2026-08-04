@@ -35,6 +35,38 @@ fn class_init_frames_resume_suspended_static_field_operations() {
 }
 
 #[test]
+fn default_method_interfaces_are_initialized_in_recursive_order() {
+    let holder = load_class("ClassInitScenarios");
+
+    // RootDefaultInterface runs before ChildDefaultInterface, then the class.
+    // PlainParentInterface declares no default method and must remain untouched.
+    assert_eq!(
+        expect_int(run(
+            &holder,
+            "defaultInterfaceInitializationOrder",
+            "()I",
+            vec![],
+        )),
+        123
+    );
+}
+
+#[test]
+fn initializing_an_interface_does_not_initialize_its_parent() {
+    let holder = load_class("ClassInitScenarios");
+
+    assert_eq!(
+        expect_int(run(
+            &holder,
+            "initializeInterfaceWithoutParent",
+            "()I",
+            vec![],
+        )),
+        4
+    );
+}
+
+#[test]
 fn failed_clinit_marks_the_class_erroneous() {
     let holder = load_class("ClassInitScenarios");
 

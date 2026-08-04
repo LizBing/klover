@@ -171,13 +171,10 @@ impl ExecDispatcher {
             ClassInitAction::AlreadyInitialized | ClassInitAction::RecursiveRequest => {
                 self.apply_continuation(thread, continuation)
             }
-            ClassInitAction::Initialize => {
-                if let Err(error) = ClassInitialization::prepare_claimed(&klass) {
-                    let _ = ClassInitialization::abandon(&klass, thread.id());
-                    return Err(error);
-                }
-
-                let frame = ClassInitFrame::new_claimed(klass.clone(), continuation);
+            ClassInitAction::Claimed => {
+                let prerequisites = ClassInitialization::prerequisites(&klass);
+                let frame =
+                    ClassInitFrame::new_claimed(klass.clone(), prerequisites, continuation);
                 if let Err(error) = thread.stack_mut().push_class_init(frame) {
                     ClassInitialization::abandon(&klass, thread.id())?;
                     return Err(ExecError::Stack(error));
@@ -200,7 +197,17 @@ impl ExecDispatcher {
             }
             Continuation::GetStatic(resolved) => self.commit_get_static(thread, resolved),
             Continuation::PutStatic(resolved) => self.commit_put_static(thread, resolved),
-            Continuation::ResumeCaller => Ok(()),
+            Continuation::ResumeInitializer => {
+                let initializer = thread
+                    .stack_mut()
+                    .current_class_init_mut()
+                    .map_err(ExecError::Stack)?;
+                if initializer.phase() != ClassInitPhase::AwaitPrerequisite {
+                    return Err(ExecError::InvalidClassInitializationFrameState);
+                }
+                initializer.set_phase(ClassInitPhase::InitializePrerequisites);
+                Ok(())
+            }
         }
     }
 
@@ -214,23 +221,57 @@ impl ExecDispatcher {
         };
 
         match phase {
-            ClassInitPhase::InitializeSuper => {
+            ClassInitPhase::InstallConstantValues => {
+                if let Err(error) = ClassInitialization::install_constant_values(&klass) {
+                    let frame = thread
+                        .stack_mut()
+                        .pop()
+                        .ok_or(ExecError::NoCurrentFrame)?;
+                    if !matches!(frame, JavaFrame::ClassInit(_)) {
+                        return Err(ExecError::InvalidClassInitializationFrameState);
+                    }
+                    ClassInitialization::abandon(&klass, thread.id())?;
+                    return Err(error);
+                }
+
                 thread
                     .stack_mut()
                     .current_class_init_mut()
                     .map_err(ExecError::Stack)?
-                    .set_phase(ClassInitPhase::InvokeClinit);
-
-                if !klass.is_interface() {
-                    if let Some(super_klass) = klass.super_klass_ref() {
-                        self.request_class_initialization(
-                            thread,
-                            super_klass,
-                            Continuation::ResumeCaller,
-                        )?;
-                    }
-                }
+                    .set_phase(ClassInitPhase::InitializePrerequisites);
                 Ok(())
+            }
+
+            ClassInitPhase::InitializePrerequisites => {
+                let prerequisite = thread
+                    .stack_mut()
+                    .current_class_init_mut()
+                    .map_err(ExecError::Stack)?
+                    .next_prerequisite();
+
+                let Some(prerequisite) = prerequisite else {
+                    thread
+                        .stack_mut()
+                        .current_class_init_mut()
+                        .map_err(ExecError::Stack)?
+                        .set_phase(ClassInitPhase::InvokeClinit);
+                    return Ok(());
+                };
+
+                thread
+                    .stack_mut()
+                    .current_class_init_mut()
+                    .map_err(ExecError::Stack)?
+                    .set_phase(ClassInitPhase::AwaitPrerequisite);
+                self.request_class_initialization(
+                    thread,
+                    prerequisite,
+                    Continuation::ResumeInitializer,
+                )
+            }
+
+            ClassInitPhase::AwaitPrerequisite => {
+                Err(ExecError::InvalidClassInitializationFrameState)
             }
 
             ClassInitPhase::InvokeClinit => {

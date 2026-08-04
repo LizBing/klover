@@ -8,7 +8,7 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub enum JavaFrame {
+pub(crate) enum JavaFrame {
     Interpreter(InterpreterFrame),
     ClassInit(ClassInitFrame),
 }
@@ -66,7 +66,7 @@ impl JavaStack {
         Ok(())
     }
 
-    pub fn push_class_init(&mut self, frame: ClassInitFrame) -> StackResult<()> {
+    pub(crate) fn push_class_init(&mut self, frame: ClassInitFrame) -> StackResult<()> {
         let required = 1;
         let new_used = self
             .used_slots
@@ -109,7 +109,7 @@ impl JavaStack {
         Ok(())
     }
 
-    pub fn pop(&mut self) -> Option<JavaFrame> {
+    pub(crate) fn pop(&mut self) -> Option<JavaFrame> {
         let frame = self.frames.pop()?;
         self.used_slots -= frame.reserved_slots();
         Some(frame)
@@ -129,18 +129,18 @@ impl JavaStack {
         }
     }
 
-    pub fn current_is_class_init(&self) -> bool {
+    pub(crate) fn current_is_class_init(&self) -> bool {
         matches!(self.frames.last(), Some(JavaFrame::ClassInit(_)))
     }
 
-    pub fn current_class_init(&self) -> StackResult<&ClassInitFrame> {
+    pub(crate) fn current_class_init(&self) -> StackResult<&ClassInitFrame> {
         match self.frames.last() {
             Some(JavaFrame::ClassInit(frame)) => Ok(frame),
             _ => Err(StackError::Empty),
         }
     }
 
-    pub fn current_class_init_mut(&mut self) -> StackResult<&mut ClassInitFrame> {
+    pub(crate) fn current_class_init_mut(&mut self) -> StackResult<&mut ClassInitFrame> {
         match self.frames.last_mut() {
             Some(JavaFrame::ClassInit(frame)) => Ok(frame),
             _ => Err(StackError::Empty),

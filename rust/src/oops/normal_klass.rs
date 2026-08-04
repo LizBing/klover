@@ -179,7 +179,7 @@ struct ClassInit {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ClassInitAction {
-    Initialize,
+    Claimed,
     AlreadyInitialized,
     RecursiveRequest,
 }
@@ -314,7 +314,7 @@ impl NormalKlass {
             match *state {
                 ClassInitState::Uninitialized => {
                     *state = ClassInitState::Initializing { owner };
-                    return Ok(ClassInitAction::Initialize);
+                    return Ok(ClassInitAction::Claimed);
                 }
                 ClassInitState::Initializing { owner: current } if current == owner => {
                     return Ok(ClassInitAction::RecursiveRequest);
@@ -375,6 +375,14 @@ impl NormalKlass {
 impl NormalKlass {
     pub(crate) fn direct_interfaces(&self) -> &[MSRef<NormalKlass>] {
         &self.interfaces
+    }
+
+    pub(crate) fn declares_default_method(&self) -> bool {
+        self.is_interface()
+            && self.methods.iter().any(|method| {
+                !method.acc_flags.contains(AccFlags::ACC_ABSTRACT)
+                    && !method.acc_flags.contains(AccFlags::ACC_STATIC)
+            })
     }
 
     pub fn find_declared_field_symbol(
