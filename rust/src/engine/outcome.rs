@@ -14,7 +14,7 @@ pub enum RetValue {
     Ref(NObjPtr),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum PendingException {
     JavaObj(NObjPtr),
     JVMGen(JavaExceptionKind),

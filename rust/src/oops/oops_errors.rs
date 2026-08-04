@@ -24,7 +24,6 @@ pub type ResolveResult<T> = Result<T, ResolveError>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ClassInitError {
-    Erroneous,
     InvalidTransition,
 }
 

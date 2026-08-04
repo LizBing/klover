@@ -3,7 +3,6 @@ use crate::{
     engine::{
         call::Invocation,
         exec_error::{ExecError, ExecResult},
-        outcome::PendingException,
         resolved_method::ResolvedMethod,
     },
     oops::{
@@ -91,10 +90,7 @@ impl ClassInitFrame {
 pub struct ClassInitialization;
 
 impl ClassInitialization {
-    pub fn begin(
-        klass: &NormalKlass,
-        owner: JavaThreadID,
-    ) -> ExecResult<ClassInitAction> {
+    pub fn begin(klass: &NormalKlass, owner: JavaThreadID) -> ExecResult<ClassInitAction> {
         klass.begin_initialization(owner).map_err(ExecError::from)
     }
 
@@ -151,19 +147,11 @@ impl ClassInitialization {
             .map_err(ExecError::from)
     }
 
-    pub fn abandon(klass: &NormalKlass, owner: JavaThreadID) -> ExecResult<()> {
-        klass
-            .abandon_initialization(owner)
-            .map_err(ExecError::from)
+    pub fn abort(klass: &NormalKlass, owner: JavaThreadID) -> ExecResult<()> {
+        klass.abort_initialization(owner).map_err(ExecError::from)
     }
 
-    pub fn fail(
-        klass: &NormalKlass,
-        owner: JavaThreadID,
-        cause: PendingException,
-    ) -> ExecResult<()> {
-        klass
-            .fail_initialization(owner, cause)
-            .map_err(ExecError::from)
+    pub fn fail(klass: &NormalKlass, owner: JavaThreadID) -> ExecResult<()> {
+        klass.fail_initialization(owner).map_err(ExecError::from)
     }
 }

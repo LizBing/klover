@@ -18,6 +18,48 @@ class FailingClassInit {
     }
 }
 
+class FailingParentInit {
+    static int value = 1 / 0;
+}
+
+class ChildOfFailingParent extends FailingParentInit {
+    static int read() {
+        return 1;
+    }
+}
+
+class OnceClassInit {
+    static int count;
+
+    static {
+        count = count + 1;
+    }
+
+    static int read() {
+        return count;
+    }
+}
+
+class RecursiveClassInit {
+    static int value = duringInit();
+
+    static int duringInit() {
+        return value + 1;
+    }
+
+    static int read() {
+        return value;
+    }
+}
+
+class AbortableClassInit {
+    static int value = 6;
+
+    static int read() {
+        return value;
+    }
+}
+
 class InterfaceInitTrace {
     static int value;
 
@@ -84,6 +126,18 @@ public class ClassInitScenarios {
 
     public static int readFailingClass() {
         return FailingClassInit.read();
+    }
+
+    public static int readFailingChild() {
+        return ChildOfFailingParent.read();
+    }
+
+    public static int readOnceClass() {
+        return OnceClassInit.read();
+    }
+
+    public static int readRecursiveClass() {
+        return RecursiveClassInit.read();
     }
 
     public static int defaultInterfaceInitializationOrder() {

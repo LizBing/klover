@@ -2,12 +2,10 @@ use crate::{
     class_loader::ms_api::MSRef,
     engine::{
         call::Invocation,
-        class_init::{
-            ClassInitFrame, ClassInitPhase, ClassInitialization, Continuation,
-        },
-        exec_error::{ExecError, ExecResult},
+        class_init::{ClassInitFrame, ClassInitPhase, ClassInitialization, Continuation},
+        exec_error::{ExecError, ExecResult, JavaExceptionKind},
         interpreter::{interpreter::Interpreter, interpreter_frame::InterpreterFrame},
-        outcome::{RetValue, RunOutcome, StepOutcome, ThreadExit},
+        outcome::{PendingException, RetValue, RunOutcome, StepOutcome, ThreadExit},
         resolved_method::ResolvedMethod,
     },
     oops::{
@@ -15,10 +13,7 @@ use crate::{
         cp_entry::ResolvedFieldRef,
         normal_klass::{ClassInitAction, NormalKlass},
     },
-    runtime::{
-        java_stack::JavaFrame,
-        java_thread::JavaThread,
-    },
+    runtime::{java_stack::JavaFrame, java_thread::JavaThread},
 };
 
 #[derive(Debug)]
@@ -47,11 +42,7 @@ impl ExecDispatcher {
             .contains(AccFlags::ACC_STATIC)
         {
             let holder = invocation.target.holder_ref();
-            self.request_class_initialization(
-                thread,
-                holder,
-                Continuation::EnterRoot(invocation),
-            )
+            self.request_class_initialization(thread, holder, Continuation::EnterRoot(invocation))
         } else {
             self.commit_root(thread, invocation)
         }
@@ -149,11 +140,7 @@ impl ExecDispatcher {
             .drop_top_slots(slot_count)
     }
 
-    fn commit_root(
-        &mut self,
-        thread: &mut JavaThread,
-        invocation: Invocation,
-    ) -> ExecResult<()> {
+    fn commit_root(&mut self, thread: &mut JavaThread, invocation: Invocation) -> ExecResult<()> {
         let frame = Self::build_interpreter_frame(invocation)?;
         thread
             .stack_mut()
@@ -173,13 +160,18 @@ impl ExecDispatcher {
             }
             ClassInitAction::Claimed => {
                 let prerequisites = ClassInitialization::prerequisites(&klass);
-                let frame =
-                    ClassInitFrame::new_claimed(klass.clone(), prerequisites, continuation);
+                let frame = ClassInitFrame::new_claimed(klass.clone(), prerequisites, continuation);
                 if let Err(error) = thread.stack_mut().push_class_init(frame) {
-                    ClassInitialization::abandon(&klass, thread.id())?;
+                    ClassInitialization::abort(&klass, thread.id())?;
                     return Err(ExecError::Stack(error));
                 }
 
+                Ok(())
+            }
+            ClassInitAction::Erroneous => {
+                thread.pending_exception = Some(PendingException::JVMGen(
+                    JavaExceptionKind::NoClassDefFoundError,
+                ));
                 Ok(())
             }
         }
@@ -223,14 +215,11 @@ impl ExecDispatcher {
         match phase {
             ClassInitPhase::InstallConstantValues => {
                 if let Err(error) = ClassInitialization::install_constant_values(&klass) {
-                    let frame = thread
-                        .stack_mut()
-                        .pop()
-                        .ok_or(ExecError::NoCurrentFrame)?;
+                    let frame = thread.stack_mut().pop().ok_or(ExecError::NoCurrentFrame)?;
                     if !matches!(frame, JavaFrame::ClassInit(_)) {
                         return Err(ExecError::InvalidClassInitializationFrameState);
                     }
-                    ClassInitialization::abandon(&klass, thread.id())?;
+                    ClassInitialization::abort(&klass, thread.id())?;
                     return Err(error);
                 }
 
@@ -302,16 +291,11 @@ impl ExecDispatcher {
                     .map_err(ExecError::Stack)
             }
 
-            ClassInitPhase::AwaitClinit => {
-                Err(ExecError::InvalidClassInitializationFrameState)
-            }
+            ClassInitPhase::AwaitClinit => Err(ExecError::InvalidClassInitializationFrameState),
 
             ClassInitPhase::Complete => {
                 ClassInitialization::complete(&klass, thread.id())?;
-                let frame = thread
-                    .stack_mut()
-                    .pop()
-                    .ok_or(ExecError::NoCurrentFrame)?;
+                let frame = thread.stack_mut().pop().ok_or(ExecError::NoCurrentFrame)?;
                 let JavaFrame::ClassInit(frame) = frame else {
                     return Err(ExecError::InvalidClassInitializationFrameState);
                 };
@@ -326,10 +310,7 @@ impl ExecDispatcher {
         thread: &mut JavaThread,
         value: RetValue,
     ) -> ExecResult<Option<RunOutcome>> {
-        let frame = thread
-            .stack_mut()
-            .pop()
-            .ok_or(ExecError::NoCurrentFrame)?;
+        let frame = thread.stack_mut().pop().ok_or(ExecError::NoCurrentFrame)?;
         if !matches!(frame, JavaFrame::Interpreter(_)) {
             return Err(ExecError::InvalidClassInitializationFrameState);
         }
@@ -366,19 +347,56 @@ impl ExecDispatcher {
     fn terminate_with_exception(
         &mut self,
         thread: &mut JavaThread,
-        exception: crate::engine::outcome::PendingException,
+        exception: PendingException,
     ) -> ExecResult<RunOutcome> {
+        let mut cleanup_error = None;
         while let Some(frame) = thread.stack_mut().pop() {
             if let JavaFrame::ClassInit(frame) = frame {
+                let phase = frame.phase();
                 let (klass, _) = frame.into_parts();
-                ClassInitialization::fail(&klass, thread.id(), exception.clone())?;
+                let result = match phase {
+                    // An exception from this class's own <clinit>, or from one
+                    // of its initialization prerequisites, makes it erroneous.
+                    // ExceptionInInitializerError wrapping is deferred until
+                    // Java exception objects and type checks are available.
+                    ClassInitPhase::AwaitClinit | ClassInitPhase::AwaitPrerequisite => {
+                        ClassInitialization::fail(&klass, thread.id())
+                    }
+                    // No Java code should be able to throw in any other phase.
+                    // Release the claim so an engine bug cannot wedge the class.
+                    _ => {
+                        let result = ClassInitialization::abort(&klass, thread.id());
+                        if result.is_ok() {
+                            cleanup_error = Some(ExecError::InvalidClassInitializationFrameState);
+                        }
+                        result
+                    }
+                };
+                if cleanup_error.is_none() {
+                    cleanup_error = result.err();
+                }
             }
+        }
+
+        if let Some(error) = cleanup_error {
+            return Err(error);
         }
 
         thread.terminate();
         Ok(RunOutcome::Terminated(ThreadExit::UncaughtException(
             exception,
         )))
+    }
+
+    /// An ExecError is a VM failure rather than a Java exception. The current
+    /// run cannot resume, so discard its frames and release every live claim.
+    fn abort_after_engine_error(&mut self, thread: &mut JavaThread) {
+        while let Some(frame) = thread.stack_mut().pop() {
+            if let JavaFrame::ClassInit(frame) = frame {
+                let (klass, _) = frame.into_parts();
+                let _ = ClassInitialization::abort(&klass, thread.id());
+            }
+        }
     }
 
     /// Shared interpreter-frame construction after arguments are materialized.
@@ -388,48 +406,65 @@ impl ExecDispatcher {
 }
 
 impl ExecDispatcher {
+    fn run_one(&mut self, thread: &mut JavaThread) -> ExecResult<Option<RunOutcome>> {
+        if thread.stack().current_is_class_init() {
+            self.advance_class_initialization(thread)?;
+            return Ok(None);
+        }
+
+        match self.interpreter.execute_one(thread)? {
+            StepOutcome::Continue => {}
+
+            StepOutcome::Branch(target) => {
+                thread
+                    .stack_mut()
+                    .current_interpreter_mut()
+                    .map_err(ExecError::Stack)?
+                    .set_pc(target)?;
+            }
+
+            StepOutcome::GetStatic(resolved) => {
+                self.request_get_static(thread, resolved)?;
+            }
+
+            StepOutcome::PutStatic(resolved) => {
+                self.request_put_static(thread, resolved)?;
+            }
+
+            StepOutcome::InvokeStatic { target, arg_slots } => {
+                self.request_static_call(thread, target, arg_slots)?;
+            }
+
+            StepOutcome::Return(value) => {
+                return self.complete_interpreter_return(thread, value);
+            }
+
+            StepOutcome::Throw(exception) => {
+                return self.terminate_with_exception(thread, exception).map(Some);
+            }
+        }
+
+        Ok(None)
+    }
+
     pub fn run_quantum(
         &mut self,
         thread: &mut JavaThread,
         budget: usize,
     ) -> ExecResult<RunOutcome> {
         for _ in 0..budget {
-            if thread.stack().current_is_class_init() {
-                self.advance_class_initialization(thread)?;
-                continue;
+            if let Some(exception) = thread.pending_exception.take() {
+                return self.terminate_with_exception(thread, exception);
             }
 
-            match self.interpreter.execute_one(thread)? {
-                StepOutcome::Continue => {}
-
-                StepOutcome::Branch(target) => {
-                    thread
-                        .stack_mut()
-                        .current_interpreter_mut()
-                        .map_err(ExecError::Stack)?
-                        .set_pc(target)?;
+            match self.run_one(thread) {
+                Ok(Some(outcome)) => {
+                    return Ok(outcome);
                 }
-
-                StepOutcome::GetStatic(resolved) => {
-                    self.request_get_static(thread, resolved)?;
-                }
-
-                StepOutcome::PutStatic(resolved) => {
-                    self.request_put_static(thread, resolved)?;
-                }
-
-                StepOutcome::InvokeStatic { target, arg_slots } => {
-                    self.request_static_call(thread, target, arg_slots)?;
-                }
-
-                StepOutcome::Return(value) => {
-                    if let Some(outcome) = self.complete_interpreter_return(thread, value)? {
-                        return Ok(outcome);
-                    }
-                }
-
-                StepOutcome::Throw(exception) => {
-                    return self.terminate_with_exception(thread, exception);
+                Ok(None) => {}
+                Err(error) => {
+                    self.abort_after_engine_error(thread);
+                    return Err(error);
                 }
             }
         }

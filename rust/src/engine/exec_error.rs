@@ -91,4 +91,5 @@ pub type ExecResult<T> = Result<T, ExecError>;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum JavaExceptionKind {
     ArithmeticException,
+    NoClassDefFoundError,
 }

@@ -10,7 +10,7 @@ use crate::{
         ms_api::{MSAllocator, MSBox, MSRef},
     },
     class_parser::{class_file::ClassFile, cp_info::ConstantPoolInfo, method_info::MethodInfo},
-    engine::{exec_error::ExecResult, outcome::PendingException, slot::Slot},
+    engine::{exec_error::ExecResult, slot::Slot},
     gc_bindings::obj_layout::ObjLayout,
     oops::{
         acc_flags::AccFlags,
@@ -168,7 +168,7 @@ enum ClassInitState {
 
     Initialized,
 
-    Erroneous { cause: PendingException },
+    Erroneous,
 }
 
 #[derive(Debug)]
@@ -182,6 +182,7 @@ pub enum ClassInitAction {
     Claimed,
     AlreadyInitialized,
     RecursiveRequest,
+    Erroneous,
 }
 
 impl Default for ClassInit {
@@ -323,7 +324,7 @@ impl NormalKlass {
                 ClassInitState::Initialized => {
                     return Ok(ClassInitAction::AlreadyInitialized);
                 }
-                ClassInitState::Erroneous { .. } => return Err(ClassInitError::Erroneous),
+                ClassInitState::Erroneous => return Ok(ClassInitAction::Erroneous),
             }
         }
     }
@@ -340,10 +341,9 @@ impl NormalKlass {
         Ok(())
     }
 
-    /// Release an initialization claim without recording a JVM initialization
-    /// failure.  The engine uses this while executable `<clinit>` frames are
-    /// not available yet, so a future attempt can initialize the class.
-    pub fn abandon_initialization(&self, owner: JavaThreadID) -> ClassInitResult<()> {
+    /// Release an initialization claim after an internal VM failure. Unlike a
+    /// Java exception from `<clinit>`, this permits a later initialization try.
+    pub fn abort_initialization(&self, owner: JavaThreadID) -> ClassInitResult<()> {
         let mut state = self.init.state.lock();
         match *state {
             ClassInitState::Initializing { owner: current } if current == owner => {
@@ -355,15 +355,11 @@ impl NormalKlass {
         Ok(())
     }
 
-    pub fn fail_initialization(
-        &self,
-        owner: JavaThreadID,
-        cause: PendingException,
-    ) -> ClassInitResult<()> {
+    pub fn fail_initialization(&self, owner: JavaThreadID) -> ClassInitResult<()> {
         let mut state = self.init.state.lock();
         match *state {
             ClassInitState::Initializing { owner: current } if current == owner => {
-                *state = ClassInitState::Erroneous { cause };
+                *state = ClassInitState::Erroneous;
             }
             _ => return Err(ClassInitError::InvalidTransition),
         }
