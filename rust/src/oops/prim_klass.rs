@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use crate::{gc_bindings::oop_handle::{KLASS_OOP_STORAGE_ID, OOPHandle}, oops::symbol_table::SymbolHandle};
+use crate::oops::symbol_table::SymbolHandle;
 
 #[derive(Debug)]
 pub struct PrimKlass {
@@ -8,7 +8,6 @@ pub struct PrimKlass {
     
     pub name: SymbolHandle,
     pub size: usize,
-    pub mirror: OOPHandle,
 }
 
 impl PrimKlass {
@@ -18,7 +17,6 @@ impl PrimKlass {
 
             name: name.into(),
             size: size,
-            mirror: OOPHandle::new(KLASS_OOP_STORAGE_ID)
         }
     }
 }

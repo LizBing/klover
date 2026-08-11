@@ -7,7 +7,7 @@ typedef struct Klass Klass;
 
 typedef struct ObjDesc ObjDesc;
 struct ObjDesc {
-  uint64_t _Atomic markword;
+  _Atomic uint64_t markword;
   HeapWord payload[0];
 };
 

@@ -1,9 +1,7 @@
 use std::{marker::PhantomData, mem::size_of, sync::OnceLock};
 
 use crate::{
-    class_loader::ms_api::MSRef,
-    gc_bindings::oop_handle::NObjPtr,
-    oops::{
+    class_loader::ms_api::MSRef, gc_bindings::oop_hierarchy::NObjPtr, oops::{
         klass::Klass,
         oops_errors::{ResolveError, ResolveResult},
         symbol_table::{SymbolHandle, SymbolTable},

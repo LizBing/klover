@@ -1,4 +1,4 @@
-use crate::{gc_bindings::oop_handle::{NObjPtr, OOPHandle}, oops::{desc::{FieldDesc, FieldElemType}, symbol_table::SymbolHandle}};
+use crate::{gc_bindings::oop_hierarchy::NObjPtr, oops::{desc::{FieldDesc, FieldElemType}, symbol_table::SymbolHandle}};
 
 /// 数组元素的固定布局：
 ///   markword(8) + length(4) + padding(4) + elements(...)
@@ -12,7 +12,6 @@ pub const ARRAY_DATA_OFFSET: usize = 16;
 pub struct ArrayKlass {
     pub name: SymbolHandle,
     pub desc: FieldDesc,
-    pub mirror: OOPHandle,
 }
 
 impl ArrayKlass {

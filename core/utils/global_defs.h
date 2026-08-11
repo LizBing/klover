@@ -13,5 +13,6 @@ static const size_t K = 1024;
 static const size_t M = 1024 * K;
 static const size_t G = 1024 * M;
 
+typedef size_t offs_t;
 
 #endif /* CORE_UTIlS_GLOBAL_DEFS_H_ */

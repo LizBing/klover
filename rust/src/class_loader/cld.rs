@@ -11,7 +11,6 @@ use crate::{
         ms_api::{MSAllocator, MSRef},
     },
     class_parser::{class_file::ClassFile, cp_info::ConstantPoolInfo},
-    gc_bindings::oop_handle::{CLD_MIRROR_STORAGE_ID, OOPHandle},
     oops::{
         klass::Klass,
         normal_klass::{NormalKlass, UnlinkedNormalKlass},
@@ -25,7 +24,6 @@ use crate::{
 pub struct ClassLoaderData {
     pub(super) next: *mut ClassLoaderData,
 
-    pub mirror: OOPHandle,
     pub debug_name: Option<String>,
 
     pub ms_allocator: MSAllocator,
@@ -46,7 +44,6 @@ impl ClassLoaderData {
     pub fn new(debug_name: Option<String>) -> NonNull<Self> {
         let cld = Box::new(Self {
             next: std::ptr::null_mut(),
-            mirror: OOPHandle::new(CLD_MIRROR_STORAGE_ID),
             debug_name,
             ms_allocator: MSAllocator::new(),
             klasses: DashMap::new(),

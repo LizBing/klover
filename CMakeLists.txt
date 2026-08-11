@@ -13,7 +13,6 @@ set(CMAKE_C_STANDARD 11)
 add_library(klover-core SHARED
   core/gc/gc.c
   core/gc/gc_heap.c
-  core/gc/oop_storage.c
   core/memory/virt_space.c
   core/metaspace/metaspace.c
 )
@@ -44,15 +43,6 @@ target_link_libraries(test_metaspace PRIVATE klover-core)
 target_include_directories(test_metaspace PRIVATE ${CMAKE_SOURCE_DIR})
 
 add_test(NAME metaspace COMMAND test_metaspace)
-
-add_executable(test_oop_storage
-  core/tests/test_oop_storage.c
-)
-
-target_link_libraries(test_oop_storage PRIVATE klover-core)
-target_include_directories(test_oop_storage PRIVATE ${CMAKE_SOURCE_DIR})
-
-add_test(NAME oop_storage COMMAND test_oop_storage)
 
 add_executable(test_gc_heap
   core/tests/test_gc_heap.c

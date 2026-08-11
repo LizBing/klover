@@ -3,7 +3,6 @@ use std::{cell::OnceCell, ptr::NonNull, sync::OnceLock};
 use crate::{
     class_loader::{bootstrap_cld::BootstrapCLD, cld::ClassLoaderData, ms_api::MSRef},
     class_parser::cp_info::ConstantPoolInfo,
-    gc_bindings::oop_handle::{KLASS_OOP_STORAGE_ID, OOPHandle},
     oops::{
         desc::MethodDesc,
         field::Field,
@@ -292,13 +291,6 @@ impl ClassCPEntry {
 #[derive(Debug)]
 pub struct StringCPEntry {
     raw: SymbolHandle,
-    resolved: OOPHandle,
-}
-
-impl StringCPEntry {
-    pub fn get(&self) -> &OOPHandle {
-        unimplemented!()
-    }
 }
 
 #[derive(Debug)]
@@ -433,7 +425,6 @@ impl CPEntry {
 
             ConstantPoolInfo::StringInfo { string_index } => Self::StringConstant(StringCPEntry {
                 raw: resolve_symbol(*string_index as usize, cp, parsed_cp)?,
-                resolved: OOPHandle::new(KLASS_OOP_STORAGE_ID),
             }),
 
             ConstantPoolInfo::IntegerInfo { value } => Self::Integer(*value),

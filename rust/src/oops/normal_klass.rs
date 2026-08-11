@@ -10,7 +10,6 @@ use crate::{
         ms_api::{MSAllocator, MSBox, MSRef},
     },
     class_parser::{class_file::ClassFile, cp_info::ConstantPoolInfo, method_info::MethodInfo},
-    engine::{exec_error::ExecResult, slot::Slot},
     gc_bindings::obj_layout::ObjLayout,
     oops::{
         acc_flags::AccFlags,
@@ -22,7 +21,6 @@ use crate::{
         oops_errors::{ClassInitError, ClassInitResult, ResolveError, ResolveResult},
         symbol_table::{SymbolHandle, SymbolTable},
     },
-    runtime::java_thread::JavaThreadID,
 };
 
 #[derive(Debug)]
@@ -161,40 +159,6 @@ impl UnlinkedNormalKlass {
 }
 
 #[derive(Debug)]
-enum ClassInitState {
-    Uninitialized,
-
-    Initializing { owner: JavaThreadID },
-
-    Initialized,
-
-    Erroneous,
-}
-
-#[derive(Debug)]
-struct ClassInit {
-    state: parking_lot::Mutex<ClassInitState>,
-    completed: parking_lot::Condvar,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ClassInitAction {
-    Claimed,
-    AlreadyInitialized,
-    RecursiveRequest,
-    Erroneous,
-}
-
-impl Default for ClassInit {
-    fn default() -> Self {
-        Self {
-            state: parking_lot::Mutex::new(ClassInitState::Uninitialized),
-            completed: parking_lot::Condvar::new(),
-        }
-    }
-}
-
-#[derive(Debug)]
 pub struct NormalKlass {
     acc_flags: AccFlags,
 
@@ -213,8 +177,6 @@ pub struct NormalKlass {
     methods: MSBox<[Method]>,
 
     obj_layout: ObjLayout,
-
-    init: ClassInit,
 }
 
 impl NormalKlass {
@@ -272,7 +234,6 @@ impl NormalKlass {
             fields: unlinked.fields,
             methods: unlinked.methods,
             obj_layout,
-            init: ClassInit::default(),
         };
 
         let boxed = MSBox::new(msa, Klass::Normal(klass));
@@ -304,70 +265,8 @@ impl NormalKlass {
     pub fn super_klass_ref(&self) -> Option<MSRef<NormalKlass>> {
         self.super_klass.clone()
     }
-
-    /// Acquire this class's initialization state for `owner`.
-    ///
-    /// This method only coordinates state and waiters.  Deciding whether and
-    /// how to execute `<clinit>` belongs to the execution engine.
-    pub fn begin_initialization(&self, owner: JavaThreadID) -> ClassInitResult<ClassInitAction> {
-        let mut state = self.init.state.lock();
-        loop {
-            match *state {
-                ClassInitState::Uninitialized => {
-                    *state = ClassInitState::Initializing { owner };
-                    return Ok(ClassInitAction::Claimed);
-                }
-                ClassInitState::Initializing { owner: current } if current == owner => {
-                    return Ok(ClassInitAction::RecursiveRequest);
-                }
-                ClassInitState::Initializing { .. } => self.init.completed.wait(&mut state),
-                ClassInitState::Initialized => {
-                    return Ok(ClassInitAction::AlreadyInitialized);
-                }
-                ClassInitState::Erroneous => return Ok(ClassInitAction::Erroneous),
-            }
-        }
-    }
-
-    pub fn complete_initialization(&self, owner: JavaThreadID) -> ClassInitResult<()> {
-        let mut state = self.init.state.lock();
-        match *state {
-            ClassInitState::Initializing { owner: current } if current == owner => {
-                *state = ClassInitState::Initialized;
-            }
-            _ => return Err(ClassInitError::InvalidTransition),
-        }
-        self.init.completed.notify_all();
-        Ok(())
-    }
-
-    /// Release an initialization claim after an internal VM failure. Unlike a
-    /// Java exception from `<clinit>`, this permits a later initialization try.
-    pub fn abort_initialization(&self, owner: JavaThreadID) -> ClassInitResult<()> {
-        let mut state = self.init.state.lock();
-        match *state {
-            ClassInitState::Initializing { owner: current } if current == owner => {
-                *state = ClassInitState::Uninitialized;
-            }
-            _ => return Err(ClassInitError::InvalidTransition),
-        }
-        self.init.completed.notify_all();
-        Ok(())
-    }
-
-    pub fn fail_initialization(&self, owner: JavaThreadID) -> ClassInitResult<()> {
-        let mut state = self.init.state.lock();
-        match *state {
-            ClassInitState::Initializing { owner: current } if current == owner => {
-                *state = ClassInitState::Erroneous;
-            }
-            _ => return Err(ClassInitError::InvalidTransition),
-        }
-        self.init.completed.notify_all();
-        Ok(())
-    }
 }
-
+    
 impl NormalKlass {
     pub(crate) fn direct_interfaces(&self) -> &[MSRef<NormalKlass>] {
         &self.interfaces
@@ -399,18 +298,6 @@ impl NormalKlass {
             CPEntry::FieldRef(entry) => entry.resolve(self),
             _ => Err(ResolveError::MismatchCPType),
         }
-    }
-
-    pub fn read_static_field(&self, field: &Field) -> ExecResult<Vec<Slot>> {
-        self.fields.read_static(field)
-    }
-
-    pub fn write_static_field(&self, field: &Field, slots: &[Slot]) -> ExecResult<()> {
-        self.fields.write_static(field, slots)
-    }
-
-    pub fn initialize_static_constant_values(&self) -> ExecResult<()> {
-        self.fields.initialize_constant_values()
     }
 
     pub fn find_declared_method(&self, name: &str, desc: &str) -> Option<MSRef<Method>> {

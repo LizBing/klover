@@ -5,13 +5,13 @@
 //! 返回指向 `ObjDesc` 的裸指针——对象 markword 已写好，payload 已清零。
 
 use crate::gc_bindings::obj_layout::ObjLayout;
-use crate::gc_bindings::oop_handle::ObjDesc;
+use crate::gc_bindings::oop_hierarchy::ObjPtr;
 use crate::oops::klass::Klass;
 use std::ffi::c_void;
 
 unsafe extern "C" {
     pub fn gc_init(xmx: usize);
-    fn gcheap_alloc(klass: *const c_void, word_size: usize) -> *mut ObjDesc;
+    fn gcheap_alloc(klass: *const c_void, word_size: usize) -> ObjPtr;
 }
 
 /// 在 Java 堆上分配一个对象。
@@ -25,7 +25,7 @@ unsafe extern "C" {
 ///
 /// # Panics
 /// 当堆空间不足时返回的指针为 null；本函数把它转为 panic。
-pub fn alloc_object(klass: *const crate::oops::klass::Klass, byte_size: usize) -> *mut ObjDesc {
+pub fn alloc_object(klass: *const crate::oops::klass::Klass, byte_size: usize) -> ObjPtr {
     // gcheap_alloc 接收的是 word_size（HeapWord 单位，8 字节）。
     // 对象大小总是 8 字节对齐（markword 8B + 字段按 size bucket 排列 + 整体对齐）。
     debug_assert!(

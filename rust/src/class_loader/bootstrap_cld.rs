@@ -5,7 +5,7 @@ use dashmap::{DashMap, Entry};
 use crate::{
     class_loader::{
         class_path::ClassPath, class_slot::{ClassLoadState, ClassSlot}, load_error::{LoadError, LoadResult}, ms_api::{MSAllocator, MSBox, MSRef},
-    }, class_parser::class_file::ClassFile, gc_bindings::oop_handle::{KLASS_OOP_STORAGE_ID, OOPHandle}, oops::{
+    }, class_parser::class_file::ClassFile, oops::{
         array_klass::ArrayKlass,
         desc::FieldDesc,
         klass::Klass,
@@ -186,7 +186,6 @@ impl BootstrapCLD {
         let klass = Klass::Array(ArrayKlass {
             name: sym,
             desc,
-            mirror: OOPHandle::new(KLASS_OOP_STORAGE_ID),
         });
 
         let boxed = MSBox::new(Self::bs_msa(), klass);

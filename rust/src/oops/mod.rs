@@ -8,6 +8,7 @@ mod fields;
 pub mod klass;
 pub mod method;
 pub mod normal_klass;
-pub mod prim_klass;
+pub mod obj_access;
 pub mod oops_errors;
+pub mod prim_klass;
 pub mod symbol_table;
