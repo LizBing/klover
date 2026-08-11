@@ -45,10 +45,3 @@ cargo build --manifest-path rust/Cargo.toml
 ```
 
 `.class` files are **not** committed; run `make classes` after clone.
-
-## Docker
-
-```bash
-docker compose build
-docker compose run --rm dev make all classes test-c
-```
