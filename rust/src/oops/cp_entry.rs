@@ -53,7 +53,6 @@ fn resolve_name_and_type(
     match cp[idx].get() {
         Some(x) => match x {
             CPEntry::NameAndType { name, desc } => Ok((name.clone(), desc.clone())),
-
             _ => Err(ResolveError::MismatchCPType),
         },
 

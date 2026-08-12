@@ -5,3 +5,4 @@ pub mod cld;
 pub mod cld_map;
 pub mod load_error;
 pub mod ms_api;
+pub mod oop_storage;

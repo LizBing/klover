@@ -1,5 +1,4 @@
 #include "metaspace/metaspace.h"
-#include "memory/virt_space.h"
 
 #include "tests/test_harness.h"
 

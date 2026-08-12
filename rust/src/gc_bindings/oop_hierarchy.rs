@@ -1,11 +1,16 @@
-#[repr(C)]
-pub struct ObjPtrImpl;
+use std::{ffi::c_void, ptr::null_mut};
+
+type ObjPtrImpl = c_void;
 
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy)]
 pub struct ObjPtr(*mut ObjPtrImpl);
 
 impl ObjPtr {
+    pub fn null() -> Self {
+        Self(null_mut())
+    }
+    
     pub fn is_null(self) -> bool {
         let Self(raw) = self;
         raw.is_null()
@@ -21,10 +26,16 @@ impl ObjPtr {
     }
 }
 
+
 #[repr(transparent)]
+#[derive(Debug, Clone, Copy)]
 pub struct NObjPtr(u32);
 
 impl NObjPtr {
+    pub fn null() -> Self {
+        Self(0)
+    }
+    
     pub fn is_null(self) -> bool {
         self.as_u32() == 0
     }

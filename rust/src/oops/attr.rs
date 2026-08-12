@@ -58,10 +58,10 @@ impl ExceptionTableEntry {
 
 #[derive(Debug)]
 pub struct Code {
-    pub max_stack: usize,
-    pub max_locals: usize,
-    pub bytecodes: MSBox<[u8]>,
-    pub exception_table: MSBox<[ExceptionTableEntry]>,
+    max_stack: usize,
+    max_locals: usize,
+    bytecodes: MSBox<[u8]>,
+    exception_table: MSBox<[ExceptionTableEntry]>,
 }
 
 impl Code {
@@ -96,6 +96,24 @@ impl Code {
             bytecodes: code,
             exception_table: et,
         })
+    }
+}
+
+impl Code {
+    pub fn max_stack(&self) -> usize {
+        self.max_stack
+    }
+
+    pub fn max_locals(&self) -> usize {
+        self.max_locals
+    }
+
+    pub fn bytecodes(&self) -> &[u8] {
+        &self.bytecodes
+    }
+
+    pub fn get_exception_table_entry(&self, idx: usize) -> &ExceptionTableEntry {
+        &self.exception_table[idx]
     }
 }
 
