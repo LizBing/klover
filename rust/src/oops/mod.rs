@@ -11,4 +11,5 @@ pub mod normal_klass;
 pub mod obj_access;
 pub mod oops_errors;
 pub mod prim_klass;
+pub mod jvalue;
 pub mod symbol_table;

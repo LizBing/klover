@@ -42,7 +42,7 @@ pub struct UnlinkedNormalKlass {
 fn build_cp<'a>(
     parsed_cp: &[ConstantPoolInfo],
     msa: &MSAllocator,
-) -> ResolveResult<MSBox<[OnceCell<CPEntry>]>> {
+) -> MSBox<[OnceCell<CPEntry>]> {
     let cp_len = parsed_cp.len();
     let uninit = msa.calloc(cp_len);
 
@@ -53,10 +53,10 @@ fn build_cp<'a>(
     let cp = unsafe { MSBox::from_raw(uninit.assume_init_mut()) };
 
     for i in 1..cp_len {
-        CPEntry::from(i, &cp, parsed_cp)?;
+        CPEntry::from(i, &cp, parsed_cp);
     }
 
-    Ok(cp)
+    cp
 }
 
 pub fn cp_slice_get(cp_slice: &[OnceCell<CPEntry>], idx: usize) -> Option<&CPEntry> {
@@ -66,7 +66,7 @@ pub fn cp_slice_get(cp_slice: &[OnceCell<CPEntry>], idx: usize) -> Option<&CPEnt
 fn build_interfaces(
     parsed_ifaces: &[u16],
     cp_slice: &[OnceCell<CPEntry>],
-) -> ResolveResult<Vec<MSRef<ClassCPEntry>>> {
+) -> Vec<MSRef<ClassCPEntry>> {
     let mut ifaces = Vec::with_capacity(parsed_ifaces.len());
 
     for idx in parsed_ifaces {
@@ -74,11 +74,11 @@ fn build_interfaces(
             Some(CPEntry::Class(entry)) => unsafe {
                 ifaces.push(MSRef::from_raw(entry.into()));
             },
-            _ => return Err(ResolveError::MismatchCPType),
+            _ => unreachable!(),
         };
     }
 
-    Ok(ifaces)
+    ifaces
 }
 
 fn link_interfaces(
@@ -89,8 +89,8 @@ fn link_interfaces(
     let uninit = msa.calloc(entries.len());
 
     for (i, entry) in entries.iter().enumerate() {
-        let klass = entry.get(cld)?;
-        let interface = klass.as_normal_ref().ok_or(ResolveError::NotANormal)?;
+        let klass = entry.resolve(cld).map_err(|e| ResolveError::Load(e))?;
+        let interface = klass.as_normal_ref().unwrap();
         if !interface.is_interface() {
             return Err(ResolveError::WrongRefType);
         }
@@ -104,19 +104,19 @@ fn build_methods(
     parsed_methods: &[MethodInfo],
     cp_slice: &[OnceCell<CPEntry>],
     msa: &MSAllocator,
-) -> ResolveResult<MSBox<[Method]>> {
+) -> MSBox<[Method]> {
     let methods_len = parsed_methods.len();
     let uninit = msa.calloc(methods_len);
 
     for (i, info) in parsed_methods.iter().enumerate() {
-        uninit[i].write(Method::from(info, cp_slice, msa)?);
+        uninit[i].write(Method::from(info, cp_slice, msa));
     }
 
-    unsafe { Ok(MSBox::from_raw(uninit.assume_init_mut())) }
+    unsafe { MSBox::from_raw(uninit.assume_init_mut()) }
 }
 
 impl UnlinkedNormalKlass {
-    pub fn build(cf: ClassFile, cld: Option<&ClassLoaderData>) -> ResolveResult<Self> {
+    pub fn build(cf: ClassFile, cld: Option<&ClassLoaderData>) -> Self {
         let msa = match cld {
             Some(x) => &x.ms_allocator,
             None => BootstrapCLD::bs_msa(),
@@ -124,11 +124,11 @@ impl UnlinkedNormalKlass {
 
         let acc_flags = AccFlags::from_bits_truncate(cf.acc_flags);
 
-        let cp = build_cp(&cf.constant_pool, msa)?;
+        let cp = build_cp(&cf.constant_pool, msa);
 
-        let this_entry: MSRef<ClassCPEntry> = match cp_slice_get(&cp, cf.this_class as usize) {
+        let this_entry = match cp_slice_get(&cp, cf.this_class as usize) {
             Some(CPEntry::Class(entry)) => unsafe { MSRef::from_raw(entry.into()) },
-            _ => return Err(ResolveError::MismatchCPType),
+            _ => unreachable!(),
         };
 
         let super_entry = if cf.super_index == 0 {
@@ -136,17 +136,17 @@ impl UnlinkedNormalKlass {
         } else {
             Some(match cp_slice_get(&cp, cf.super_index as usize) {
                 Some(CPEntry::Class(entry)) => unsafe { MSRef::from_raw(entry.into()) },
-                _ => return Err(ResolveError::MismatchCPType),
+                _ => unreachable!(),
             })
         };
 
-        let interfaces = build_interfaces(&cf.interfaces, &cp)?;
+        let interfaces = build_interfaces(&cf.interfaces, &cp);
 
-        let fields = Fields::build(&cf.fields, &cp, msa)?;
+        let fields = Fields::build(&cf.fields, &cp, msa);
 
-        let methods = build_methods(&cf.methods, &cp, msa)?;
+        let methods = build_methods(&cf.methods, &cp, msa);
 
-        Ok(Self {
+        Self {
             acc_flags,
             this_klass: this_entry.clone(),
             super_klass: super_entry,
@@ -154,7 +154,7 @@ impl UnlinkedNormalKlass {
             interfaces,
             fields,
             methods,
-        })
+        }
     }
 }
 
@@ -193,7 +193,7 @@ impl NormalKlass {
         let super_klass;
         match unlinked.super_klass {
             Some(x) => {
-                let super_ref = x.get(cld)?;
+                let super_ref = x.resolve(cld).map_err(|e| ResolveError::Load(e))?;
                 let super_normal = super_ref.as_normal().unwrap();
                 super_klass = unsafe { Some(MSRef::from_raw(super_normal.into())) };
 
@@ -296,7 +296,7 @@ impl NormalKlass {
 
         match entry {
             CPEntry::FieldRef(entry) => entry.resolve(self),
-            _ => Err(ResolveError::MismatchCPType),
+            _ => unreachable!(),
         }
     }
 
@@ -327,7 +327,7 @@ impl NormalKlass {
 
         match entry {
             CPEntry::MethodRef(entry) => entry.resolve(self),
-            _ => Err(ResolveError::MismatchCPType),
+            _ => unreachable!(),
         }
     }
 }

@@ -1,11 +1,7 @@
+use crate::class_loader::load_error::LoadError;
+
 #[derive(Debug, Clone)]
 pub enum ResolveError {
-    MismatchCPType,
-    MismatchAttrType,
-    InvalidDesc(String),
-    UnknownRefKind(u8),
-    NotANormal,
-
     // 运行时解析错误（CP 引用解析阶段）
     ClassNotFound,
     MethodNotFound,
@@ -18,6 +14,8 @@ pub enum ResolveError {
     InvalidCPIndex,
 
     IllegalMethodName(String),
+
+    Load(LoadError),
 }
 
 pub type ResolveResult<T> = Result<T, ResolveError>;

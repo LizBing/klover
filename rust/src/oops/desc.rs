@@ -80,7 +80,7 @@ impl FieldDesc {
 }
 
 impl FieldDesc {
-    pub fn from(utf8: &str) -> ResolveResult<Self> {
+    pub fn from(utf8: &str) -> Self {
         let bytes = utf8.as_bytes();
         let mut pos = 0;
 
@@ -91,9 +91,7 @@ impl FieldDesc {
             pos += 1;
         }
 
-        if pos >= bytes.len() {
-            return Err(ResolveError::InvalidDesc(utf8.into()));
-        }
+        debug_assert!(pos < bytes.len());
 
         let elem = match bytes[pos] {
             b'B' => FieldElemType::Byte,
@@ -109,22 +107,22 @@ impl FieldDesc {
                 let start = pos + 1;
                 let end = bytes[start..]
                     .iter()
-                    .position(|&b| b == b';')
-                    .ok_or_else(|| ResolveError::InvalidDesc(utf8.into()))?;
+                    .position(|&b| b == b';').unwrap();
+                
                 let class_name = &utf8[start..start + end];
                 FieldElemType::Class {
                     name: SymbolTable::intern(class_name),
                     resolved: OnceLock::new(),
                 }
             }
-            _ => return Err(ResolveError::InvalidDesc(utf8.into())),
+            _ => unreachable!(),
         };
 
-        Ok(FieldDesc {
+        FieldDesc {
             raw: SymbolTable::intern(utf8),
             dimensions,
             elem,
-        })
+        }
     }
 }
 
@@ -151,18 +149,16 @@ impl MethodDesc {
         self.params_desc.iter().map(FieldDesc::slot_count).sum()
     }
 
-    pub fn from(utf8: &str) -> ResolveResult<Self> {
+    pub fn from(utf8: &str) -> Self {
         let bytes = utf8.as_bytes();
 
-        if bytes.is_empty() || bytes[0] != b'(' {
-            return Err(ResolveError::InvalidDesc(utf8.into()));
-        }
+        debug_assert!(!bytes.is_empty() && bytes[0] == b'(');
 
         // Find the closing ')'.  close_paren_rel is the offset of ')' inside `bytes[1..]`.
         let close_paren_rel = bytes[1..]
             .iter()
-            .position(|&b| b == b')')
-            .ok_or_else(|| ResolveError::InvalidDesc(utf8.into()))?;
+            .position(|&b| b == b')').unwrap();
+
         // Absolute position of ')' in the full string.
         let close_paren_abs = close_paren_rel + 1;
 
@@ -172,31 +168,29 @@ impl MethodDesc {
         while pos < close_paren_abs {
             let len = Self::field_desc_len(&utf8[pos..]);
             let param_str = &utf8[pos..pos + len];
-            let field_desc = FieldDesc::from(&param_str.to_string())?;
+            let field_desc = FieldDesc::from(&param_str.to_string());
             params_desc.push(field_desc);
             pos += len;
         }
 
         // Parse return descriptor
         let ret_start = close_paren_abs + 1; // skip ')'
-        if ret_start >= utf8.len() {
-            return Err(ResolveError::InvalidDesc(utf8.into()));
-        }
+        debug_assert!(ret_start < utf8.len());
 
         let ret_str = &utf8[ret_start..];
         let ret_desc = if ret_str.as_bytes()[0] == b'V' {
             ReturnDesc::Void
         } else {
-            ReturnDesc::Type(FieldDesc::from(&ret_str.to_string())?)
+            ReturnDesc::Type(FieldDesc::from(&ret_str.to_string()))
         };
 
-        Ok(MethodDesc {
+        MethodDesc {
             __: PhantomData,
 
             raw: SymbolTable::intern(utf8),
             ret_desc,
             params_desc,
-        })
+        }
     }
 
     /// Returns the byte length of a field descriptor at the start of `s`.
@@ -229,12 +223,11 @@ mod tests {
 
     #[test]
     fn parameter_slot_count_accounts_for_category_two_values() {
-        assert_eq!(MethodDesc::from("()V").unwrap().parameter_slot_count(), 0);
-        assert_eq!(MethodDesc::from("(II)I").unwrap().parameter_slot_count(), 2);
-        assert_eq!(MethodDesc::from("(JD)V").unwrap().parameter_slot_count(), 4);
+        assert_eq!(MethodDesc::from("()V").parameter_slot_count(), 0);
+        assert_eq!(MethodDesc::from("(II)I").parameter_slot_count(), 2);
+        assert_eq!(MethodDesc::from("(JD)V").parameter_slot_count(), 4);
         assert_eq!(
             MethodDesc::from("(IJLjava/lang/Object;[D)V")
-                .unwrap()
                 .parameter_slot_count(),
             5
         );

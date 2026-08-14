@@ -1,15 +1,11 @@
 use std::{array, cell::OnceCell, marker::PhantomData, ptr};
 
-use parking_lot::RwLock;
-
 use crate::{
     class_loader::ms_api::{MSAllocator, MSBox}, class_parser::field_info::FieldInfo, gc_bindings::oop_hierarchy::NObjPtr, oops::{
         acc_flags::AccFlags,
-        attr::ConstantValue,
         cp_entry::CPEntry,
-        desc::{FieldDesc, FieldElemType},
+        desc::FieldDesc,
         field::Field,
-        oops_errors::ResolveResult,
     },
 };
 
@@ -39,7 +35,7 @@ fn allocate_slice_from_vec<T>(msa: &MSAllocator, vec: Vec<T>) -> MSBox<[T]> {
 pub struct Fields {
     __: PhantomData<()>,
 
-    pub static_storage: Option<RwLock<MSBox<[u8]>>>,
+    pub static_storage: Option<MSBox<[u8]>>,
     pub static_fields: Option<MSBox<[Field]>>,
     pub static_ptrs_count: usize,
 
@@ -151,12 +147,12 @@ impl Fields {
         infos: &[FieldInfo],
         cp_slice: &[OnceCell<CPEntry>],
         msa: &MSAllocator,
-    ) -> ResolveResult<Self> {
+    ) -> Self {
         let mut instance_buckets = array::from_fn(|_| Vec::new());
         let mut static_buckets = array::from_fn(|_| Vec::new());
 
         for info in infos {
-            let f = Field::from(info, cp_slice)?;
+            let f = Field::from(info, cp_slice);
 
             let bucket = if f.acc_flags.contains(AccFlags::ACC_STATIC) {
                 Self::get_bucket(&mut static_buckets, &f.desc)
@@ -178,11 +174,11 @@ impl Fields {
             unsafe {
                 let uninit = msa.calloc(s_size);
                 ptr::write_bytes(uninit.as_mut_ptr(), 0, s_size);
-                Some(RwLock::new(MSBox::from_raw(uninit.assume_init_mut())))
+                Some(MSBox::from_raw(uninit.assume_init_mut()))
             }
         };
 
-        Ok(Self {
+        Self {
             __: PhantomData,
 
             static_storage,
@@ -192,7 +188,7 @@ impl Fields {
             instance_size,
             instance_fields,
             instance_ptrs_count,
-        })
+        }
     }
 
     pub(super) fn find_declared(

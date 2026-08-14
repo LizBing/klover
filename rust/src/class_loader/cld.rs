@@ -67,11 +67,10 @@ impl ClassLoaderData {
             ConstantPoolInfo::ClassInfo { name_index } => {
                 match &cf.constant_pool[*name_index as usize] {
                     ConstantPoolInfo::Utf8Info { utf8 } => utf8.clone(),
-                    _ => return Err(LoadError::Resolve(ResolveError::MismatchCPType)),
+                    _ => unreachable!(),
                 }
             }
-
-            _ => return Err(LoadError::Resolve(ResolveError::MismatchCPType)),
+            _ => unreachable!(),
         };
         // field desc
         let name = SymbolTable::intern(name_utf8.as_str());
