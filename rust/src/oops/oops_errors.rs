@@ -14,8 +14,13 @@ pub enum ResolveError {
     InvalidCPIndex,
 
     IllegalMethodName(String),
+}
 
+#[derive(Debug)]
+pub enum LinkError {
     Load(LoadError),
+    
+    NotInterface,
 }
 
 pub type ResolveResult<T> = Result<T, ResolveError>;

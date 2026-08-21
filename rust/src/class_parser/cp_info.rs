@@ -1,3 +1,5 @@
+use crate::class_parser::parse_error::ParseErrorKind;
+
 use super::{
     class_reader::ClassReader,
     parse_error::{ParseError, ParseResult},
@@ -5,53 +7,52 @@ use super::{
 
 #[derive(Debug)]
 pub enum ConstantPoolInfo {
-    ClassInfo {
+    Class {
         name_index: u16, // Utf8Info
     },
 
-    FieldrefInfo {
+    Fieldref {
         class_index: u16,         // ClassInfo
         name_and_type_index: u16, // NameAndTypeInfo
     },
 
-    MethodrefInfo {
+    Methodref {
         class_index: u16,         // ClassInfo
         name_and_type_index: u16, // NameAndTypeInfo
     },
 
-    InterfaceMethodrefInfo {
+    InterfaceMethodref {
         class_index: u16,         // ClassInfo
         name_and_type_index: u16, // NameAndTypeInfo
     },
 
-    StringInfo {
+    String {
         string_index: u16, // Utf8Info
     },
 
-    IntegerInfo {
-        value: i32,
-    },
+    Integer(i32),
+    Float(f32),
+    Long(i64),
+    Double(f64),
+    Utf8(String),
 
-    FloatInfo {
-        value: f32,
-    },
-
-    LongInfo {
-        value: i64,
-    },
-
-    DoubleInfo {
-        value: f64,
-    },
-
-    NameAndTypeInfo {
+    NameAndType {
         name_index: u16, // Utf8Info
         desc_index: u16, // Utf8Info
     },
 
-    // best-effort UTF-8
-    Utf8Info {
-        utf8: String,
+    MethodHandle {
+        ref_kind: u8,
+        ref_index: u16,
+    },
+
+    MethodType {
+       desc_index: u16, 
+    },
+
+    InvokeDynamic {
+        bs_method_attr_index: u16,
+        name_and_type_index: u16,
     },
 
     /// JVM spec 4.4.5: Long and Double occupy two consecutive slots.
@@ -60,59 +61,73 @@ pub enum ConstantPoolInfo {
 }
 
 impl ConstantPoolInfo {
-    pub fn read(rd: &mut ClassReader) -> ParseResult<Self> {
+    pub fn read(rd: &mut ClassReader, cp_index: u16) -> ParseResult<Self> {
+        let offset = rd.position();
         let tag = rd.read_u8()?;
 
         let res = match tag {
-            7 => Self::ClassInfo {
+            7 => Self::Class {
                 name_index: rd.read_u16()?,
             },
-            9 => Self::FieldrefInfo {
+            
+            9 => Self::Fieldref {
                 class_index: rd.read_u16()?,
                 name_and_type_index: rd.read_u16()?,
             },
-            10 => Self::MethodrefInfo {
+            10 => Self::Methodref {
                 class_index: rd.read_u16()?,
                 name_and_type_index: rd.read_u16()?,
             },
-            11 => Self::InterfaceMethodrefInfo {
+            11 => Self::InterfaceMethodref {
                 class_index: rd.read_u16()?,
                 name_and_type_index: rd.read_u16()?,
             },
-            8 => Self::StringInfo {
+            
+            8 => Self::String {
                 string_index: rd.read_u16()?,
             },
-            3 => Self::IntegerInfo {
-                value: rd.read_i32()?,
-            },
-            4 => Self::FloatInfo {
-                value: rd.read_f32()?,
-            },
-            5 => Self::LongInfo {
-                value: rd.read_i64()?,
-            },
-            6 => Self::DoubleInfo {
-                value: rd.read_f64()?,
-            },
-            12 => Self::NameAndTypeInfo {
+            3 => Self::Integer(rd.read_i32()?),
+            4 => Self::Float(rd.read_f32()?),
+            5 => Self::Long(rd.read_i64()?),
+            6 => Self::Double(rd.read_f64()?),
+            
+            12 => Self::NameAndType {
                 name_index: rd.read_u16()?,
                 desc_index: rd.read_u16()?,
             },
+            
             1 => {
                 let len = rd.read_u16()? as usize;
                 let raw = rd.read(len)?;
-                let utf8 = match String::from_utf8(Vec::from(raw)) {
-                    Ok(x) => x,
-                    Err(_) => return Err(ParseError::InvalidUtf8(Vec::from(raw))),
-                };
+                let utf8 = cesu8::from_java_cesu8(raw).map_err(|_| ParseError {
+                    offset,
+                    kind: ParseErrorKind::InvalidModifiedUtf8 { cp_index }
+                })?;
 
-                Self::Utf8Info { utf8 }
+                Self::Utf8(utf8.into())
             },
 
             // Ignore for now.
-            15 | 16 | 18 => return Err(ParseError::UnsupportedCPTag(tag)),
+            // 15 | 16 | 18 => return Err(ParseError::UnsupportedCPTag(tag)),
+            // 
+            15 => Self::MethodHandle {
+                ref_kind: rd.read_u8()?,
+                ref_index: rd.read_u16()?,
+            },
 
-            _ => return Err(ParseError::InvalidCPTag(tag)),
+            16 => Self::MethodType {
+                desc_index: rd.read_u16()?,
+            },
+
+            18 => Self::InvokeDynamic {
+                bs_method_attr_index: rd.read_u16()?,
+                name_and_type_index: rd.read_u16()?,
+            },
+
+            _ => return Err(ParseError {
+                offset,
+                kind: ParseErrorKind::InvalidConstantPoolTag { cp_index, tag }
+            }),
         };
 
         Ok(res)

@@ -1,4 +1,4 @@
-use std::{ptr::NonNull, sync::Arc};
+use std::{num::FpCategory::Normal, ptr::NonNull, sync::Arc};
 
 use dashmap::{DashMap, mapref::entry::Entry};
 
@@ -14,7 +14,6 @@ use crate::{
     oops::{
         klass::Klass,
         normal_klass::{NormalKlass, UnlinkedNormalKlass},
-        oops_errors::ResolveError,
         symbol_table::{SymbolHandle, SymbolTable},
     },
 };
@@ -64,9 +63,9 @@ impl ClassLoaderData {
         };
 
         let name_utf8 = match &cf.constant_pool[cf.this_class as usize] {
-            ConstantPoolInfo::ClassInfo { name_index } => {
+            ConstantPoolInfo::Class { name_index } => {
                 match &cf.constant_pool[*name_index as usize] {
-                    ConstantPoolInfo::Utf8Info { utf8 } => utf8.clone(),
+                    ConstantPoolInfo::Utf8(utf8) => utf8.clone(),
                     _ => unreachable!(),
                 }
             }
@@ -90,9 +89,8 @@ impl ClassLoaderData {
             }
         };
 
-        let load_result = UnlinkedNormalKlass::build(cf, Some(self))
-            .map_err(LoadError::from)
-            .and_then(|unlinked| NormalKlass::link(unlinked, Some(self)).map_err(LoadError::from));
+        let unlinked = UnlinkedNormalKlass::build(cf, Some(self));
+        let load_result = NormalKlass::link(unlinked, Some(self));
 
         match load_result {
             Ok(klass) => {

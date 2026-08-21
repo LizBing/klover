@@ -1,8 +1,11 @@
+use crate::class_parser::parse_error::ParseErrorKind;
+
 use super::parse_error::{ParseError, ParseResult};
 
 pub struct ClassReader<'a> {
     stream: &'a [u8],
     pos: usize,
+    last_pos: usize,
 }
 
 impl<'a> ClassReader<'a> {
@@ -10,89 +13,86 @@ impl<'a> ClassReader<'a> {
         Self {
             stream: stream,
             pos: 0,
+            last_pos: 0,
         }
     }
 }
 
 impl ClassReader<'_> {
     pub fn read_u8(&mut self) -> ParseResult<u8> {
-        let x = self.stream.get(self.pos).copied().ok_or(ParseError::EOF)?;
-        
-        self.pos += 1;
-        
-        Ok(x)
+        let s = self.read(size_of::<u8>())?;
+        Ok(s[0])
     }
 
 
     pub fn read_u16(&mut self) -> ParseResult<u16> {
-        Ok(u16::from_be_bytes([self.read_u8()?, self.read_u8()?]))
+        let s = self.read(size_of::<u16>())?;
+        Ok(u16::from_be_bytes(s.try_into().unwrap()))
     }
 
     pub fn read_u32(&mut self) -> ParseResult<u32> {
-        Ok(u32::from_be_bytes([
-            self.read_u8()?,
-            self.read_u8()?,
-            self.read_u8()?,
-            self.read_u8()?,
-        ]))
+        let s = self.read(size_of::<u32>())?;
+        Ok(u32::from_be_bytes(s.try_into().unwrap()))
     }
 
     pub fn read_i32(&mut self) -> ParseResult<i32> {
-        Ok(i32::from_be_bytes([
-            self.read_u8()?,
-            self.read_u8()?,
-            self.read_u8()?,
-            self.read_u8()?,
-        ]))
+        let s = self.read(size_of::<i32>())?;
+        Ok(i32::from_be_bytes(s.try_into().unwrap()))
     }
 
     pub fn read_f32(&mut self) -> ParseResult<f32> {
-        Ok(f32::from_be_bytes([
-            self.read_u8()?,
-            self.read_u8()?,
-            self.read_u8()?,
-            self.read_u8()?,
-        ]))
+        let s = self.read(size_of::<f32>())?;
+        Ok(f32::from_be_bytes(s.try_into().unwrap()))
     }
 
     pub fn read_i64(&mut self) -> ParseResult<i64> {
-        Ok(i64::from_be_bytes([
-            self.read_u8()?,
-            self.read_u8()?,
-            self.read_u8()?,
-            self.read_u8()?,
-            self.read_u8()?,
-            self.read_u8()?,
-            self.read_u8()?,
-            self.read_u8()?,
-        ]))
+        let s = self.read(size_of::<i64>())?;
+        Ok(i64::from_be_bytes(s.try_into().unwrap()))
     }
 
     pub fn read_f64(&mut self) -> ParseResult<f64> {
-        Ok(f64::from_be_bytes([
-            self.read_u8()?,
-            self.read_u8()?,
-            self.read_u8()?,
-            self.read_u8()?,
-            self.read_u8()?,
-            self.read_u8()?,
-            self.read_u8()?,
-            self.read_u8()?,
-        ]))
+        let s = self.read(size_of::<f64>())?;
+        Ok(f64::from_be_bytes(s.try_into().unwrap()))
+    }
+
+    pub fn position(&self) -> usize {
+        self.pos
+    }
+
+    pub fn last_position(&self) -> usize {
+        self.last_pos
+    }
+    
+    pub fn remaining(&self) -> usize {
+        self.stream.len() - self.pos
     }
 
     pub fn read(&mut self, len: usize) -> ParseResult<&[u8]> {
-        let res = match self.stream.get(self.pos..self.pos + len) {
-            Some(x) => x,
-            None => return Err(ParseError::EOF),
-        };
+        let offset = self.pos;
 
-        self.pos += len;
+        let end = self.pos.checked_add(len).ok_or(ParseError {
+            offset,
+            kind: ParseErrorKind::UnexpectedEof {
+                needed: len,
+                remaining: self.remaining(),
+            },
+        })?;
 
-        Ok(res)
+        let bytes = self.stream.get(self.pos..end).ok_or(ParseError {
+            offset,
+            kind: ParseErrorKind::UnexpectedEof {
+                needed: len,
+                remaining: self.remaining(),
+            },
+        })?;
+
+        self.last_pos = self.pos;
+        self.pos = end;
+        
+        Ok(bytes)
     }
 
     pub fn is_empty(&self) -> bool {
-        self.stream.len() == self.pos
+        self.remaining() == 0
     }
 }

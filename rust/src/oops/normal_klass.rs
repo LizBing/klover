@@ -5,13 +5,8 @@ use std::{
 
 use crate::{
     class_loader::{
-        bootstrap_cld::BootstrapCLD,
-        cld::ClassLoaderData,
-        ms_api::{MSAllocator, MSBox, MSRef},
-    },
-    class_parser::{class_file::ClassFile, cp_info::ConstantPoolInfo, method_info::MethodInfo},
-    gc_bindings::obj_layout::ObjLayout,
-    oops::{
+        bootstrap_cld::BootstrapCLD, cld::ClassLoaderData, load_error::LoadResult, ms_api::{MSAllocator, MSBox, MSRef},
+    }, class_parser::{class_file::ClassFile, cp_info::ConstantPoolInfo, method_info::MethodInfo}, gc_bindings::obj_layout::ObjLayout, oops::{
         acc_flags::AccFlags,
         cp_entry::{CPEntry, ClassCPEntry, ResolvedFieldRef, ResolvedMethodRef},
         field::Field,
@@ -89,7 +84,7 @@ fn link_interfaces(
     let uninit = msa.calloc(entries.len());
 
     for (i, entry) in entries.iter().enumerate() {
-        let klass = entry.resolve(cld).map_err(|e| ResolveError::Load(e))?;
+        let klass = entry.resolve(cld).unwrap();
         let interface = klass.as_normal_ref().unwrap();
         if !interface.is_interface() {
             return Err(ResolveError::WrongRefType);
@@ -183,7 +178,7 @@ impl NormalKlass {
     pub fn link(
         unlinked: UnlinkedNormalKlass,
         cld: Option<&ClassLoaderData>,
-    ) -> ResolveResult<MSBox<Klass>> {
+    ) -> LoadResult<MSBox<Klass>> {
         let msa = match cld {
             Some(x) => &x.ms_allocator,
             None => BootstrapCLD::bs_msa(),
@@ -193,7 +188,7 @@ impl NormalKlass {
         let super_klass;
         match unlinked.super_klass {
             Some(x) => {
-                let super_ref = x.resolve(cld).map_err(|e| ResolveError::Load(e))?;
+                let super_ref = x.resolve(cld)?;
                 let super_normal = super_ref.as_normal().unwrap();
                 super_klass = unsafe { Some(MSRef::from_raw(super_normal.into())) };
 
@@ -217,7 +212,7 @@ impl NormalKlass {
         // A linked class keeps direct interfaces as resolved metadata references.
         // Field resolution can then traverse the interface graph without exposing
         // or re-reading symbolic constant-pool entries.
-        let interfaces = link_interfaces(&unlinked.interfaces, cld, msa)?;
+        let interfaces = link_interfaces(&unlinked.interfaces, cld, msa).unwrap();
 
         let cld_ptr = match cld {
             Some(x) => Some(x.into()),

@@ -181,10 +181,9 @@ impl BootstrapCLD {
     }
 
     fn find_array_klass(sym: SymbolHandle) -> LoadResult<MSBox<Klass>> {
-        let desc = FieldDesc::from(sym.utf8())?;
+        let desc = FieldDesc::from(sym.utf8());
 
         let klass = Klass::Array(ArrayKlass {
-            name: sym,
             desc,
         });
 
@@ -199,8 +198,8 @@ impl BootstrapCLD {
             None => return Err(LoadError::NotFound(sym.utf8().into())),
         };
 
-        let cf = ClassFile::from(&bytes)?;
-        let unlinked = UnlinkedNormalKlass::build(cf, None)?;
+        let cf = ClassFile::from(&bytes).unwrap();
+        let unlinked = UnlinkedNormalKlass::build(cf, None);
         let boxed = NormalKlass::link(unlinked, None)?;
 
         Ok(boxed)

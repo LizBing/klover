@@ -1,4 +1,7 @@
-use crate::class_parser::attr_info::AttrInfo;
+use crate::class_parser::attr_info::{AttrInfo, read_attrs};
+use crate::class_parser::field_info::read_fields;
+use crate::class_parser::method_info::read_methods;
+use crate::class_parser::parse_error::ParseErrorKind;
 use crate::class_parser::{
     class_reader::ClassReader,
     cp_info::ConstantPoolInfo,
@@ -40,15 +43,18 @@ fn read_cp(rd: &mut ClassReader) -> ParseResult<Vec<ConstantPoolInfo>> {
     let cp_count = rd.read_u16()?;
     let mut cp = Vec::with_capacity(cp_count as usize);
     cp.push(ConstantPoolInfo::Unusable); // slot 0 placeholder
+    
     let mut slot: u16 = 1;
     while slot < cp_count {
-        let entry = ConstantPoolInfo::read(rd)?;
+        let entry = ConstantPoolInfo::read(rd, slot)?;
         let wide = matches!(
             entry,
-            ConstantPoolInfo::LongInfo { .. } | ConstantPoolInfo::DoubleInfo { .. }
+            ConstantPoolInfo::Long(..) | ConstantPoolInfo::Double(..)
         );
         cp.push(entry);
+        
         slot += 1;
+        
         if wide && slot < cp_count {
             cp.push(ConstantPoolInfo::Unusable);
             slot += 1;
@@ -68,39 +74,6 @@ fn read_interfaces(rd: &mut ClassReader) -> ParseResult<Vec<u16>> {
     Ok(interfaces)
 }
 
-pub(super) fn read_attrs(rd: &mut ClassReader, cp: &[ConstantPoolInfo]) -> ParseResult<Vec<AttrInfo>> {
-    let attrs_count = rd.read_u16()?;
-    let mut attrs = Vec::with_capacity(attrs_count as _);
-    for _ in 0..attrs_count {
-        if let Some(x) = AttrInfo::read(rd, cp)? {
-            attrs.push(x);
-        }
-    }
-
-    Ok(attrs)
-}
-
-fn read_fields(rd: &mut ClassReader, cp: &[ConstantPoolInfo]) -> ParseResult<Vec<FieldInfo>> {
-    let fields_count = rd.read_u16()?;
-    let mut fields = Vec::with_capacity(fields_count as _);
-
-    for _ in 0..fields_count {
-        fields.push(FieldInfo::read(rd, cp)?);
-    }
-
-    Ok(fields)
-}
-
-fn read_methods(rd: &mut ClassReader, cp: &[ConstantPoolInfo]) -> ParseResult<Vec<MethodInfo>> {
-    let methods_count = rd.read_u16()?;
-    let mut methods = Vec::with_capacity(methods_count as _);
-    for _ in 0..methods_count {
-        methods.push(MethodInfo::read(rd, cp)?);
-    }
-
-    Ok(methods)
-}
-
 impl ClassFile {
     pub fn from(stream: &[u8]) -> ParseResult<Self> {
         let mut rd = ClassReader::new(stream);
@@ -108,13 +81,19 @@ impl ClassFile {
         // -- header --
         let magic = rd.read_u32()?;
         if magic != VALID_MAGIC {
-            return Err(ParseError::InvalidMagic(magic));
+            return Err(ParseError {
+                offset: rd.position(),
+                kind: ParseErrorKind::InvalidMagic(magic),
+            });
         }
 
         let minor = rd.read_u16()?;
         let major = rd.read_u16()?;
         if !is_version_valid(minor, major) {
-            return Err(ParseError::InvalidVersion { minor, major });
+            return Err(ParseError {
+                offset: rd.position(),
+                kind: ParseErrorKind::UnsupportedVersion { major, minor }
+            });
         }
 
         let cp = read_cp(&mut rd)?;
@@ -131,6 +110,13 @@ impl ClassFile {
         
         let attrs = read_attrs(&mut rd, &cp)?;
 
+        if !rd.is_empty() {
+            return Err(ParseError {
+                offset: rd.position(),
+                kind: ParseErrorKind::TrailingBytes { remaining: rd.remaining() }
+            });
+        }
+
         Ok(Self {
             minor_version: minor,
             major_version: major,
@@ -143,5 +129,24 @@ impl ClassFile {
             methods,
             attrs,
         })
+    }
+}
+
+impl ClassFile {
+    pub fn cp(&self, index: u16) -> &ConstantPoolInfo {
+        debug_assert!(index != 0);
+        
+        self.constant_pool
+            .get(index as usize)
+            .unwrap()
+    }
+
+    pub fn utf8(&self, index: u16) -> &str {
+        let entry = self.cp(index);
+        let ConstantPoolInfo::Utf8(n) = entry else {
+            unreachable!()
+        };
+
+        n.as_str()
     }
 }

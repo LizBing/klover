@@ -1,4 +1,4 @@
-use crate::class_parser::{attr_info::AttrInfo, class_file::read_attrs, cp_info::ConstantPoolInfo};
+use crate::class_parser::{attr_info::{AttrInfo, read_attrs}, cp_info::ConstantPoolInfo};
 
 use super::{class_reader::ClassReader, parse_error::ParseResult};
 
@@ -12,7 +12,7 @@ pub struct FieldInfo {
     
 impl FieldInfo {
     /// Read and resolve a field from the class file stream.
-    pub(crate) fn read(rd: &mut ClassReader, cp: &[ConstantPoolInfo]) -> ParseResult<Self> {
+    pub(super) fn read(rd: &mut ClassReader, cp: &[ConstantPoolInfo]) -> ParseResult<Self> {
         let acc_flags = rd.read_u16()?;
         
         let name_idx = rd.read_u16()?;
@@ -27,4 +27,15 @@ impl FieldInfo {
             attrs
         })
     }
+}
+
+pub(super) fn read_fields(rd: &mut ClassReader, cp: &[ConstantPoolInfo]) -> ParseResult<Vec<FieldInfo>> {
+    let fields_count = rd.read_u16()?;
+    let mut fields = Vec::with_capacity(fields_count as usize);
+
+    for _ in 0..fields_count {
+        fields.push(FieldInfo::read(rd, cp)?);
+    }
+
+    Ok(fields)
 }

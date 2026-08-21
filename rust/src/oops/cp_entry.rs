@@ -1,4 +1,4 @@
-use std::{cell::OnceCell, marker::PhantomData, ptr::NonNull, sync::{OnceLock, mpsc::RecvError}};
+use std::{cell::OnceCell, marker::PhantomData, ptr::NonNull, sync::OnceLock};
 
 use crate::{
     class_loader::{bootstrap_cld::BootstrapCLD, cld::ClassLoaderData, load_error::LoadResult, ms_api::MSRef}, class_parser::cp_info::ConstantPoolInfo, oops::{
@@ -22,7 +22,7 @@ pub struct SymbolicMemberRef {
 #[derive(Debug, Clone)]
 pub struct ResolvedFieldRef {
     __: PhantomData<()>,
-    
+
     pub holder: MSRef<NormalKlass>,
     pub field: MSRef<Field>,
 }
@@ -61,7 +61,7 @@ fn resolve_name_and_type(
         },
 
         None => match &parsed_cp[idx] {
-            ConstantPoolInfo::NameAndTypeInfo {
+            ConstantPoolInfo::NameAndType {
                 name_index,
                 desc_index,
             } => {
@@ -90,7 +90,7 @@ impl<R> CPRefEntry<R> {
         parsed_cp: &[ConstantPoolInfo],
     ) -> Self {
         match info {
-            ConstantPoolInfo::FieldrefInfo {
+            ConstantPoolInfo::Fieldref {
                 class_index,
                 name_and_type_index,
             } => {
@@ -106,7 +106,7 @@ impl<R> CPRefEntry<R> {
                 }
             }
 
-            ConstantPoolInfo::MethodrefInfo {
+            ConstantPoolInfo::Methodref {
                 class_index,
                 name_and_type_index,
             } => {
@@ -122,7 +122,7 @@ impl<R> CPRefEntry<R> {
                 }
             }
 
-            ConstantPoolInfo::InterfaceMethodrefInfo {
+            ConstantPoolInfo::InterfaceMethodref {
                 class_index,
                 name_and_type_index,
             } => {
@@ -154,8 +154,7 @@ impl CPRefEntry<ResolvedFieldRef> {
         let target = self
             .symbolic
             .class
-            .resolve(referrer.cld())
-            .map_err(|e| ResolveError::Load(e))?;
+            .resolve(referrer.cld()).unwrap();
         
         let target = target.as_normal_ref().unwrap();
         let mut visited = Vec::new();
@@ -215,8 +214,7 @@ impl CPRefEntry<ResolvedMethodRef> {
         let target = self
             .symbolic
             .class
-            .resolve(referrer.cld())
-            .map_err(|e| ResolveError::Load(e))?;
+            .resolve(referrer.cld()).unwrap();
 
         let mut current = target.as_normal_ref().unwrap();
 
@@ -265,7 +263,7 @@ impl CPRefEntry<ResolvedInterfaceMethodRef> {}
 #[derive(Debug)]
 pub struct ClassCPEntry {
     name: SymbolHandle,
-    resolved: OnceLock<LoadResult<MSRef<Klass>>>,
+    resolved: OnceLock<LoadResult<MSRef<Klass>>>
 }
 
 impl ClassCPEntry {
@@ -317,7 +315,7 @@ pub enum CPEntry {
         desc: SymbolHandle,
     },
 
-    Utf8(SymbolHandle),
+    UTF8(SymbolHandle),
 
     // Ignore for now.
     InvokeDynamic {},
@@ -332,7 +330,7 @@ fn resolve_class_symbol(
         Some(CPEntry::Class(entry)) => entry.name.clone(),
 
         None => match &parsed_cp[idx] {
-            ConstantPoolInfo::ClassInfo { name_index } => {
+            ConstantPoolInfo::Class { name_index } => {
                 let name = resolve_symbol(*name_index as usize, cp, parsed_cp);
 
                 cp[idx]
@@ -372,14 +370,14 @@ fn resolve_symbol(
 ) -> SymbolHandle {
     match cp[idx].get() {
         Some(x) => match x {
-            CPEntry::Utf8(handle) => handle.clone(),
+            CPEntry::UTF8(handle) => handle.clone(),
             _ => unreachable!(),
         },
 
         None => match &parsed_cp[idx] {
-            ConstantPoolInfo::Utf8Info { utf8 } => {
+            ConstantPoolInfo::Utf8(utf8) => {
                 let handle = SymbolTable::intern(utf8.as_str());
-                cp[idx].set(CPEntry::Utf8(handle.clone())).unwrap();
+                cp[idx].set(CPEntry::UTF8(handle.clone())).unwrap();
 
                 handle
             }
@@ -398,7 +396,7 @@ impl CPEntry {
         let info = &parsed_cp[idx];
 
         let res = match info {
-            ConstantPoolInfo::ClassInfo { name_index } => {
+            ConstantPoolInfo::Class { name_index } => {
                 let name = resolve_symbol(*name_index as usize, cp, parsed_cp);
                 Self::Class(ClassCPEntry {
                     name,
@@ -406,41 +404,41 @@ impl CPEntry {
                 })
             }
 
-            ConstantPoolInfo::FieldrefInfo { .. } => {
+            ConstantPoolInfo::Fieldref { .. } => {
                 let entry = CPRefEntry::build(info, cp, parsed_cp);
                 Self::FieldRef(entry)
             }
 
-            ConstantPoolInfo::MethodrefInfo { .. } => {
+            ConstantPoolInfo::Methodref { .. } => {
                 let entry = CPRefEntry::build(info, cp, parsed_cp);
                 Self::MethodRef(entry)
             }
 
-            ConstantPoolInfo::InterfaceMethodrefInfo { .. } => {
+            ConstantPoolInfo::InterfaceMethodref { .. } => {
                 let entry = CPRefEntry::build(info, cp, parsed_cp);
                 Self::InterfaceMethodRef(entry)
             }
 
-            ConstantPoolInfo::StringInfo { string_index } => Self::StringConstant(StringCPEntry {
+            ConstantPoolInfo::String { string_index } => Self::StringConstant(StringCPEntry {
                 raw: resolve_symbol(*string_index as usize, cp, parsed_cp),
             }),
 
-            ConstantPoolInfo::IntegerInfo { value } => Self::Integer(*value),
+            ConstantPoolInfo::Integer(value) => Self::Integer(*value),
 
-            ConstantPoolInfo::FloatInfo { value } => Self::Float(*value),
+            ConstantPoolInfo::Float(value) => Self::Float(*value),
 
-            ConstantPoolInfo::LongInfo { value } => Self::Long(*value),
+            ConstantPoolInfo::Long(value) => Self::Long(*value),
 
-            ConstantPoolInfo::DoubleInfo { value } => Self::Double(*value),
+            ConstantPoolInfo::Double(value) => Self::Double(*value),
 
-            ConstantPoolInfo::NameAndTypeInfo { .. } => {
+            ConstantPoolInfo::NameAndType { .. } => {
                 let (name, desc) = resolve_name_and_type(idx, cp, parsed_cp);
                 Self::NameAndType { name, desc }
             }
 
-            ConstantPoolInfo::Utf8Info { .. } => {
+            ConstantPoolInfo::Utf8 { .. } => {
                 let handle = resolve_symbol(idx, cp, parsed_cp);
-                Self::Utf8(handle)
+                Self::UTF8(handle)
             }
 
             ConstantPoolInfo::Unusable => return,
@@ -452,7 +450,7 @@ impl CPEntry {
 
 pub fn get_utf8(cp: &[OnceCell<CPEntry>], idx: usize) -> SymbolHandle {
     match cp[idx].get() {
-        Some(CPEntry::Utf8(handle)) => handle.clone(),
+        Some(CPEntry::UTF8(handle)) => handle.clone(),
         _ => unreachable!(),
     }
 }

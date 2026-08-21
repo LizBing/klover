@@ -1,8 +1,7 @@
 use crate::class_parser::{
-    class_file::read_attrs,
     class_reader::ClassReader,
     cp_info::ConstantPoolInfo,
-    parse_error::{ParseError, ParseResult},
+    parse_error::{ParseError, ParseErrorKind, ParseResult},
 };
 
 pub struct ExceptionTableEntryInfo {
@@ -62,33 +61,33 @@ pub enum AttrInfo {
 }
 
 impl AttrInfo {
-    pub fn read(rd: &mut ClassReader, cp: &[ConstantPoolInfo]) -> ParseResult<Option<Self>> {
-        let name_idx = rd.read_u16()? as usize;
+    pub(super) fn read(rd: &mut ClassReader, cp: &[ConstantPoolInfo]) -> ParseResult<Option<Self>> {
+        let offset = rd.position();
+        
+        let name_idx = rd.read_u16()?;        
         let len = rd.read_u32()? as usize;
         let payload = rd.read(len)?;
 
-        if name_idx == 0 || name_idx >= cp.len() {
-            return Err(ParseError::InvalidCPIndex);
-        }
-
         let mut pl_rd = ClassReader::new(payload);
 
-        let utf8_info = &cp[name_idx];
-        let name = match utf8_info {
-            ConstantPoolInfo::Utf8Info { utf8 } => utf8,
-            _ => return Err(ParseError::InvalidCPType),
+        let utf8 = &cp[name_idx as usize];
+        let ConstantPoolInfo::Utf8(name) = utf8 else {
+            unreachable!()
         };
 
         match name.as_str() {
             "ConstantValue" => {
                 if len != 2 {
-                    return Err(ParseError::InvalidAttrLen(len));
+                    return Err(ParseError {
+                        offset,
+                        kind: ParseErrorKind::InvalidAttributeLength {
+                            name_index: name_idx,
+                            declared: len
+                        }
+                    });
                 }
 
                 let cp_idx = pl_rd.read_u16()?;
-                if cp_idx == 0 || cp_idx as usize >= cp.len() {
-                    return Err(ParseError::InvalidCPIndex);
-                }
 
                 Ok(Some(Self::ConstantValue { cp_idx }))
             }
@@ -98,4 +97,16 @@ impl AttrInfo {
             _ => Ok(None),
         }
     }
+}
+
+pub(super) fn read_attrs(rd: &mut ClassReader, cp: &[ConstantPoolInfo]) -> ParseResult<Vec<AttrInfo>> {
+    let attrs_count = rd.read_u16()?;
+    let mut attrs = Vec::with_capacity(attrs_count as usize);
+    for _ in 0..attrs_count {
+        if let Some(x) = AttrInfo::read(rd, cp)? {
+            attrs.push(x);
+        }
+    }
+
+    Ok(attrs)
 }

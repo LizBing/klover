@@ -1,8 +1,6 @@
-use crate::{class_loader::ms_api::MSRef, engines::{exec_error::{ExecError, ExecResult}, invocation::{Invocation, ResolvedMethod}, slot::Slot}, gc_bindings::oop_hierarchy::NObjPtr, oops::{attr::Code, jvalue::{JByte, JDouble, JFloat, JInt, JLong, JShort, JValue}, method::Method, normal_klass::NormalKlass}};
+use crate::{class_loader::ms_api::MSRef, engines::{exec_error::{ExecError, ExecResult}, invocation::Invocation, slot::Slot}, gc_bindings::oop_hierarchy::NObjPtr, oops::{attr::Code, jvalue::{JByte, JDouble, JFloat, JInt, JLong, JShort, JValue}, method::Method, normal_klass::NormalKlass}};
 
 pub struct InterpreterFrame {
-    target: ResolvedMethod,
-    
     oprand_stack: Vec<Slot>,
     locals: Box<[Slot]>,
 
@@ -11,36 +9,14 @@ pub struct InterpreterFrame {
 }
 
 impl InterpreterFrame {
-    pub fn from_call(target: ResolvedMethod, args: &[Slot]) -> ExecResult<Self> {
-        let Some(code) = target.method.code.as_ref() else {
-            return Err(ExecError::NoCode);
-        };
-
-        let argc = args.len();
-        let max_locals = code.max_locals();
-        let mut locals = Vec::with_capacity(max_locals);
-
-        for arg in args {
-            locals.push(*arg);
-        }
-        
-        for _ in [argc..max_locals] {
-            locals.push(Slot::Unused);
-        }
-
-        Ok(Self {
-            target,
-            oprand_stack: Vec::new(),
-            locals: locals.into_boxed_slice(),
-            pc: 0,
-            last_pc: 0,
-        })
+    pub fn from_call(args: &[Slot]) -> ExecResult<Self> {
+        unimplemented!()
     }
 }
 
 impl InterpreterFrame {
     fn code(&self) -> &Code {
-        self.target.method.code.as_ref().unwrap()
+        unimplemented!()
     }
 }
 
@@ -120,7 +96,7 @@ impl InterpreterFrame {
 impl InterpreterFrame {
     pub fn read_u8(&mut self) -> ExecResult<u8> {
         let res;
-        match self.code().bytecodes().get(self.pc) {
+        match self.code().bytecodes.get(self.pc) {
             Some(b) => res = *b,
             None => return Err(ExecError::EOF),
         }
