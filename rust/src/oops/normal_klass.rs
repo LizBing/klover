@@ -8,7 +8,6 @@ use crate::{
         bootstrap_cld::BootstrapCLD, cld::ClassLoaderData, load_error::LoadResult, ms_api::{MSAllocator, MSBox, MSRef},
     }, class_parser::{class_file::ClassFile, cp_info::ConstantPoolInfo, method_info::MethodInfo}, gc_bindings::obj_layout::ObjLayout, oops::{
         acc_flags::AccFlags,
-        cp_entry::{CPEntry, ClassCPEntry, ResolvedFieldRef, ResolvedMethodRef},
         field::Field,
         fields::Fields,
         klass::Klass,

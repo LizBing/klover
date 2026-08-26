@@ -1,7 +1,6 @@
 pub mod acc_flags;
 pub mod array_klass;
 pub mod attr;
-pub mod cp_entry;
 pub mod desc;
 pub mod field;
 mod fields;

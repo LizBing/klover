@@ -1,8 +1,8 @@
-use crate::class_parser::parse_error::ParseErrorKind;
+use crate::class_parser::parse_error::ClassFileErrorKind;
 
 use super::{
     class_reader::ClassReader,
-    parse_error::{ParseError, ParseResult},
+    parse_error::{ClassFileError, ClassFileResult},
 };
 
 #[derive(Debug)]
@@ -61,7 +61,7 @@ pub enum ConstantPoolInfo {
 }
 
 impl ConstantPoolInfo {
-    pub fn read(rd: &mut ClassReader, cp_index: u16) -> ParseResult<Self> {
+    pub fn read(rd: &mut ClassReader, cp_index: u16) -> ClassFileResult<Self> {
         let offset = rd.position();
         let tag = rd.read_u8()?;
 
@@ -99,9 +99,12 @@ impl ConstantPoolInfo {
             1 => {
                 let len = rd.read_u16()? as usize;
                 let raw = rd.read(len)?;
-                let utf8 = cesu8::from_java_cesu8(raw).map_err(|_| ParseError {
+                let utf8 = cesu8::from_java_cesu8(raw).map_err(|_| ClassFileError {
                     offset,
-                    kind: ParseErrorKind::InvalidModifiedUtf8 { cp_index }
+                    kind: ClassFileErrorKind::InvalidModifiedUtf8 {
+                        cp_index,
+                        bytes: raw.into()
+                    }
                 })?;
 
                 Self::Utf8(utf8.into())
@@ -124,9 +127,9 @@ impl ConstantPoolInfo {
                 name_and_type_index: rd.read_u16()?,
             },
 
-            _ => return Err(ParseError {
+            _ => return Err(ClassFileError {
                 offset,
-                kind: ParseErrorKind::InvalidConstantPoolTag { cp_index, tag }
+                kind: ClassFileErrorKind::InvalidConstantPoolTag { cp_index, tag }
             }),
         };
 

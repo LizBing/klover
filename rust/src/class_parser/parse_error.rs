@@ -1,11 +1,11 @@
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ParseError {
+pub struct ClassFileError {
     pub offset: usize,
-    pub kind: ParseErrorKind,
+    pub kind: ClassFileErrorKind,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ParseErrorKind {
+pub enum ClassFileErrorKind {
     UnexpectedEof {
         needed: usize,
         remaining: usize,
@@ -25,11 +25,7 @@ pub enum ParseErrorKind {
 
     InvalidModifiedUtf8 {
         cp_index: u16,
-    },
-
-    InvalidConstantPoolReference {
-        index: u16,
-        expected: CPKind,
+        bytes: Vec<u8>,
     },
 
     InvalidAttributeLength {
@@ -42,12 +38,53 @@ pub enum ParseErrorKind {
     },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub type ClassFileResult<T> = Result<T, ClassFileError>;
+
+#[derive(Debug, Clone)]
 pub enum CPKind {
-    Utf8,
     Class,
-    NameAndType,
+
+    Fieldref,
+
+    Methodref,
+
+    InterfaceMethodref,
+
+    Utf8,
+
     ConstantValue,
+
+    NameAndType,
+
+    MethodHandle,
+
+    MethodType,
+
+    InvokeDynamic,
+
+    Unusable,
 }
 
-pub type ParseResult<T> = Result<T, ParseError>;
+#[derive(Debug, Clone)]
+pub enum ImageError {
+    InvalidCPIndex(u16),
+
+    CPKindMismatched {
+        index: u16,
+        expected: CPKind,
+    },
+
+    InvalidRefKind(u8),
+
+    InvalidMemberRefName(String),
+
+    InvalidDesc(String),
+}
+
+pub type ImageResult<T> = Result<T, ImageError>;
+
+#[derive(Debug, Clone)]
+pub enum ParseError {
+    ClassFile(ClassFileError),
+    Image(ImageError),
+}

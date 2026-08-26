@@ -1,9 +1,7 @@
 use std::{cell::OnceCell, marker::PhantomData};
 
 use crate::{
-    class_loader::ms_api::{MSAllocator, MSBox, MSRef}, class_parser::attr_info::{CodeAttrInfo, ExceptionTableEntryInfo}, oops::{
-        cp_entry::{CPEntry, ClassCPEntry, StringCPEntry}, jvalue::{JDouble, JFloat, JInt, JLong}, normal_klass::cp_slice_get,
-    },
+    class_loader::ms_api::{MSAllocator, MSBox, MSRef}, class_parser::attr_info::{CodeAttrInfo, ExceptionTableEntryInfo}
 };
 
 #[derive(Debug)]

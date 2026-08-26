@@ -1,7 +1,7 @@
 use crate::class_parser::{attr_info::read_attrs, cp_info::ConstantPoolInfo};
 use crate::class_parser::attr_info::AttrInfo;
 
-use super::{class_reader::ClassReader, parse_error::ParseResult};
+use super::{class_reader::ClassReader, parse_error::ClassFileResult};
 
 pub struct MethodInfo {
     pub acc_flags: u16,
@@ -12,7 +12,7 @@ pub struct MethodInfo {
 
 impl MethodInfo {
     /// Read and resolve a method from the class file stream.
-    pub(super) fn read(rd: &mut ClassReader, cp: &[ConstantPoolInfo]) -> ParseResult<Self> {
+    pub(super) fn read(rd: &mut ClassReader, cp: &[ConstantPoolInfo]) -> ClassFileResult<Self> {
         let acc_flags = rd.read_u16()?;
 
         let name_idx= rd.read_u16()?;
@@ -29,7 +29,7 @@ impl MethodInfo {
     }
 }
 
-pub(super) fn read_methods(rd: &mut ClassReader, cp: &[ConstantPoolInfo]) -> ParseResult<Vec<MethodInfo>> {
+pub(super) fn read_methods(rd: &mut ClassReader, cp: &[ConstantPoolInfo]) -> ClassFileResult<Vec<MethodInfo>> {
     let methods_count = rd.read_u16()?;
     let mut methods = Vec::with_capacity(methods_count as usize);
     for _ in 0..methods_count {
