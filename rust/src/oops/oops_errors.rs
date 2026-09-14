@@ -17,17 +17,20 @@ pub enum ResolveError {
 }
 
 #[derive(Debug)]
-pub enum LinkError {
-    Load(LoadError),
+pub enum LinkageError {
+    SuperNotFound {
+        name: String,
+    },
     
-    NotInterface,
+    NotInterface {
+        name: String,
+    },
+
+    NotNormalKlass {
+        name: String,
+    },
 }
 
 pub type ResolveResult<T> = Result<T, ResolveError>;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ClassInitError {
-    InvalidTransition,
-}
-
-pub type ClassInitResult<T> = Result<T, ClassInitError>;
+pub type LinkageResult<T> = Result<T, LinkageError>;

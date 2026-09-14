@@ -1,28 +1,16 @@
-use crate::{
-    class_loader::{load_error::LoadError, ms_api::MSBox},
-    oops::klass::Klass,
-};
+use std::hash::Hash;
 
-#[derive(Debug)]
-pub enum ClassLoadState {
-    Loading { owner: std::thread::ThreadId },
-    Loaded(MSBox<Klass>),
-    Failed(LoadError),
-}
+use crate::{class_loader::ms_api::MSBox, oops::{klass::Klass, symbol_table::SymbolHandle}};
 
-#[derive(Debug)]
 pub struct ClassSlot {
-    pub state: parking_lot::Mutex<ClassLoadState>,
-    pub completed: parking_lot::Condvar,
+    pub klass: MSBox<Klass>,
 }
 
-impl Default for ClassSlot {
-    fn default() -> Self {
-        Self {
-            state: parking_lot::Mutex::new(ClassLoadState::Loading {
-                owner: std::thread::current().id(),
-            }),
-            completed: parking_lot::Condvar::new(),
-        }
+unsafe impl Send for ClassSlot {}
+unsafe impl Sync for ClassSlot {}
+
+impl ClassSlot {
+    pub fn new(klass: MSBox<Klass>) -> Self {
+        Self { klass }
     }
 }

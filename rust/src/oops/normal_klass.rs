@@ -1,327 +1,107 @@
-use std::{
-    cell::OnceCell,
-    ptr::{NonNull, null},
-};
+use std::{ops::Deref, ptr::NonNull};
 
-use crate::{
-    class_loader::{
-        bootstrap_cld::BootstrapCLD, cld::ClassLoaderData, load_error::LoadResult, ms_api::{MSAllocator, MSBox, MSRef},
-    }, class_parser::{class_file::ClassFile, cp_info::ConstantPoolInfo, method_info::MethodInfo}, gc_bindings::obj_layout::ObjLayout, oops::{
-        acc_flags::AccFlags,
-        field::Field,
-        fields::Fields,
-        klass::Klass,
-        method::Method,
-        oops_errors::{ClassInitError, ClassInitResult, ResolveError, ResolveResult},
-        symbol_table::{SymbolHandle, SymbolTable},
-    },
-};
+pub use cafebabe::ClassAccessFlags;
 
-#[derive(Debug)]
-pub struct UnlinkedNormalKlass {
-    acc_flags: AccFlags,
+use crate::{class_loader::{bs_cld::BootstrapCLD, class_loader_data::ClassLoaderData, ms_api::{MSAllocator, MSBox, MSRef}}, oops::{fields::Fields, method::Method, oops_errors::LinkageError, symbol_table::{SymbolHandle, SymbolTable}}};
 
-    this_klass: MSRef<ClassCPEntry>,
-    pub super_klass: Option<MSRef<ClassCPEntry>>,
+fn get_msa(cld: Option<&ClassLoaderData>) -> &MSAllocator {
+    match cld {
+        Some(cld) => &cld.msa,
+        None => BootstrapCLD::ms_allocator(),
+    }
+}
 
-    constant_pool: MSBox<[OnceCell<CPEntry>]>,
-
-    interfaces: Vec<MSRef<ClassCPEntry>>,
-
-    fields: Fields,
+pub struct UnlinkedNormalKlass<'cld> {
+    name: SymbolHandle,
+    acc_flags: ClassAccessFlags,
+    cld: Option<&'cld ClassLoaderData>,
+    
+    super_name: Option<SymbolHandle>,
+    interfaces: Box<[SymbolHandle]>,
 
     methods: MSBox<[Method]>,
 }
 
-fn build_cp<'a>(
-    parsed_cp: &[ConstantPoolInfo],
-    msa: &MSAllocator,
-) -> MSBox<[OnceCell<CPEntry>]> {
-    let cp_len = parsed_cp.len();
-    let uninit = msa.calloc(cp_len);
+impl<'cld> UnlinkedNormalKlass<'cld> {
+    pub fn build(cf: cafebabe::ClassFile, cld: Option<&'cld ClassLoaderData>) -> Self {
+        let msa = get_msa(cld);
+        
+        let name = SymbolTable::intern(&cf.this_class);
+        let super_name = cf.super_class.map(|n| SymbolTable::intern(&n));
 
-    for i in 0..cp_len {
-        uninit[i].write(OnceCell::new());
-    }
-
-    let cp = unsafe { MSBox::from_raw(uninit.assume_init_mut()) };
-
-    for i in 1..cp_len {
-        CPEntry::from(i, &cp, parsed_cp);
-    }
-
-    cp
-}
-
-pub fn cp_slice_get(cp_slice: &[OnceCell<CPEntry>], idx: usize) -> Option<&CPEntry> {
-    cp_slice[idx].get()
-}
-
-fn build_interfaces(
-    parsed_ifaces: &[u16],
-    cp_slice: &[OnceCell<CPEntry>],
-) -> Vec<MSRef<ClassCPEntry>> {
-    let mut ifaces = Vec::with_capacity(parsed_ifaces.len());
-
-    for idx in parsed_ifaces {
-        match cp_slice_get(cp_slice, *idx as usize) {
-            Some(CPEntry::Class(entry)) => unsafe {
-                ifaces.push(MSRef::from_raw(entry.into()));
-            },
-            _ => unreachable!(),
-        };
-    }
-
-    ifaces
-}
-
-fn link_interfaces(
-    entries: &[MSRef<ClassCPEntry>],
-    cld: Option<&ClassLoaderData>,
-    msa: &MSAllocator,
-) -> ResolveResult<MSBox<[MSRef<NormalKlass>]>> {
-    let uninit = msa.calloc(entries.len());
-
-    for (i, entry) in entries.iter().enumerate() {
-        let klass = entry.resolve(cld).unwrap();
-        let interface = klass.as_normal_ref().unwrap();
-        if !interface.is_interface() {
-            return Err(ResolveError::WrongRefType);
+        let mut ifaces = Vec::with_capacity(cf.interfaces.len());
+        for iface in cf.interfaces {
+            ifaces.push(SymbolTable::intern(&iface));
         }
-        uninit[i].write(interface);
-    }
 
-    unsafe { Ok(MSBox::from_raw(uninit.assume_init_mut())) }
-}
+        let methods = msa.calloc(cf.methods.len());
+        for (i, v) in cf.methods.iter().enumerate() {
+            methods[i].write(Method::build(v, msa));
+        }
 
-fn build_methods(
-    parsed_methods: &[MethodInfo],
-    cp_slice: &[OnceCell<CPEntry>],
-    msa: &MSAllocator,
-) -> MSBox<[Method]> {
-    let methods_len = parsed_methods.len();
-    let uninit = msa.calloc(methods_len);
-
-    for (i, info) in parsed_methods.iter().enumerate() {
-        uninit[i].write(Method::from(info, cp_slice, msa));
-    }
-
-    unsafe { MSBox::from_raw(uninit.assume_init_mut()) }
-}
-
-impl UnlinkedNormalKlass {
-    pub fn build(cf: ClassFile, cld: Option<&ClassLoaderData>) -> Self {
-        let msa = match cld {
-            Some(x) => &x.ms_allocator,
-            None => BootstrapCLD::bs_msa(),
-        };
-
-        let acc_flags = AccFlags::from_bits_truncate(cf.acc_flags);
-
-        let cp = build_cp(&cf.constant_pool, msa);
-
-        let this_entry = match cp_slice_get(&cp, cf.this_class as usize) {
-            Some(CPEntry::Class(entry)) => unsafe { MSRef::from_raw(entry.into()) },
-            _ => unreachable!(),
-        };
-
-        let super_entry = if cf.super_index == 0 {
-            None
-        } else {
-            Some(match cp_slice_get(&cp, cf.super_index as usize) {
-                Some(CPEntry::Class(entry)) => unsafe { MSRef::from_raw(entry.into()) },
-                _ => unreachable!(),
-            })
-        };
-
-        let interfaces = build_interfaces(&cf.interfaces, &cp);
-
-        let fields = Fields::build(&cf.fields, &cp, msa);
-
-        let methods = build_methods(&cf.methods, &cp, msa);
-
-        Self {
-            acc_flags,
-            this_klass: this_entry.clone(),
-            super_klass: super_entry,
-            constant_pool: cp,
-            interfaces,
-            fields,
-            methods,
+        unsafe {
+            Self {
+                name,
+                acc_flags: cf.access_flags,
+                cld,
+                super_name,
+                interfaces: ifaces.into(),
+                methods: MSBox::from_raw(methods.assume_init_mut()),
+            }
         }
     }
 }
 
-#[derive(Debug)]
 pub struct NormalKlass {
-    acc_flags: AccFlags,
-
-    this_klass: MSRef<ClassCPEntry>,
-    super_klass: Option<MSRef<NormalKlass>>,
-
-    // Points to rust memory space.
+    pub name: SymbolHandle,
+    pub acc_flags: ClassAccessFlags,
     cld: Option<NonNull<ClassLoaderData>>,
 
-    constant_pool: MSBox<[OnceCell<CPEntry>]>,
-
-    interfaces: MSBox<[MSRef<NormalKlass>]>,
-
-    fields: Fields,
+    super_klass: Option<MSRef<NormalKlass>>,
 
     methods: MSBox<[Method]>,
-
-    obj_layout: ObjLayout,
 }
 
-impl NormalKlass {
-    pub fn link(
-        unlinked: UnlinkedNormalKlass,
-        cld: Option<&ClassLoaderData>,
-    ) -> LoadResult<MSBox<Klass>> {
-        let msa = match cld {
-            Some(x) => &x.ms_allocator,
-            None => BootstrapCLD::bs_msa(),
-        };
+impl TryFrom<UnlinkedNormalKlass<'_>> for NormalKlass {
+    type Error = LinkageError;
 
-        let obj_layout;
-        let super_klass;
-        match unlinked.super_klass {
-            Some(x) => {
-                let super_ref = x.resolve(cld)?;
-                let super_normal = super_ref.as_normal().unwrap();
-                super_klass = unsafe { Some(MSRef::from_raw(super_normal.into())) };
+    fn try_from(value: UnlinkedNormalKlass<'_>) -> Result<Self, Self::Error> {        
+        let cld = value.cld.map(|cld| cld.into());
 
-                obj_layout = ObjLayout {
-                    super_layout: &super_normal.obj_layout,
-                    byte_size: super_normal.obj_layout.byte_size + unlinked.fields.instance_size,
-                    ptrs_count: unlinked.fields.instance_ptrs_count,
-                }
-            }
-
-            None => {
-                super_klass = None;
-                obj_layout = ObjLayout {
-                    super_layout: null(),
-                    byte_size: unlinked.fields.instance_size,
-                    ptrs_count: unlinked.fields.instance_ptrs_count,
-                }
-            }
-        }
-
-        // A linked class keeps direct interfaces as resolved metadata references.
-        // Field resolution can then traverse the interface graph without exposing
-        // or re-reading symbolic constant-pool entries.
-        let interfaces = link_interfaces(&unlinked.interfaces, cld, msa).unwrap();
-
-        let cld_ptr = match cld {
-            Some(x) => Some(x.into()),
+        let super_klass = match value.super_name {
             None => None,
+
+            Some(skn) => {
+                let sk = match value.cld {
+                    None => BootstrapCLD::find_class(skn.utf8()),
+                    Some(cld) => cld.load_class(skn.utf8()),
+                }.map_err(|_| LinkageError::SuperNotFound { name: skn.utf8().into() })?;
+
+                match sk.as_normal_klass_ref() {
+                    None => return Err(LinkageError::NotNormalKlass { name: skn.utf8().into() }),
+                    Some(x) => Some(x),
+                }
+            }
         };
 
-        let klass = Self {
-            acc_flags: unlinked.acc_flags,
-            this_klass: unlinked.this_klass,
+        Ok(Self {
+            name: value.name,
+            acc_flags: value.acc_flags,
+            cld,
             super_klass,
-            cld: cld_ptr,
-            constant_pool: unlinked.constant_pool,
-            interfaces,
-            fields: unlinked.fields,
-            methods: unlinked.methods,
-            obj_layout,
-        };
-
-        let boxed = MSBox::new(msa, Klass::Normal(klass));
-        boxed.as_normal().unwrap().this_klass.set((&boxed).into());
-
-        Ok(boxed)
+            methods: value.methods,
+        })
     }
 }
 
 impl NormalKlass {
-    pub fn is_interface(&self) -> bool {
-        self.acc_flags.contains(AccFlags::ACC_INTERFACE)
-    }
-}
-
-impl NormalKlass {
-    pub fn obj_layout(&self) -> &ObjLayout {
-        &self.obj_layout
-    }
-
-    pub fn constant_pool_entry(&self, index: usize) -> Option<&CPEntry> {
-        self.constant_pool.get(index)?.get()
-    }
-
-    pub fn cld(&self) -> Option<&ClassLoaderData> {
-        self.cld.map(|x| unsafe { x.as_ref() })
-    }
-
-    pub fn super_klass_ref(&self) -> Option<MSRef<NormalKlass>> {
-        self.super_klass.clone()
-    }
-}
-    
-impl NormalKlass {
-    pub(crate) fn direct_interfaces(&self) -> &[MSRef<NormalKlass>] {
-        &self.interfaces
-    }
-
-    pub(crate) fn declares_default_method(&self) -> bool {
-        self.is_interface()
-            && self.methods.iter().any(|method| {
-                !method.acc_flags.contains(AccFlags::ACC_ABSTRACT)
-                    && !method.acc_flags.contains(AccFlags::ACC_STATIC)
-            })
-    }
-
-    pub fn find_declared_field_symbol(
-        &self,
-        name: &SymbolHandle,
-        desc: &SymbolHandle,
-    ) -> Option<MSRef<Field>> {
-        let field = self.fields.find_declared(name, desc)?;
-        Some(unsafe { MSRef::from_raw(NonNull::from(field)) })
-    }
-
-    pub fn resolve_field_ref(&self, index: usize) -> ResolveResult<ResolvedFieldRef> {
-        let entry = self
-            .constant_pool_entry(index)
-            .ok_or(ResolveError::InvalidCPIndex)?;
-
-        match entry {
-            CPEntry::FieldRef(entry) => entry.resolve(self),
-            _ => unreachable!(),
-        }
-    }
-
     pub fn find_declared_method(&self, name: &str, desc: &str) -> Option<MSRef<Method>> {
-        let name = SymbolTable::intern(name);
-        let desc = SymbolTable::intern(desc);
-
-        self.find_declared_method_symbol(&name, &desc)
-    }
-
-    pub fn find_declared_method_symbol(
-        &self,
-        name: &SymbolHandle,
-        desc: &SymbolHandle,
-    ) -> Option<MSRef<Method>> {
-        let method = self
-            .methods
-            .iter()
-            .find(|method| method.name.equals(name) && method.desc.raw.equals(desc))?;
-
-        Some(unsafe { MSRef::from_raw(NonNull::from(method)) })
-    }
-
-    pub fn resolve_method_ref(&self, index: usize) -> ResolveResult<ResolvedMethodRef> {
-        let entry = self
-            .constant_pool_entry(index)
-            .ok_or(ResolveError::InvalidCPIndex)?;
-
-        match entry {
-            CPEntry::MethodRef(entry) => entry.resolve(self),
-            _ => unreachable!(),
+        for method in self.methods.deref() {
+            if method.name.utf8() == name && method.desc.raw.utf8() == desc {
+                unsafe { return Some(MSRef::from_raw(method.into())); }
+            }
         }
+
+        None
     }
 }

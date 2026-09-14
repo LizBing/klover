@@ -1,19 +1,25 @@
-use crate::{class_parser::parse_error::ParseError, linkage::linkage_error::LinkageError};
+use std::marker::PhantomData;
 
-#[derive(Debug, Clone)]
-pub enum LoadError {
-    NotFound(String),
+use crate::oops::oops_errors::LinkageError;
 
-    Parse(ParseError),
+#[derive(Debug)]
+pub enum LoadErrorKind {
+    NotFound,
 
-    Link(LinkageError),
+    Duplicated,
 
-    StillLoading(String),
+    Parse(cafebabe::ParseError),
 
-    Duplicated {
-        cld_name: Option<String>,
-        class_name: String
-    },
+    Linkage(LinkageError),
+}
+
+#[derive(Debug)]
+pub struct LoadError {
+    pub(super) __: PhantomData<()>,
+    
+    pub cld_name: Option<String>,
+    pub klass_name: String,
+    pub kind: LoadErrorKind,
 }
 
 pub type LoadResult<T> = Result<T, LoadError>;

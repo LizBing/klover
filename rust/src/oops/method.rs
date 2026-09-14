@@ -1,34 +1,37 @@
-use std::cell::OnceCell;
+use std::marker::PhantomData;
 
-use crate::{class_loader::ms_api::MSAllocator, class_parser::{attr_info::AttrInfo, method_info::MethodInfo}, oops::{acc_flags::AccFlags, attr::Code, cp_entry::{CPEntry, get_utf8}, desc::MethodDesc, oops_errors::ResolveResult, symbol_table::SymbolHandle}};
+pub use cafebabe::MethodAccessFlags;
 
-#[derive(Debug)]
+use crate::{class_loader::ms_api::MSAllocator, code::code::Code, oops::{desc::MethodDesc, symbol_table::{SymbolHandle, SymbolTable}}};
+
 pub struct Method {
-    pub acc_flags: AccFlags,
+    __: PhantomData<()>,
+    
+    pub acc_flags: MethodAccessFlags,
     pub name: SymbolHandle,
     pub desc: MethodDesc,
+
     pub code: Option<Code>,
 }
 
 impl Method {
-    pub fn from(info: &MethodInfo, cp: &[OnceCell<CPEntry>], msa: &MSAllocator) -> Self {
-        let acc_flags = AccFlags::from_bits_truncate(info.acc_flags);
-        let name = get_utf8(cp, info.name_idx as usize);
-        let desc = MethodDesc::from(get_utf8(cp, info.desc_idx as usize).utf8());
+    pub(super) fn build(info: &cafebabe::MethodInfo, msa: &MSAllocator) -> Self {
+        let name = SymbolTable::intern(&info.name);
+        let desc = MethodDesc::build(&info.descriptor, msa);
 
         let mut code = None;
-        for n in &info.attrs {
-            match n {
-                AttrInfo::Code(info) => code = Some(Code::build(info, cp, msa)),
-                _ => continue
+        for attr in &info.attributes {
+            if let cafebabe::attributes::AttributeData::Code(cd) = &attr.data {
+                code = Some(Code::build(cd, msa));
             }
         }
 
         Self {
-            acc_flags,
+            __: PhantomData,
+            acc_flags: info.access_flags,
             name,
             desc,
-            code
+            code,
         }
     }
 }

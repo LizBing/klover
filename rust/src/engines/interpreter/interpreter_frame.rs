@@ -1,6 +1,12 @@
-use crate::{class_loader::ms_api::MSRef, engines::{exec_error::{ExecError, ExecResult}, invocation::Invocation, slot::Slot}, gc_bindings::oop_hierarchy::NObjPtr, oops::{attr::Code, jvalue::{JByte, JDouble, JFloat, JInt, JLong, JShort, JValue}, method::Method, normal_klass::NormalKlass}};
+use crate::{
+    code::instructions::Instruction, engines::{
+        exec_dispatcher::{EngineExit, ExecBudget, MethodReturn}, exec_error::{ExecError, ExecErrorKind, ExecResult}, interpreter::{interpreter::Interpreter, slot::Slot}, invocation::Invocation, java_frame::JavaFrame,
+    }, oops::jvalue::{JDouble, JInt, JLong, JValue},
+};
 
 pub struct InterpreterFrame {
+    invocation: Invocation,
+
     oprand_stack: Vec<Slot>,
     locals: Box<[Slot]>,
 
@@ -9,120 +15,196 @@ pub struct InterpreterFrame {
 }
 
 impl InterpreterFrame {
-    pub fn from_call(args: &[Slot]) -> ExecResult<Self> {
-        unimplemented!()
+    // Todo: make try_new()
+    pub fn new(invocation: Invocation) -> Self {
+        let oprand_stack = Vec::new();
+
+        let mut locals: Box<[Slot]> = std::iter::repeat(Slot::Unused)
+            .take(invocation.code().max_locals)
+            .collect();
+
+        let mut idx = 0;
+        for arg in invocation.args.iter() {
+            match *arg {
+                JValue::Boolean(b) => locals[idx] = Slot::Int(b as JInt),
+                JValue::Byte(v) => locals[idx] = Slot::Int(v.into()),
+                JValue::Short(v) => locals[idx] = Slot::Int(v.into()),
+                JValue::Char(v) => locals[idx] = Slot::Int(v.into()),
+                JValue::Int(v) => locals[idx] = Slot::Int(v),
+                JValue::Float(v) => locals[idx] = Slot::Float(v),
+                JValue::Ref(v) => locals[idx] = Slot::Ref(v),
+                JValue::Long(v) => {
+                    let bytes = v.to_be_bytes();
+                    locals[idx] = Slot::LongHigh([bytes[0], bytes[1], bytes[2], bytes[3]]);
+                    locals[idx + 1] = Slot::LongLow([bytes[4], bytes[5], bytes[6], bytes[7]]);
+                    idx += 1;
+                }
+                JValue::Double(v) => {
+                    let bytes = v.to_be_bytes();
+                    locals[idx] = Slot::DoubleHigh([bytes[0], bytes[1], bytes[2], bytes[3]]);
+                    locals[idx + 1] = Slot::DoubleLow([bytes[4], bytes[5], bytes[6], bytes[7]]);
+                    idx += 1;
+                }
+            }
+            idx += 1;
+        }
+
+        Self {
+            invocation,
+            oprand_stack,
+            locals,
+            pc: 0,
+            last_pc: 0,
+        }
     }
 }
 
 impl InterpreterFrame {
-    fn code(&self) -> &Code {
-        unimplemented!()
+    pub(super) fn make_exec_error(&self, kind: ExecErrorKind) -> ExecError {
+        ExecError::with_invocation(&self.invocation, kind)
+    }
+}
+
+impl JavaFrame for InterpreterFrame {
+    fn resume(
+        &mut self,
+        budget: &mut ExecBudget,
+    ) -> ExecResult<EngineExit>
+    {
+        Interpreter::execute(self, budget)
+    }
+
+    fn accept_return(
+        &mut self,
+        value: MethodReturn,
+    ) -> ExecResult<()>
+    {
+        let jvalue = match value {
+            MethodReturn::Void => return Ok(()),
+            MethodReturn::Value(v) => v,
+        };
+
+        match jvalue {
+            JValue::Boolean(b) => self.push(Slot::Int(b as JInt)),
+            JValue::Byte(b) => self.push(Slot::Int(b as JInt)),
+            JValue::Char(c) => self.push(Slot::Int(c as JInt)),
+            JValue::Double(d) => self.push_double(d),
+            JValue::Float(f) => self.push(Slot::Float(f)),
+            JValue::Int(i) => self.push(Slot::Int(i)),
+            JValue::Long(l) => self.push_long(l),
+            JValue::Ref(r) => self.push(Slot::Ref(r)),
+            JValue::Short(s) => self.push(Slot::Int(s as JInt)),
+        }
+
+        Ok(())
     }
 }
 
 impl InterpreterFrame {
-    pub fn push(&mut self, slot: Slot) {
+    pub(super) fn next_inst(&mut self) -> Option<Instruction> {
+        let res = self.invocation.code().insts.get(self.pc).cloned();
+        if res.is_some() {
+            self.last_pc = self.pc;
+            self.pc += 1;
+        }
+
+        res
+    }
+}
+
+impl InterpreterFrame {
+    pub(super) fn push(&mut self, slot: Slot) {
         self.oprand_stack.push(slot);
     }
 
-    pub fn pop(&mut self) -> ExecResult<Slot> {
+    pub(super) fn pop(&mut self) -> ExecResult<Slot> {
         match self.oprand_stack.pop() {
             Some(s) => Ok(s),
-            None => Err(ExecError::StackUnderflow),
+            None => Err(ExecError::with_invocation(
+                &self.invocation,
+                ExecErrorKind::StackUnderflow,
+            )),
         }
     }
 
-    pub fn push_long(&mut self, value: JLong) {
+    pub(super) fn push_long(&mut self, value: JLong) {
         let bytes = value.to_be_bytes();
-        
-        self.oprand_stack.push(Slot::LongHigh([bytes[0], bytes[1], bytes[2], bytes[3]]));
-        self.oprand_stack.push(Slot::LongLow([bytes[4], bytes[5], bytes[6], bytes[7]]));
+
+        self.oprand_stack
+            .push(Slot::LongHigh([bytes[0], bytes[1], bytes[2], bytes[3]]));
+        self.oprand_stack
+            .push(Slot::LongLow([bytes[4], bytes[5], bytes[6], bytes[7]]));
     }
 
-    pub fn pop_long(&mut self) -> ExecResult<JLong> {
+    pub(super) fn pop_long(&mut self) -> ExecResult<JLong> {
         let Slot::LongLow(low) = self.pop()? else {
-            return Err(ExecError::MismatchSlotType);
+            return Err(ExecError::with_invocation(
+                &self.invocation,
+                ExecErrorKind::MismatchSlotType,
+            ));
         };
-        
+
         let Slot::LongHigh(high) = self.pop()? else {
-            return Err(ExecError::MismatchSlotType);
+            return Err(ExecError::with_invocation(
+                &self.invocation,
+                ExecErrorKind::MismatchSlotType,
+            ));
         };
 
         Ok(JLong::from_be_bytes([
-            high[0], high[1], high[2], high[3],
-            low[0], low[1], low[2], low[3]
+            high[0], high[1], high[2], high[3], low[0], low[1], low[2], low[3],
         ]))
     }
-    pub fn push_double(&mut self, value: JDouble) {
+
+    pub(super) fn push_double(&mut self, value: JDouble) {
         let bytes = value.to_be_bytes();
-        
-        self.oprand_stack.push(Slot::DoubleHigh([bytes[0], bytes[1], bytes[2], bytes[3]]));
-        self.oprand_stack.push(Slot::DoubleLow([bytes[4], bytes[5], bytes[6], bytes[7]]));
+
+        self.oprand_stack
+            .push(Slot::DoubleHigh([bytes[0], bytes[1], bytes[2], bytes[3]]));
+        self.oprand_stack
+            .push(Slot::DoubleLow([bytes[4], bytes[5], bytes[6], bytes[7]]));
     }
 
-    pub fn pop_double(&mut self) -> ExecResult<JDouble> {
+    pub(super) fn pop_double(&mut self) -> ExecResult<JDouble> {
         let Slot::DoubleLow(low) = self.pop()? else {
-            return Err(ExecError::MismatchSlotType);
+            return Err(ExecError::with_invocation(
+                &self.invocation,
+                ExecErrorKind::MismatchSlotType,
+            ));
         };
-        
+
         let Slot::DoubleHigh(high) = self.pop()? else {
-            return Err(ExecError::MismatchSlotType);
+            return Err(ExecError::with_invocation(
+                &self.invocation,
+                ExecErrorKind::MismatchSlotType,
+            ));
         };
 
         Ok(JDouble::from_be_bytes([
-            high[0], high[1], high[2], high[3],
-            low[0], low[1], low[2], low[3]
+            high[0], high[1], high[2], high[3], low[0], low[1], low[2], low[3],
         ]))
     }
 
-    pub fn get_local(&self, idx: usize) -> ExecResult<Slot> {
+    pub(super) fn get_local(&self, idx: usize) -> ExecResult<Slot> {
         match self.locals.get(idx) {
             Some(s) => Ok(*s),
-            None => Err(ExecError::InvalidLocalIndex(idx)),
+            None => Err(ExecError::with_invocation(
+                &self.invocation,
+                ExecErrorKind::InvalidLocalIndex(idx),
+            )),
         }
     }
 
-    pub fn set_local(&mut self, idx: usize, slot: Slot) -> ExecResult<()> {
+    pub(super) fn set_local(&mut self, idx: usize, slot: Slot) -> ExecResult<()> {
         match self.locals.get(idx) {
             Some(_) => {
                 self.locals[idx] = slot;
                 Ok(())
             }
-            None => Err(ExecError::InvalidLocalIndex(idx))
+            None => Err(ExecError::with_invocation(
+                &self.invocation,
+                ExecErrorKind::InvalidLocalIndex(idx),
+            )),
         }
-    }
-}
-
-impl InterpreterFrame {
-    pub fn read_u8(&mut self) -> ExecResult<u8> {
-        let res;
-        match self.code().bytecodes.get(self.pc) {
-            Some(b) => res = *b,
-            None => return Err(ExecError::EOF),
-        }
-
-        self.last_pc = self.pc;
-        self.pc += 1;
-
-        Ok(res)
-    }
-
-    pub fn read_u16(&mut self) -> ExecResult<u16> {
-        let high = self.read_u8()?;
-        let low = self.read_u8()?;
-
-        Ok(u16::from_be_bytes([high, low]))
-    }
-
-    pub fn read_jbyte(&mut self) -> ExecResult<JByte> {
-        let b = self.read_u8()?;
-        Ok(b as JByte)
-    }
-
-    pub fn read_jshort(&mut self) -> ExecResult<JShort> {
-        let high = self.read_u8()?;
-        let low = self.read_u8()?;
-
-        Ok(JShort::from_be_bytes([high, low]))
     }
 }

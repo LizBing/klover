@@ -101,21 +101,13 @@ impl SymbolTable {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SymbolHandle {
     symbol: NonNull<Symbol>,
 }
 
-impl Clone for SymbolHandle {
-    fn clone(&self) -> Self {
-        unsafe {
-            self.symbol.as_ref().inc_ref_cnt();
-        }
-        Self {
-            symbol: self.symbol,
-        }
-    }
-}
+unsafe impl Send for SymbolHandle {}
+unsafe impl Sync for SymbolHandle {}
 
 impl Drop for SymbolHandle {
     fn drop(&mut self) {

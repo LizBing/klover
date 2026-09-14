@@ -1,15 +1,9 @@
-use std::{marker::PhantomData, mem::size_of, sync::OnceLock};
+use std::marker::PhantomData;
 
-use crate::{
-    class_loader::ms_api::MSRef, gc_bindings::oop_hierarchy::NObjPtr, oops::{
-        klass::Klass,
-        oops_errors::{ResolveError, ResolveResult},
-        symbol_table::{SymbolHandle, SymbolTable},
-    },
-};
+use crate::{class_loader::ms_api::{MSAllocator, MSBox}, oops::symbol_table::{SymbolHandle, SymbolTable}};
 
-#[derive(Debug, Clone)]
-pub enum FieldElemType {
+#[derive(Debug)]
+pub enum ElemDesc {
     Boolean,
     Byte,
     Char,
@@ -18,218 +12,80 @@ pub enum FieldElemType {
     Int,
     Long,
     Short,
-
-    Class {
-        name: SymbolHandle,
-        resolved: OnceLock<MSRef<Klass>>,
-    },
+    Class(SymbolHandle),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct FieldDesc {
-    /// 原始描述符字符串（如 `I` / `Ljava/lang/String;` / `[I`），
-    /// intern 后可直接指针比较，供 `find_field` 使用。
+    __: PhantomData<()>,
+    
     pub raw: SymbolHandle,
     pub dimensions: usize,
-    pub elem: FieldElemType,
+    pub elem: ElemDesc,
 }
 
-impl FieldDesc {
-    /// Number of local-variable / operand-stack slots occupied by this type.
-    /// Arrays and object references are always category 1.
-    pub fn slot_count(&self) -> usize {
-        if self.dimensions != 0 {
-            return 1;
-        }
+use cafebabe::descriptors::FieldType::*;
+impl From<&cafebabe::descriptors::FieldDescriptor<'_>> for FieldDesc {
+    fn from(value: &cafebabe::descriptors::FieldDescriptor) -> Self {
+        let raw = SymbolTable::intern(&value.to_string());
 
-        match self.elem {
-            FieldElemType::Long | FieldElemType::Double => 2,
-            _ => 1,
-        }
-    }
-
-    pub fn byte_size(&self) -> usize {
-        if self.dimensions != 0 {
-            return size_of::<NObjPtr>();
-        }
-
-        match self.elem {
-            FieldElemType::Boolean => size_of::<u8>(),
-            FieldElemType::Byte => size_of::<u8>(),
-            FieldElemType::Char => size_of::<u16>(),
-            FieldElemType::Double => size_of::<f64>(),
-            FieldElemType::Float => size_of::<f32>(),
-            FieldElemType::Int => size_of::<i32>(),
-            FieldElemType::Long => size_of::<i64>(),
-            FieldElemType::Short => size_of::<i16>(),
-            FieldElemType::Class { .. } => size_of::<NObjPtr>(),
-        }
-    }
-
-    pub fn is_ref_type(&self) -> bool {
-        if self.dimensions != 0 {
-            return true;
+        let elem = match &value.field_type {
+            Boolean => ElemDesc::Boolean,
+            Byte => ElemDesc::Byte,
+            Char => ElemDesc::Char,
+            Double => ElemDesc::Double,
+            Float => ElemDesc::Float,
+            Integer => ElemDesc::Int,
+            Long => ElemDesc::Long,
+            Short => ElemDesc::Short,
+            Object(cn) => ElemDesc::Class(SymbolTable::intern(cn)),
         };
 
-        if let FieldElemType::Class { .. } = self.elem {
-            true
-        } else {
-            false
-        }
-    }
-}
-
-impl FieldDesc {
-    pub fn from(utf8: &str) -> Self {
-        let bytes = utf8.as_bytes();
-        let mut pos = 0;
-
-        // Parse array dimensions
-        let mut dimensions = 0usize;
-        while pos < bytes.len() && bytes[pos] == b'[' {
-            dimensions += 1;
-            pos += 1;
-        }
-
-        debug_assert!(pos < bytes.len());
-
-        let elem = match bytes[pos] {
-            b'B' => FieldElemType::Byte,
-            b'C' => FieldElemType::Char,
-            b'D' => FieldElemType::Double,
-            b'F' => FieldElemType::Float,
-            b'I' => FieldElemType::Int,
-            b'J' => FieldElemType::Long,
-            b'S' => FieldElemType::Short,
-            b'Z' => FieldElemType::Boolean,
-            b'L' => {
-                // Class type: L<classname>;
-                let start = pos + 1;
-                let end = bytes[start..]
-                    .iter()
-                    .position(|&b| b == b';').unwrap();
-                
-                let class_name = &utf8[start..start + end];
-                FieldElemType::Class {
-                    name: SymbolTable::intern(class_name),
-                    resolved: OnceLock::new(),
-                }
-            }
-            _ => unreachable!(),
-        };
-
-        FieldDesc {
-            raw: SymbolTable::intern(utf8),
-            dimensions,
+        Self {
+            __: PhantomData,
+            raw,
+            dimensions: value.dimensions as usize,
             elem,
         }
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum ReturnDesc {
     Void,
     Type(FieldDesc),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct MethodDesc {
     __: PhantomData<()>,
-
+    
     pub raw: SymbolHandle,
-    pub ret_desc: ReturnDesc,
-    pub params_desc: Vec<FieldDesc>,
+    pub ret: ReturnDesc,
+    pub args: MSBox<[FieldDesc]>,
 }
 
+use cafebabe::descriptors::ReturnDescriptor::*;
 impl MethodDesc {
-    /// Number of slots consumed by the method parameters.  This deliberately
-    /// excludes the receiver; `invokestatic` has no receiver, while future
-    /// instance-call instructions add one explicitly.
-    pub fn parameter_slot_count(&self) -> usize {
-        self.params_desc.iter().map(FieldDesc::slot_count).sum()
-    }
-
-    pub fn from(utf8: &str) -> Self {
-        let bytes = utf8.as_bytes();
-
-        debug_assert!(!bytes.is_empty() && bytes[0] == b'(');
-
-        // Find the closing ')'.  close_paren_rel is the offset of ')' inside `bytes[1..]`.
-        let close_paren_rel = bytes[1..]
-            .iter()
-            .position(|&b| b == b')').unwrap();
-
-        // Absolute position of ')' in the full string.
-        let close_paren_abs = close_paren_rel + 1;
-
-        // Parse parameter descriptors – each is a complete FieldDesc.
-        let mut params_desc = Vec::new();
-        let mut pos = 1; // right after '('
-        while pos < close_paren_abs {
-            let len = Self::field_desc_len(&utf8[pos..]);
-            let param_str = &utf8[pos..pos + len];
-            let field_desc = FieldDesc::from(&param_str.to_string());
-            params_desc.push(field_desc);
-            pos += len;
-        }
-
-        // Parse return descriptor
-        let ret_start = close_paren_abs + 1; // skip ')'
-        debug_assert!(ret_start < utf8.len());
-
-        let ret_str = &utf8[ret_start..];
-        let ret_desc = if ret_str.as_bytes()[0] == b'V' {
-            ReturnDesc::Void
-        } else {
-            ReturnDesc::Type(FieldDesc::from(&ret_str.to_string()))
+    pub fn build(parsed: &cafebabe::descriptors::MethodDescriptor, msa: &MSAllocator) -> Self {
+        let raw = SymbolTable::intern(&parsed.to_string());
+        let ret = match &parsed.return_type {
+            Void => ReturnDesc::Void,
+            Return(fd) => ReturnDesc::Type(FieldDesc::from(fd)),
         };
 
-        MethodDesc {
-            __: PhantomData,
+        let args = msa.calloc(parsed.parameters.len());
+        for (i, v) in parsed.parameters.iter().enumerate() {
+            args[i].write(FieldDesc::from(v));
+        }
 
-            raw: SymbolTable::intern(utf8),
-            ret_desc,
-            params_desc,
-        }
-    }
-
-    /// Returns the byte length of a field descriptor at the start of `s`.
-    fn field_desc_len(s: &str) -> usize {
-        let bytes = s.as_bytes();
-        let mut pos = 0;
-        while pos < bytes.len() && bytes[pos] == b'[' {
-            pos += 1;
-        }
-        if pos >= bytes.len() {
-            return pos;
-        }
-        match bytes[pos] {
-            b'L' => {
-                // Find the ';'
-                bytes[pos..]
-                    .iter()
-                    .position(|&b| b == b';')
-                    .map(|p| pos + p + 1)
-                    .unwrap_or(s.len())
+        unsafe {
+            Self {
+                __: PhantomData,
+                raw,
+                ret,
+                args: MSBox::from_raw(args.assume_init_mut()),
             }
-            _ => pos + 1, // primitive type
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::MethodDesc;
-
-    #[test]
-    fn parameter_slot_count_accounts_for_category_two_values() {
-        assert_eq!(MethodDesc::from("()V").parameter_slot_count(), 0);
-        assert_eq!(MethodDesc::from("(II)I").parameter_slot_count(), 2);
-        assert_eq!(MethodDesc::from("(JD)V").parameter_slot_count(), 4);
-        assert_eq!(
-            MethodDesc::from("(IJLjava/lang/Object;[D)V")
-                .parameter_slot_count(),
-            5
-        );
     }
 }

@@ -1,8 +1,7 @@
-pub mod bootstrap_cld;
+pub mod bs_cld;
+pub mod class_loader_data;
 pub mod class_path;
-pub mod class_slot;
-pub mod cld;
-pub mod cld_map;
+mod class_slot;
 pub mod load_error;
 pub mod ms_api;
 pub mod oop_storage;

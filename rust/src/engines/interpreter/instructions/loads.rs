@@ -1,9 +1,9 @@
-use crate::engines::{exec_error::ExecResult, interpreter::{interpreter_frame::InterpreterFrame, step_outcome::StepOutcome}};
+use crate::engines::{exec_error::ExecResult, interpreter::{interpreter_frame::InterpreterFrame, step_outcome::{StepControl, StepOutcome}}};
 
 // 0x1a..=0x1d
-pub fn iload_n<const N: usize>(f: &mut InterpreterFrame) -> ExecResult<StepOutcome> {
-    let s = f.get_local(N)?;
+pub fn iload(f: &mut InterpreterFrame, idx: usize) -> ExecResult<StepControl> {
+    let s = f.get_local(idx)?;
     f.push(s);
 
-    Ok(StepOutcome::Continue)
+    Ok(StepControl::Continue)
 }

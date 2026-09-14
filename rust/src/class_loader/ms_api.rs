@@ -333,7 +333,7 @@ unsafe impl<T: Send> Send for MSBox<T> {}
 unsafe impl<T: Sync> Sync for MSBox<T> {}
 
 // Safety: guaranteed by developer.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct MSRef<T> {
     raw: NonNull<T>,
 }
@@ -380,18 +380,6 @@ impl<T> From<&MSBox<T>> for MSRef<T> {
         Self { raw: value.raw }
     }
 }
-
-impl<T> Clone for MSRef<T> {
-    fn clone(&self) -> Self {
-        Self { raw: self.raw }
-    }
-}
-
-// impl<T> From<*const T> for MSRef<T> {
-//     fn from(value: *const T) -> Self {
-//         unsafe { (&*value).into() }
-//     }
-// }
 
 impl<T> Deref for MSRef<T> {
     type Target = T;

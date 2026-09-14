@@ -1,14 +1,9 @@
-pub mod acc_flags;
-pub mod array_klass;
-pub mod attr;
 pub mod desc;
 pub mod field;
-mod fields;
+pub mod fields;
+pub mod jvalue;
 pub mod klass;
 pub mod method;
 pub mod normal_klass;
-pub mod obj_access;
 pub mod oops_errors;
-pub mod prim_klass;
-pub mod jvalue;
 pub mod symbol_table;

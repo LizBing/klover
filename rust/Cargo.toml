@@ -9,6 +9,7 @@ crate-type = ["staticlib", "rlib"]
 [dependencies]
 "bitflags" = "2.11.1"
 "byteorder" = "1"
+"cafebabe" = "0.9.0"
 "cesu8" = "1.1"
 "dashmap" = "6.2.1"
 "parking_lot" = "0.12.5"
