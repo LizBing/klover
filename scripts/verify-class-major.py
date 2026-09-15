@@ -20,14 +20,25 @@ def major_of(path: Path) -> int:
 
 def main(argv: list[str]) -> int:
     if len(argv) < 3:
-        print(f"usage: {argv[0]} EXPECTED_MAJOR classfile...", file=sys.stderr)
+        print(f"usage: {argv[0]} EXPECTED_MAJOR classfile-or-directory...", file=sys.stderr)
         return 2
 
     expected = int(argv[1])
     failed = 0
 
+    paths = []
     for raw in argv[2:]:
         path = Path(raw)
+        if path.is_dir():
+            classes = sorted(path.rglob("*.class"))
+            if not classes:
+                print(f"FAIL {path}: no class files (run: make classes)")
+                failed += 1
+            paths.extend(classes)
+        else:
+            paths.append(path)
+
+    for path in paths:
         if not path.is_file():
             print(f"FAIL {path}: missing (run: make classes)", file=sys.stderr)
             failed += 1
