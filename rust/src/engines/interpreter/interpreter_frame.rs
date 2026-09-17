@@ -20,11 +20,11 @@ impl InterpreterFrame {
         let oprand_stack = Vec::new();
 
         let mut locals: Box<[Slot]> = std::iter::repeat(Slot::Unused)
-            .take(invocation.code().max_locals)
+            .take(invocation.code().max_locals())
             .collect();
 
         let mut idx = 0;
-        for arg in invocation.args.iter() {
+        for arg in invocation.args().iter() {
             match *arg {
                 JValue::Boolean(b) => locals[idx] = Slot::Int(b as JInt),
                 JValue::Byte(v) => locals[idx] = Slot::Int(v.into()),
@@ -102,7 +102,7 @@ impl JavaFrame for InterpreterFrame {
 
 impl InterpreterFrame {
     pub(super) fn next_inst(&mut self) -> Option<Instruction> {
-        let res = self.invocation.code().insts.get(self.pc).cloned();
+        let res = self.invocation.code().instructions().get(self.pc).cloned();
         if res.is_some() {
             self.last_pc = self.pc;
             self.pc += 1;

@@ -1,6 +1,6 @@
-use std::{collections::HashMap, marker::PhantomData, ops::Deref, path::Path, sync::LazyLock};
+use std::sync::LazyLock;
 
-use dashmap::{DashMap, DashSet};
+use dashmap::DashMap;
 
 use crate::{class_loader::{class_path::ClassPath, class_slot::ClassSlot, load_error::{LoadError, LoadErrorKind, LoadResult}}, oops::{klass::Klass, normal_klass::{NormalKlass, UnlinkedNormalKlass}, symbol_table::{SymbolHandle, SymbolTable}}, runtime::ms_api::{MsAllocator, MsBox, MsRef}};
 
@@ -14,13 +14,12 @@ impl BootstrapCLD {
         &MSA
     }
 
-    pub fn make_load_error(klass_name: &SymbolHandle, kind: LoadErrorKind) -> LoadError {
-        LoadError {
-            __: PhantomData,
-            cld_name: Some("Klover Bootstrap Class Loader".into()),
-            klass_name: klass_name.utf8().into(),
+    fn make_load_error(klass_name: &SymbolHandle, kind: LoadErrorKind) -> LoadError {
+        LoadError::new(
+            Some("Klover Bootstrap Class Loader".into()),
+            klass_name.utf8().into(),
             kind,
-        }
+        )
     }
 }
 
@@ -45,7 +44,7 @@ impl BootstrapCLD {
 
     fn find_loaded_class(name: &SymbolHandle) -> Option<MsRef<Klass>> {
         CLASS_TABLE.get(name)
-            .map(|r| MsRef::from(&r.klass))
+            .map(|r| r.klass())
     }
 
     fn define_class(name: &SymbolHandle, bytes: &[u8]) -> LoadResult<MsRef<Klass>> {

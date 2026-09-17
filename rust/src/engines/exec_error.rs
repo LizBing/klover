@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use crate::engines::invocation::Invocation;
 
 #[derive(Debug)]
@@ -31,7 +29,7 @@ pub enum ExecErrorKind {
 
 #[derive(Debug)]
 pub struct ExecError {
-    __: PhantomData<()>,
+    _private: (),
     
     pub invocation: Option<Invocation>,
 
@@ -41,7 +39,7 @@ pub struct ExecError {
 impl ExecError {
     pub(super) fn new(kind: ExecErrorKind) -> Self {
         Self {
-            __: PhantomData,
+            _private: (),
             invocation: None,
             kind,
         }
@@ -49,7 +47,7 @@ impl ExecError {
     
     pub(super) fn with_invocation(invocation: Invocation, kind: ExecErrorKind) -> Self {
         Self {
-            __: PhantomData,
+            _private: (),
             invocation: Some(invocation),
             kind,
         }

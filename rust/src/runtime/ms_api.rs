@@ -22,7 +22,7 @@ const BUMP_THRESHOLD: usize = SMALL_CHUNK_BYTE_SIZE / 2; // 4 KB
 // 都可以用这套编解码。
 
 /// Metaspace 的虚拟内存基址（与 C 层 `METASPACE_BASE` 一致）。
-pub const METASPACE_BASE: usize = 1usize << 43;
+const METASPACE_BASE: usize = 1usize << 43;
 
 /// 压缩指针的对齐粒度（与 C 层 `COMP_PTR_SHIFT` 一致）。
 const COMP_PTR_SHIFT: u32 = 3;
@@ -65,7 +65,7 @@ fn ms_comp_ptr_decode<T>(narrow: u32) -> *mut T {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MsInitStatus {
+enum MsInitStatus {
     Initialized,
     AlreadyInitialized,
     VSpaceFailed,
@@ -91,8 +91,7 @@ pub enum MsInitError {
 }
 
 unsafe extern "C" {
-    #[link_name = "ms_init"]
-    fn c_ms_init() -> i32;
+    fn c_ms_try_init() -> i32;
     fn ms_alloc_small_chunk() -> *mut MSChunk;
     fn ms_alloc_sized_chunk(byte_size: usize) -> *mut MSChunk;
     fn ms_free_chunk(chunk: *mut MSChunk);
@@ -104,7 +103,7 @@ pub fn ensure_initialized() -> Result<(), MsInitError> {
     static INIT: std::sync::OnceLock<Result<(), MsInitError>> = std::sync::OnceLock::new();
     *INIT.get_or_init(|| {
         // SAFETY: all Rust initialization calls are serialized by INIT.
-        let raw = unsafe { c_ms_init() };
+        let raw = unsafe { c_ms_try_init() };
         match MsInitStatus::try_from(raw) {
             Ok(MsInitStatus::Initialized | MsInitStatus::AlreadyInitialized) => Ok(()),
             Ok(MsInitStatus::VSpaceFailed) => Err(MsInitError::VSpaceFailed),

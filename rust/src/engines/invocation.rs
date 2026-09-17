@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use crate::{
     runtime::ms_api::MsRef,
     code::code::Code,
@@ -9,12 +7,10 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub struct Invocation {
-    __: PhantomData<()>,
+    owner: MsRef<NormalKlass>,
+    method: MsRef<Method>,
     
-    pub owner: MsRef<NormalKlass>,
-    pub method: MsRef<Method>,
-    
-    pub args: Box<[JValue]>,
+    args: Box<[JValue]>,
 }
 
 impl Invocation {
@@ -27,16 +23,16 @@ impl Invocation {
     {
         let Some(method) = owner.find_declared_method(mname, desc) else {
             return Err(ExecError::new(ExecErrorKind::MethodNotFound {
-                owner: owner.name.utf8().into(),
+                owner: owner.name().utf8().into(),
                 name: mname.into(),
                 desc: desc.into(),
             }))
         };
 
-        if method.code.is_none() {
+        if method.code().is_none() {
             return Err(ExecError::new(
                 ExecErrorKind::NoCode {
-                    owner: owner.name.utf8().into(),
+                    owner: owner.name().utf8().into(),
                     name: mname.into(),
                     desc: desc.into(),
                 },
@@ -44,7 +40,6 @@ impl Invocation {
         }
 
         Ok(Self {
-            __: PhantomData,
             owner,
             method,
             args: args.into(),
@@ -53,7 +48,19 @@ impl Invocation {
 }
 
 impl Invocation {
+    pub fn owner(&self) -> &NormalKlass {
+        &self.owner
+    }
+
+    pub fn method(&self) -> &Method {
+        &self.method
+    }
+
+    pub fn args(&self) -> &[JValue] {
+        &self.args
+    }
+
     pub fn code(&self) -> &Code {
-        self.method.code.as_ref().unwrap()
+        self.method.code().unwrap()
     }
 }

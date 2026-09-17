@@ -36,7 +36,7 @@ TEST(init_ok)
 TEST(init_double_fails)
 {
     /* Second init must fail (already initialized) */
-    int32_t status = ms_init();
+    int32_t status = c_ms_try_init();
     ASSERT_TRUE(status == MS_INIT_ALREADY_INITIALIZED, "second ms_init should return MS_INIT_ALREADY_INITIALIZED");
 }
 
@@ -257,7 +257,7 @@ int main(void)
     printf("\n=== metaspace tests ===\n\n");
 
     /* Initialise metaspace once for all tests */
-    int32_t status = ms_init();
+    int32_t status = c_ms_try_init();
     if (status != MS_INIT_OK) {
         printf("  FAILED: ms_init()\n");
         return EXIT_FAILURE;

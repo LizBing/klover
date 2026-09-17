@@ -1,15 +1,17 @@
-use std::hash::Hash;
-
-use crate::{oops::{klass::Klass, symbol_table::SymbolHandle}, runtime::ms_api::MsBox};
+use crate::{oops::klass::Klass, runtime::ms_api::{MsBox, MsRef}};
 
 pub struct ClassSlot {
-    pub klass: MsBox<Klass>,
+    klass: MsBox<Klass>,
 }
 
 unsafe impl Send for ClassSlot {}
 unsafe impl Sync for ClassSlot {}
 
 impl ClassSlot {
+    pub fn klass(&self) -> MsRef<Klass> {
+        MsRef::from(&self.klass)
+    }
+
     pub fn new(klass: MsBox<Klass>) -> Self {
         Self { klass }
     }

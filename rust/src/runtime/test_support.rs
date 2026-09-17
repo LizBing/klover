@@ -2,7 +2,7 @@
 use super::{arguments::Arguments, vm};
 use std::sync::Once;
 
-pub(crate) fn init_vm() {
+pub fn init_vm() {
     static INIT: Once = Once::new();
     INIT.call_once(|| {
         vm::try_init(Arguments {

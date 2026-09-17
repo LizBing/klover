@@ -4,4 +4,4 @@ pub mod ms_api;
 pub mod vm;
 
 #[cfg(test)]
-pub(crate) mod test_support;
+pub mod test_support;

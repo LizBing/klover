@@ -1,6 +1,6 @@
 pub mod desc;
-pub mod field;
-pub mod fields;
+mod field;
+mod fields;
 pub mod jvalue;
 pub mod klass;
 pub mod method;

@@ -69,7 +69,7 @@ static inline size_t round_up_8k(size_t byte_size) {
 /*  Public API                                                                */
 /* -------------------------------------------------------------------------- */
 
-int32_t ms_init(void) {
+int32_t c_ms_try_init(void) {
     if (_vs != NULL) {
         return MS_INIT_ALREADY_INITIALIZED; /* already initialised */
     }
@@ -87,7 +87,7 @@ int32_t ms_init(void) {
 
 /* -------------------------------------------------------------------------- */
 
-MSChunk* alloc_chunk(size_t byte_size) {
+static MSChunk* alloc_chunk(size_t byte_size) {
     pthread_mutex_lock(&_mutex);
     
     uintptr_t cstart = (uintptr_t)_vs->commit_top;

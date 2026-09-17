@@ -7,7 +7,7 @@ use crate::{class_loader::{bs_cld::BootstrapCLD, class_loader_data::ClassLoaderD
 
 fn get_msa(cld: Option<&ClassLoaderData>) -> &MsAllocator {
     match cld {
-        Some(cld) => &cld.msa,
+        Some(cld) => cld.ms_allocator(),
         None => BootstrapCLD::ms_allocator(),
     }
 }
@@ -55,8 +55,8 @@ impl<'cld> UnlinkedNormalKlass<'cld> {
 
 #[derive(Debug)]
 pub struct NormalKlass {
-    pub name: SymbolHandle,
-    pub acc_flags: ClassAccessFlags,
+    name: SymbolHandle,
+    acc_flags: ClassAccessFlags,
     cld: Option<NonNull<ClassLoaderData>>,
 
     super_klass: Option<MsRef<NormalKlass>>,
@@ -97,9 +97,13 @@ impl TryFrom<UnlinkedNormalKlass<'_>> for NormalKlass {
 }
 
 impl NormalKlass {
+    pub fn name(&self) -> &SymbolHandle {
+        &self.name
+    }
+
     pub fn find_declared_method(&self, name: &str, desc: &str) -> Option<MsRef<Method>> {
         for method in self.methods.deref() {
-            if method.name.utf8() == name && method.desc.raw.utf8() == desc {
+            if method.name().utf8() == name && method.desc().raw().utf8() == desc {
                 unsafe { return Some(MsRef::from_raw(method.into())); }
             }
         }

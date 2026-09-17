@@ -102,3 +102,19 @@ Without `KLOVER_CORE_DIR`, the build script uses `build/debug/core` or
 fixtures in a custom directory. Native runtime paths reference the build directory;
 these are development artifacts, not a relocatable distribution. Cross-compilation
 requires matching native toolchain/linker configuration and is not automated here.
+
+## Module visibility
+
+Rust subsystem boundaries are controlled by `mod` / `pub mod` in `lib.rs` and
+`mod.rs`. Top-level modules are private to this crate. Callers use concrete module
+paths; there is no module-level re-export facade. Cross-module types and methods
+use `pub`; `pub(super)` is reserved for members needed only by the parent subsystem.
+
+Error/result records such as `VmInitError`, `LoadError`, `ExecError`, and
+`StepOutcome` have a private `_private: ()` field. Their defining modules control
+construction; exposed fields remain readable and movable (and mutable when owned).
+Objects with related fields, such as `Invocation`, `Method`, descriptors, and
+`Code`, keep their fields private and expose only needed read accessors. Types
+that already have private fields do not need an additional construction marker.
+Input values such as `Arguments` remain directly constructible. FFI layouts are
+kept unchanged by this visibility convention.

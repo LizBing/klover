@@ -1,21 +1,27 @@
-use std::marker::PhantomData;
-
 pub use cafebabe::MethodAccessFlags;
 
 use crate::{runtime::ms_api::MsAllocator, code::code::Code, oops::{desc::MethodDesc, symbol_table::{SymbolHandle, SymbolTable}}};
 
 #[derive(Debug)]
 pub struct Method {
-    __: PhantomData<()>,
-    
-    pub acc_flags: MethodAccessFlags,
-    pub name: SymbolHandle,
-    pub desc: MethodDesc,
+    acc_flags: MethodAccessFlags,
+    name: SymbolHandle,
+    desc: MethodDesc,
 
-    pub code: Option<Code>,
+    code: Option<Code>,
 }
 
 impl Method {
+    pub fn name(&self) -> &SymbolHandle {
+        &self.name
+    }
+    pub fn desc(&self) -> &MethodDesc {
+        &self.desc
+    }
+    pub fn code(&self) -> Option<&Code> {
+        self.code.as_ref()
+    }
+
     pub(super) fn build(info: &cafebabe::MethodInfo, msa: &MsAllocator) -> Self {
         let name = SymbolTable::intern(&info.name);
         let desc = MethodDesc::build(&info.descriptor, msa);
@@ -28,7 +34,6 @@ impl Method {
         }
 
         Self {
-            __: PhantomData,
             acc_flags: info.access_flags,
             name,
             desc,

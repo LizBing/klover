@@ -1,5 +1,5 @@
-mod exec_dispatcher;
-mod exec_error;
-pub mod interpreter;
+pub mod exec_dispatcher;
+pub mod exec_error;
+mod interpreter;
 pub mod invocation;
 pub mod java_frame;

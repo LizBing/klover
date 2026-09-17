@@ -19,7 +19,7 @@ typedef enum {
 
 /* Returns an MSInitStatus code with a fixed-width FFI representation.
  * Initialization must be serialized by the caller. */
-int32_t ms_init(void);
+int32_t c_ms_try_init(void);
 
 MSChunk* ms_alloc_small_chunk();
 MSChunk* ms_alloc_sized_chunk(size_t byte_size);

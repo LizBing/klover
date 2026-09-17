@@ -2,12 +2,19 @@ use crate::{runtime::ms_api::{MsAllocator, MsBox}, code::instructions::Instructi
 
 #[derive(Debug)]
 pub struct Code {
-    pub max_stack: usize,
-    pub max_locals: usize,
-    pub insts: MsBox<[Instruction]>,
+    max_stack: usize,
+    max_locals: usize,
+    insts: MsBox<[Instruction]>,
 }
 
 impl Code {
+    pub fn max_locals(&self) -> usize {
+        self.max_locals
+    }
+    pub fn instructions(&self) -> &[Instruction] {
+        &self.insts
+    }
+
     pub fn build(cd: &cafebabe::attributes::CodeData, msa: &MsAllocator) -> Self {
         let opcodes = &cd.bytecode
             .as_ref()

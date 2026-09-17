@@ -15,6 +15,7 @@ pub enum VmInitErrorKind {
 
 #[derive(Debug)]
 pub struct VmInitError {
+    _private: (),
     pub args: Arguments,
     pub kind: VmInitErrorKind,
 }
@@ -30,12 +31,14 @@ pub fn try_init(args: Arguments) -> VmInitResult {
 
     if Arguments::is_initialized() {
         return Err(VmInitError {
+            _private: (),
             args,
             kind: VmInitErrorKind::AlreadyInitialized,
         });
     }
     if let Err(error) = ms_api::ensure_initialized() {
         return Err(VmInitError {
+            _private: (),
             args,
             kind: VmInitErrorKind::Metaspace(error),
         });
@@ -44,6 +47,7 @@ pub fn try_init(args: Arguments) -> VmInitResult {
     // only after native initialization succeeds, preventing a second success.
     if !unsafe { gc_init(args.xmx) } {
         return Err(VmInitError {
+            _private: (),
             args,
             kind: VmInitErrorKind::GcInitFailed,
         });

@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use crate::{engines::{exec_dispatcher::MethodReturn, exec_error::ExecResult}, oops::jvalue::JValue};
 
 pub enum StepControl {
@@ -8,7 +6,7 @@ pub enum StepControl {
 }
 
 pub struct StepOutcome {
-    __: PhantomData<()>,
+    _private: (),
 
     pub cost: u64,
     pub result: ExecResult<StepControl>,
@@ -17,7 +15,7 @@ pub struct StepOutcome {
 impl StepOutcome {
     pub(super) fn new(cost: u64, result: ExecResult<StepControl>) -> Self {
         Self {
-            __: PhantomData,
+            _private: (),
             cost,
             result,
         }

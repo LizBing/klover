@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use crate::{runtime::ms_api::{MsAllocator, MsBox}, oops::symbol_table::{SymbolHandle, SymbolTable}};
 
 #[derive(Debug)]
@@ -17,11 +15,9 @@ pub enum ElemDesc {
 
 #[derive(Debug)]
 pub struct FieldDesc {
-    __: PhantomData<()>,
-    
-    pub raw: SymbolHandle,
-    pub dimensions: usize,
-    pub elem: ElemDesc,
+    raw: SymbolHandle,
+    dimensions: usize,
+    elem: ElemDesc,
 }
 
 use cafebabe::descriptors::FieldType::*;
@@ -42,7 +38,6 @@ impl From<&cafebabe::descriptors::FieldDescriptor<'_>> for FieldDesc {
         };
 
         Self {
-            __: PhantomData,
             raw,
             dimensions: value.dimensions as usize,
             elem,
@@ -58,15 +53,17 @@ pub enum ReturnDesc {
 
 #[derive(Debug)]
 pub struct MethodDesc {
-    __: PhantomData<()>,
-    
-    pub raw: SymbolHandle,
-    pub ret: ReturnDesc,
-    pub args: MsBox<[FieldDesc]>,
+    raw: SymbolHandle,
+    ret: ReturnDesc,
+    args: MsBox<[FieldDesc]>,
 }
 
 use cafebabe::descriptors::ReturnDescriptor::*;
 impl MethodDesc {
+    pub fn raw(&self) -> &SymbolHandle {
+        &self.raw
+    }
+
     pub fn build(parsed: &cafebabe::descriptors::MethodDescriptor, msa: &MsAllocator) -> Self {
         let raw = SymbolTable::intern(&parsed.to_string());
         let ret = match &parsed.return_type {
@@ -81,7 +78,6 @@ impl MethodDesc {
 
         unsafe {
             Self {
-                __: PhantomData,
                 raw,
                 ret,
                 args: MsBox::from_raw(args.assume_init_mut()),
