@@ -61,7 +61,7 @@ impl InterpreterFrame {
 
 impl InterpreterFrame {
     pub(super) fn make_exec_error(&self, kind: ExecErrorKind) -> ExecError {
-        ExecError::with_invocation(&self.invocation, kind)
+        ExecError::with_invocation(self.invocation.clone(), kind)
     }
 }
 
@@ -120,10 +120,7 @@ impl InterpreterFrame {
     pub(super) fn pop(&mut self) -> ExecResult<Slot> {
         match self.oprand_stack.pop() {
             Some(s) => Ok(s),
-            None => Err(ExecError::with_invocation(
-                &self.invocation,
-                ExecErrorKind::StackUnderflow,
-            )),
+            None => Err(self.make_exec_error(ExecErrorKind::StackUnderflow)),
         }
     }
 
@@ -138,17 +135,11 @@ impl InterpreterFrame {
 
     pub(super) fn pop_long(&mut self) -> ExecResult<JLong> {
         let Slot::LongLow(low) = self.pop()? else {
-            return Err(ExecError::with_invocation(
-                &self.invocation,
-                ExecErrorKind::MismatchSlotType,
-            ));
+            return Err(self.make_exec_error(ExecErrorKind::MismatchSlotType));
         };
 
         let Slot::LongHigh(high) = self.pop()? else {
-            return Err(ExecError::with_invocation(
-                &self.invocation,
-                ExecErrorKind::MismatchSlotType,
-            ));
+            return Err(self.make_exec_error(ExecErrorKind::MismatchSlotType));
         };
 
         Ok(JLong::from_be_bytes([
@@ -167,17 +158,11 @@ impl InterpreterFrame {
 
     pub(super) fn pop_double(&mut self) -> ExecResult<JDouble> {
         let Slot::DoubleLow(low) = self.pop()? else {
-            return Err(ExecError::with_invocation(
-                &self.invocation,
-                ExecErrorKind::MismatchSlotType,
-            ));
+            return Err(self.make_exec_error(ExecErrorKind::MismatchSlotType));
         };
 
         let Slot::DoubleHigh(high) = self.pop()? else {
-            return Err(ExecError::with_invocation(
-                &self.invocation,
-                ExecErrorKind::MismatchSlotType,
-            ));
+            return Err(self.make_exec_error(ExecErrorKind::MismatchSlotType));
         };
 
         Ok(JDouble::from_be_bytes([
@@ -188,10 +173,7 @@ impl InterpreterFrame {
     pub(super) fn get_local(&self, idx: usize) -> ExecResult<Slot> {
         match self.locals.get(idx) {
             Some(s) => Ok(*s),
-            None => Err(ExecError::with_invocation(
-                &self.invocation,
-                ExecErrorKind::InvalidLocalIndex(idx),
-            )),
+            None => Err(self.make_exec_error(ExecErrorKind::InvalidLocalIndex(idx))),
         }
     }
 
@@ -201,10 +183,7 @@ impl InterpreterFrame {
                 self.locals[idx] = slot;
                 Ok(())
             }
-            None => Err(ExecError::with_invocation(
-                &self.invocation,
-                ExecErrorKind::InvalidLocalIndex(idx),
-            )),
+            None => Err(self.make_exec_error(ExecErrorKind::InvalidLocalIndex(idx))),
         }
     }
 }

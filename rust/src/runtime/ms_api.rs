@@ -1,8 +1,8 @@
 use std::mem::MaybeUninit;
 use std::ops::{Deref, DerefMut};
-use std::{ptr, slice};
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::{ptr, slice};
 
 use parking_lot::{Mutex, RwLock};
 
@@ -18,7 +18,7 @@ const BUMP_THRESHOLD: usize = SMALL_CHUNK_BYTE_SIZE / 2; // 4 KB
 //   编码后 32 位 narrow ptr 覆盖 32 GB，与 COMPSPACE_BYTE_SIZE 相同。
 //   narrow == 0 保留给 NULL。
 //
-// 任何 metaspace 内分配的、可被 MSRef 引用的结构（Klass、Field、Method 等）
+// 任何 metaspace 内分配的、可被 MsRef 引用的结构（Klass、Field、Method 等）
 // 都可以用这套编解码。
 
 /// Metaspace 的虚拟内存基址（与 C 层 `METASPACE_BASE` 一致）。
@@ -64,11 +64,53 @@ fn ms_comp_ptr_decode<T>(narrow: u32) -> *mut T {
     addr as *mut T
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MsInitStatus {
+    Initialized,
+    AlreadyInitialized,
+    VSpaceFailed,
+}
+
+impl TryFrom<i32> for MsInitStatus {
+    type Error = i32;
+
+    fn try_from(raw: i32) -> Result<Self, Self::Error> {
+        match raw {
+            0 => Ok(Self::Initialized),
+            1 => Ok(Self::AlreadyInitialized),
+            2 => Ok(Self::VSpaceFailed),
+            other => Err(other),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MsInitError {
+    VSpaceFailed,
+    UnknownStatus(i32),
+}
+
 unsafe extern "C" {
-    pub fn ms_init() -> bool;
+    #[link_name = "ms_init"]
+    fn c_ms_init() -> i32;
     fn ms_alloc_small_chunk() -> *mut MSChunk;
     fn ms_alloc_sized_chunk(byte_size: usize) -> *mut MSChunk;
     fn ms_free_chunk(chunk: *mut MSChunk);
+}
+
+/// Initialize the process-wide metaspace once. Failures are cached as well:
+/// callers must not retry a failed native initialization implicitly.
+pub fn ensure_initialized() -> Result<(), MsInitError> {
+    static INIT: std::sync::OnceLock<Result<(), MsInitError>> = std::sync::OnceLock::new();
+    *INIT.get_or_init(|| {
+        // SAFETY: all Rust initialization calls are serialized by INIT.
+        let raw = unsafe { c_ms_init() };
+        match MsInitStatus::try_from(raw) {
+            Ok(MsInitStatus::Initialized | MsInitStatus::AlreadyInitialized) => Ok(()),
+            Ok(MsInitStatus::VSpaceFailed) => Err(MsInitError::VSpaceFailed),
+            Err(raw) => Err(MsInitError::UnknownStatus(raw)),
+        }
+    })
 }
 
 #[repr(C)]
@@ -79,11 +121,11 @@ struct MSChunk {
 }
 
 // SAFETY: chunks are allocated by the C metaspace layer and protected
-// by internal synchronisation (Mutex / RwLock) in MSAllocator.
+// by internal synchronisation (Mutex / RwLock) in MsAllocator.
 unsafe impl Send for MSChunk {}
 unsafe impl Sync for MSChunk {}
 
-pub struct MSAllocator {
+pub struct MsAllocator {
     chunks: Mutex<Vec<NonNull<MSChunk>>>,
     /// Current chunk used for bump allocation. Protected by RwLock:
     /// read-lock for the fast path (peek + CAS on offset),
@@ -96,12 +138,12 @@ pub struct MSAllocator {
 
 // SAFETY: all mutable state is behind internal synchronisation
 // (Mutex, RwLock, AtomicUsize).
-unsafe impl Send for MSAllocator {}
-unsafe impl Sync for MSAllocator {}
+unsafe impl Send for MsAllocator {}
+unsafe impl Sync for MsAllocator {}
 
-impl MSAllocator {
+impl MsAllocator {
     pub const fn new() -> Self {
-        MSAllocator {
+        MsAllocator {
             chunks: Mutex::new(Vec::new()),
             cur_chunk: RwLock::new(None),
             cur_offset: AtomicUsize::new(0),
@@ -256,7 +298,7 @@ impl MSAllocator {
     }
 }
 
-impl Drop for MSAllocator {
+impl Drop for MsAllocator {
     fn drop(&mut self) {
         // All chunks — including the current bump chunk — are tracked
         // in `chunks`.  Drain and free each one through the C layer.
@@ -267,37 +309,37 @@ impl Drop for MSAllocator {
     }
 }
 
-impl Default for MSAllocator {
+impl Default for MsAllocator {
     fn default() -> Self {
         Self::new()
     }
 }
 
-// ── MSBox ─────────────────────────────────────────────────────────────
+// ── MsBox ─────────────────────────────────────────────────────────────
 
 /// A pointer type that owns a heap allocation inside an
-/// [`MSAllocator`]'s metaspace arena.
+/// [`MsAllocator`]'s metaspace arena.
 ///
 /// Individual deallocations are not supported (bump-allocator
 /// semantics); memory is reclaimed when the underlying chunks are
 /// destroyed together with the allocator.
 #[derive(Debug)]
-pub struct MSBox<T: ?Sized> {
+pub struct MsBox<T: ?Sized> {
     raw: NonNull<T>,
 }
 
-impl<T> MSBox<T> {
+impl<T> MsBox<T> {
     /// Allocate memory through `allocator` and move `value` into it.
-    pub fn new(allocator: &MSAllocator, value: T) -> Self {
+    pub fn new(allocator: &MsAllocator, value: T) -> Self {
         let uninit = allocator.alloc::<T>();
         let ptr = uninit.write(value);
-        MSBox {
+        MsBox {
             raw: unsafe { NonNull::new_unchecked(ptr) },
         }
     }
 }
 
-impl<T: ?Sized> MSBox<T> {
+impl<T: ?Sized> MsBox<T> {
     pub unsafe fn from_raw(raw: *mut T) -> Self {
         Self {
             raw: NonNull::new(raw).unwrap(),
@@ -305,7 +347,7 @@ impl<T: ?Sized> MSBox<T> {
     }
 }
 
-impl<T: ?Sized> Deref for MSBox<T> {
+impl<T: ?Sized> Deref for MsBox<T> {
     type Target = T;
 
     fn deref(&self) -> &T {
@@ -313,13 +355,13 @@ impl<T: ?Sized> Deref for MSBox<T> {
     }
 }
 
-impl<T: ?Sized> DerefMut for MSBox<T> {
+impl<T: ?Sized> DerefMut for MsBox<T> {
     fn deref_mut(&mut self) -> &mut T {
         unsafe { self.raw.as_mut() }
     }
 }
 
-impl<T: ?Sized> Drop for MSBox<T> {
+impl<T: ?Sized> Drop for MsBox<T> {
     fn drop(&mut self) {
         unsafe {
             ptr::drop_in_place(self.raw.as_ptr());
@@ -327,22 +369,30 @@ impl<T: ?Sized> Drop for MSBox<T> {
     }
 }
 
-// SAFETY: MSBox owns a uniquely-allocated region of metaspace memory,
+// SAFETY: MsBox owns a uniquely-allocated region of metaspace memory,
 // so it is Send/Sync under the same conditions as Box<T>.
-unsafe impl<T: Send> Send for MSBox<T> {}
-unsafe impl<T: Sync> Sync for MSBox<T> {}
+unsafe impl<T: Send> Send for MsBox<T> {}
+unsafe impl<T: Sync> Sync for MsBox<T> {}
 
 // Safety: guaranteed by developer.
-#[derive(Debug, Clone, Copy)]
-pub struct MSRef<T> {
+#[derive(Debug)]
+pub struct MsRef<T> {
     raw: NonNull<T>,
 }
+
+impl<T> Clone for MsRef<T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<T> Copy for MsRef<T> {}
 
 /// Metaspace 压缩指针。  32 位偏移量（以 `METASPACE_BASE` 为基准，
 /// 8 字节对齐）。  0 保留给 null。
 pub type CompPtr = u32;
 
-impl<T> MSRef<T> {
+impl<T> MsRef<T> {
     /// 将引用编码为压缩指针。
     pub fn encode(&self) -> CompPtr {
         ms_comp_ptr_encode(self.raw.as_ptr())
@@ -354,8 +404,10 @@ impl<T> MSRef<T> {
     /// `cp` 必须是之前由 `encode` 或 `ms_comp_ptr_encode` 生成的合法值，
     /// 指向 metaspace 内类型为 `T` 的对象。
     pub unsafe fn decode(cp: CompPtr) -> Option<Self> {
-        if cp == 0 { return None }
-        
+        if cp == 0 {
+            return None;
+        }
+
         let ptr = ms_comp_ptr_decode::<T>(cp);
         // SAFETY: 由调用方保证 cp 合法。
         Some(Self {
@@ -363,25 +415,23 @@ impl<T> MSRef<T> {
         })
     }
 
-    /// 判断两个 MSRef 是否指向同一个对象（指针相等）。
-    pub fn equals<U>(&self, other: &MSRef<U>) -> bool {
+    /// 判断两个 MsRef 是否指向同一个对象（指针相等）。
+    pub fn equals<U>(&self, other: &MsRef<U>) -> bool {
         self.raw.as_ptr() as *const () == other.raw.as_ptr() as *const ()
     }
 
     pub unsafe fn from_raw(ptr: NonNull<T>) -> Self {
-        Self {
-            raw: ptr
-        }
+        Self { raw: ptr }
     }
 }
 
-impl<T> From<&MSBox<T>> for MSRef<T> {
-    fn from(value: &MSBox<T>) -> Self {
+impl<T> From<&MsBox<T>> for MsRef<T> {
+    fn from(value: &MsBox<T>) -> Self {
         Self { raw: value.raw }
     }
 }
 
-impl<T> Deref for MSRef<T> {
+impl<T> Deref for MsRef<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -394,14 +444,14 @@ impl<T> Deref for MSRef<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Once;
 
-    fn ms_init_once() {
-        static INIT: Once = Once::new();
-        INIT.call_once(|| {
-            let ok = unsafe { ms_init() };
-            assert!(ok, "ms_init: metaspace initialisation failed");
-        });
+    #[test]
+    fn init_status_rejects_unknown_values() {
+        assert_eq!(MsInitStatus::try_from(0), Ok(MsInitStatus::Initialized));
+        assert_eq!(MsInitStatus::try_from(1), Ok(MsInitStatus::AlreadyInitialized));
+        assert_eq!(MsInitStatus::try_from(2), Ok(MsInitStatus::VSpaceFailed));
+        assert_eq!(MsInitStatus::try_from(-1), Err(-1));
+        assert_eq!(MsInitStatus::try_from(99), Err(99));
     }
 
     #[derive(Debug, PartialEq, Eq)]
@@ -417,36 +467,36 @@ mod tests {
 
     #[test]
     fn alloc_basic() {
-        ms_init_once();
-        let allocator = MSAllocator::new();
-        let b = MSBox::new(&allocator, Point { x: 10, y: 20 });
+        ensure_initialized().expect("initialize test metaspace");
+        let allocator = MsAllocator::new();
+        let b = MsBox::new(&allocator, Point { x: 10, y: 20 });
         assert_eq!(b.x, 10);
         assert_eq!(b.y, 20);
     }
 
     #[test]
     fn alloc_int() {
-        ms_init_once();
-        let allocator = MSAllocator::new();
-        let b = MSBox::new(&allocator, 42u32);
+        ensure_initialized().expect("initialize test metaspace");
+        let allocator = MsAllocator::new();
+        let b = MsBox::new(&allocator, 42u32);
         assert_eq!(*b, 42);
     }
 
     #[test]
     fn alloc_empty_tuple() {
-        ms_init_once();
-        let allocator = MSAllocator::new();
-        let b = MSBox::new(&allocator, ());
+        ensure_initialized().expect("initialize test metaspace");
+        let allocator = MsAllocator::new();
+        let b = MsBox::new(&allocator, ());
         let _ = *b;
     }
 
     #[test]
     fn alloc_multiple_distinct_addresses() {
-        ms_init_once();
-        let allocator = MSAllocator::new();
-        let a = MSBox::new(&allocator, 1u64);
-        let b = MSBox::new(&allocator, 2u64);
-        let c = MSBox::new(&allocator, 3u64);
+        ensure_initialized().expect("initialize test metaspace");
+        let allocator = MsAllocator::new();
+        let a = MsBox::new(&allocator, 1u64);
+        let b = MsBox::new(&allocator, 2u64);
+        let c = MsBox::new(&allocator, 3u64);
 
         let pa = &*a as *const u64;
         let pb = &*b as *const u64;
@@ -462,9 +512,9 @@ mod tests {
 
     #[test]
     fn alloc_many_small() {
-        ms_init_once();
-        let allocator = MSAllocator::new();
-        let boxes: Vec<MSBox<u32>> = (0..1000).map(|i| MSBox::new(&allocator, i)).collect();
+        ensure_initialized().expect("initialize test metaspace");
+        let allocator = MsAllocator::new();
+        let boxes: Vec<MsBox<u32>> = (0..1000).map(|i| MsBox::new(&allocator, i)).collect();
         for (i, b) in boxes.iter().enumerate() {
             assert_eq!(**b, i as u32);
         }
@@ -472,9 +522,9 @@ mod tests {
 
     #[test]
     fn deref_mut_field() {
-        ms_init_once();
-        let allocator = MSAllocator::new();
-        let mut b = MSBox::new(&allocator, Point { x: 0, y: 0 });
+        ensure_initialized().expect("initialize test metaspace");
+        let allocator = MsAllocator::new();
+        let mut b = MsBox::new(&allocator, Point { x: 0, y: 0 });
         b.x = 100;
         b.y = 200;
         assert_eq!(b.x, 100);
@@ -483,9 +533,9 @@ mod tests {
 
     #[test]
     fn alloc_large_object() {
-        ms_init_once();
-        let allocator = MSAllocator::new();
-        let mut b = MSBox::new(&allocator, [0u8; 5 * 1024]);
+        ensure_initialized().expect("initialize test metaspace");
+        let allocator = MsAllocator::new();
+        let mut b = MsBox::new(&allocator, [0u8; 5 * 1024]);
         for (i, byte) in b.iter_mut().enumerate() {
             *byte = (i & 0xff) as u8;
         }
@@ -496,11 +546,11 @@ mod tests {
 
     #[test]
     fn alloc_mixed_small_and_large() {
-        ms_init_once();
-        let allocator = MSAllocator::new();
-        let small = MSBox::new(&allocator, 7u64);
-        let large = MSBox::new(&allocator, [0xffu8; 5000]);
-        let another = MSBox::new(&allocator, 42i32);
+        ensure_initialized().expect("initialize test metaspace");
+        let allocator = MsAllocator::new();
+        let small = MsBox::new(&allocator, 7u64);
+        let large = MsBox::new(&allocator, [0xffu8; 5000]);
+        let another = MsBox::new(&allocator, 42i32);
 
         assert_eq!(*small, 7);
         assert_eq!(large[0], 0xff);
@@ -510,13 +560,13 @@ mod tests {
 
     #[test]
     fn chunk_overflow_forces_new_chunk() {
-        ms_init_once();
-        let allocator = MSAllocator::new();
-        let boxes: Vec<MSBox<[u8; 256]>> = (0..64)
+        ensure_initialized().expect("initialize test metaspace");
+        let allocator = MsAllocator::new();
+        let boxes: Vec<MsBox<[u8; 256]>> = (0..64)
             .map(|i| {
                 let mut arr = [0u8; 256];
                 arr[0] = i as u8;
-                MSBox::new(&allocator, arr)
+                MsBox::new(&allocator, arr)
             })
             .collect();
         for (i, b) in boxes.iter().enumerate() {
@@ -526,38 +576,38 @@ mod tests {
 
     #[test]
     fn alloc_overaligned() {
-        ms_init_once();
-        let allocator = MSAllocator::new();
-        let b = MSBox::new(&allocator, OverAligned { data: [0xAA; 64] });
+        ensure_initialized().expect("initialize test metaspace");
+        let allocator = MsAllocator::new();
+        let b = MsBox::new(&allocator, OverAligned { data: [0xAA; 64] });
         let addr = &*b as *const OverAligned as usize;
         assert_eq!(addr % 64, 0);
     }
 
     #[test]
     fn drop_allocator_does_not_crash() {
-        ms_init_once();
+        ensure_initialized().expect("initialize test metaspace");
         {
-            let allocator = MSAllocator::new();
-            let _a = MSBox::new(&allocator, 1u32);
-            let _b = MSBox::new(&allocator, [0u8; 6000]);
-            let _c = MSBox::new(&allocator, 3.14f64);
+            let allocator = MsAllocator::new();
+            let _a = MsBox::new(&allocator, 1u32);
+            let _b = MsBox::new(&allocator, [0u8; 6000]);
+            let _c = MsBox::new(&allocator, 3.14f64);
         }
     }
 
     #[test]
     fn drop_empty_allocator_does_not_crash() {
-        ms_init_once();
+        ensure_initialized().expect("initialize test metaspace");
         {
-            let _allocator = MSAllocator::new();
+            let _allocator = MsAllocator::new();
         }
     }
 
     #[test]
     fn concurrent_allocations() {
-        ms_init_once();
+        ensure_initialized().expect("initialize test metaspace");
         use std::sync::Arc;
 
-        let allocator = Arc::new(MSAllocator::new());
+        let allocator = Arc::new(MsAllocator::new());
         let mut handles = Vec::new();
 
         for tid in 0..8 {
@@ -565,7 +615,7 @@ mod tests {
             handles.push(std::thread::spawn(move || {
                 let mut boxes = Vec::new();
                 for i in 0..100 {
-                    boxes.push(MSBox::new(&a, (tid, i)));
+                    boxes.push(MsBox::new(&a, (tid, i)));
                 }
                 boxes
             }));
@@ -583,20 +633,20 @@ mod tests {
     #[test]
     fn msbox_is_send() {
         fn assert_send<T: Send>() {}
-        assert_send::<MSBox<i32>>();
+        assert_send::<MsBox<i32>>();
     }
 
     #[test]
     fn msbox_is_sync() {
         fn assert_sync<T: Sync>() {}
-        assert_sync::<MSBox<i32>>();
+        assert_sync::<MsBox<i32>>();
     }
 
     #[test]
     fn allocator_default() {
-        ms_init_once();
-        let allocator = MSAllocator::default();
-        let b = MSBox::new(&allocator, "hello");
+        ensure_initialized().expect("initialize test metaspace");
+        let allocator = MsAllocator::default();
+        let b = MsBox::new(&allocator, "hello");
         assert_eq!(*b, "hello");
     }
 }

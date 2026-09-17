@@ -36,8 +36,8 @@ TEST(init_ok)
 TEST(init_double_fails)
 {
     /* Second init must fail (already initialized) */
-    bool ok = ms_init();
-    ASSERT_TRUE(!ok, "second ms_init should return false");
+    int32_t status = ms_init();
+    ASSERT_TRUE(status == MS_INIT_ALREADY_INITIALIZED, "second ms_init should return MS_INIT_ALREADY_INITIALIZED");
 }
 
 /* ---- small chunk allocation -------------------------------------- */
@@ -257,9 +257,9 @@ int main(void)
     printf("\n=== metaspace tests ===\n\n");
 
     /* Initialise metaspace once for all tests */
-    bool ok = ms_init();
-    if (!ok) {
-        printf("  FAILED: ms_init() returned false\n");
+    int32_t status = ms_init();
+    if (status != MS_INIT_OK) {
+        printf("  FAILED: ms_init()\n");
         return EXIT_FAILURE;
     }
 

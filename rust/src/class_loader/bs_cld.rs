@@ -2,15 +2,15 @@ use std::{collections::HashMap, marker::PhantomData, ops::Deref, path::Path, syn
 
 use dashmap::{DashMap, DashSet};
 
-use crate::{class_loader::{class_path::ClassPath, class_slot::ClassSlot, load_error::{LoadError, LoadErrorKind, LoadResult}, ms_api::{MSAllocator, MSBox, MSRef}}, oops::{klass::Klass, normal_klass::{NormalKlass, UnlinkedNormalKlass}, symbol_table::{SymbolHandle, SymbolTable}}};
+use crate::{class_loader::{class_path::ClassPath, class_slot::ClassSlot, load_error::{LoadError, LoadErrorKind, LoadResult}}, oops::{klass::Klass, normal_klass::{NormalKlass, UnlinkedNormalKlass}, symbol_table::{SymbolHandle, SymbolTable}}, runtime::ms_api::{MsAllocator, MsBox, MsRef}};
 
 pub struct BootstrapCLD;
 
-static MSA: MSAllocator = MSAllocator::new();
+static MSA: MsAllocator = MsAllocator::new();
 static CLASS_TABLE: LazyLock<DashMap<SymbolHandle, ClassSlot>> = LazyLock::new(|| DashMap::new());
 
 impl BootstrapCLD {
-    pub fn ms_allocator() -> &'static MSAllocator {
+    pub fn ms_allocator() -> &'static MsAllocator {
         &MSA
     }
 
@@ -25,12 +25,12 @@ impl BootstrapCLD {
 }
 
 impl BootstrapCLD {
-    pub fn find_class(name: &str) -> LoadResult<MSRef<Klass>> {
+    pub fn find_class(name: &str) -> LoadResult<MsRef<Klass>> {
         let sh = SymbolTable::intern(name);
         Self::find_class_sym(&sh)
     }
     
-    pub fn find_class_sym(name: &SymbolHandle) -> LoadResult<MSRef<Klass>> {
+    pub fn find_class_sym(name: &SymbolHandle) -> LoadResult<MsRef<Klass>> {
         if let Some(klass) = Self::find_loaded_class(name) {
             return Ok(klass);
         }
@@ -43,12 +43,12 @@ impl BootstrapCLD {
         Self::define_class(name, &bytes)
     }
 
-    fn find_loaded_class(name: &SymbolHandle) -> Option<MSRef<Klass>> {
+    fn find_loaded_class(name: &SymbolHandle) -> Option<MsRef<Klass>> {
         CLASS_TABLE.get(name)
-            .map(|r| MSRef::from(&r.klass))
+            .map(|r| MsRef::from(&r.klass))
     }
 
-    fn define_class(name: &SymbolHandle, bytes: &[u8]) -> LoadResult<MSRef<Klass>> {
+    fn define_class(name: &SymbolHandle, bytes: &[u8]) -> LoadResult<MsRef<Klass>> {
         let mut parse_option = cafebabe::ParseOptions::default();
         parse_option.parse_bytecode(true);
 
@@ -59,8 +59,8 @@ impl BootstrapCLD {
         let normal = NormalKlass::try_from(unlinked)
             .map_err(|e| Self::make_load_error(name, LoadErrorKind::Linkage(e)))?;
 
-        let boxed = MSBox::new(Self::ms_allocator(), Klass::Normal(normal));
-        let res = MSRef::from(&boxed);
+        let boxed = MsBox::new(Self::ms_allocator(), Klass::Normal(normal));
+        let res = MsRef::from(&boxed);
         
         match CLASS_TABLE.insert(name.clone(), ClassSlot::new(boxed)) {
             Some(_) => Err(Self::make_load_error(name, LoadErrorKind::Duplicated)),

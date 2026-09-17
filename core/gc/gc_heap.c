@@ -11,11 +11,19 @@ static VirtSpace* VS = NULL;
 static HeapWord* _Atomic BUMPING_TOP = NULL;
 
 bool gcheap_init(size_t xmx) {
-    VS = create_virt_space(GCHEAP_BASE, COMPSPACE_WORD_SIZE, false);
-    if (VS == NULL) {
+    if (VS != NULL || xmx < 2 * sizeof(HeapWord) ||
+        xmx > COMPSPACE_BYTE_SIZE || xmx % sizeof(HeapWord) != 0) {
         return false;
     }
-    vs_expand(VS, xmx / sizeof(HeapWord), false);
+    VirtSpace* vs = create_virt_space(GCHEAP_BASE, COMPSPACE_WORD_SIZE, false);
+    if (vs == NULL) {
+        return false;
+    }
+    if (!vs_expand(vs, xmx / sizeof(HeapWord), false)) {
+        destroy_virt_space(vs);
+        return false;
+    }
+    VS = vs;
 
     /* Skip the first word so that the first allocation never lands at offset 0
      * – offset 0 is the NULL sentinel for compressed pointers.

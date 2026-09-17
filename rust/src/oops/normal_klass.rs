@@ -1,10 +1,11 @@
+use crate::runtime::ms_api::{MsAllocator, MsBox, MsRef};
 use std::{ops::Deref, ptr::NonNull};
 
 pub use cafebabe::ClassAccessFlags;
 
-use crate::{class_loader::{bs_cld::BootstrapCLD, class_loader_data::ClassLoaderData, ms_api::{MSAllocator, MSBox, MSRef}}, oops::{fields::Fields, method::Method, oops_errors::LinkageError, symbol_table::{SymbolHandle, SymbolTable}}};
+use crate::{class_loader::{bs_cld::BootstrapCLD, class_loader_data::ClassLoaderData}, oops::{fields::Fields, method::Method, oops_errors::LinkageError, symbol_table::{SymbolHandle, SymbolTable}}};
 
-fn get_msa(cld: Option<&ClassLoaderData>) -> &MSAllocator {
+fn get_msa(cld: Option<&ClassLoaderData>) -> &MsAllocator {
     match cld {
         Some(cld) => &cld.msa,
         None => BootstrapCLD::ms_allocator(),
@@ -19,7 +20,7 @@ pub struct UnlinkedNormalKlass<'cld> {
     super_name: Option<SymbolHandle>,
     interfaces: Box<[SymbolHandle]>,
 
-    methods: MSBox<[Method]>,
+    methods: MsBox<[Method]>,
 }
 
 impl<'cld> UnlinkedNormalKlass<'cld> {
@@ -46,20 +47,21 @@ impl<'cld> UnlinkedNormalKlass<'cld> {
                 cld,
                 super_name,
                 interfaces: ifaces.into(),
-                methods: MSBox::from_raw(methods.assume_init_mut()),
+                methods: MsBox::from_raw(methods.assume_init_mut()),
             }
         }
     }
 }
 
+#[derive(Debug)]
 pub struct NormalKlass {
     pub name: SymbolHandle,
     pub acc_flags: ClassAccessFlags,
     cld: Option<NonNull<ClassLoaderData>>,
 
-    super_klass: Option<MSRef<NormalKlass>>,
+    super_klass: Option<MsRef<NormalKlass>>,
 
-    methods: MSBox<[Method]>,
+    methods: MsBox<[Method]>,
 }
 
 impl TryFrom<UnlinkedNormalKlass<'_>> for NormalKlass {
@@ -95,10 +97,10 @@ impl TryFrom<UnlinkedNormalKlass<'_>> for NormalKlass {
 }
 
 impl NormalKlass {
-    pub fn find_declared_method(&self, name: &str, desc: &str) -> Option<MSRef<Method>> {
+    pub fn find_declared_method(&self, name: &str, desc: &str) -> Option<MsRef<Method>> {
         for method in self.methods.deref() {
             if method.name.utf8() == name && method.desc.raw.utf8() == desc {
-                unsafe { return Some(MSRef::from_raw(method.into())); }
+                unsafe { return Some(MsRef::from_raw(method.into())); }
             }
         }
 

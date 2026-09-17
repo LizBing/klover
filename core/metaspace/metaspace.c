@@ -69,20 +69,20 @@ static inline size_t round_up_8k(size_t byte_size) {
 /*  Public API                                                                */
 /* -------------------------------------------------------------------------- */
 
-bool ms_init(void) {
+int32_t ms_init(void) {
     if (_vs != NULL) {
-        return false; /* already initialised */
+        return MS_INIT_ALREADY_INITIALIZED; /* already initialised */
     }
 
     VirtSpace* vs = create_virt_space(METASPACE_BASE, COMPSPACE_WORD_SIZE, false);
     if (vs == NULL) {
-        return false;
+        return MS_INIT_VSPACE_FAILED;
     }
 
     _vs        = vs;
     _free_stack.top = NULL;
 
-    return true;
+    return MS_INIT_OK;
 }
 
 /* -------------------------------------------------------------------------- */

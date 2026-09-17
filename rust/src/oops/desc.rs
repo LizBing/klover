@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use crate::{class_loader::ms_api::{MSAllocator, MSBox}, oops::symbol_table::{SymbolHandle, SymbolTable}};
+use crate::{runtime::ms_api::{MsAllocator, MsBox}, oops::symbol_table::{SymbolHandle, SymbolTable}};
 
 #[derive(Debug)]
 pub enum ElemDesc {
@@ -62,12 +62,12 @@ pub struct MethodDesc {
     
     pub raw: SymbolHandle,
     pub ret: ReturnDesc,
-    pub args: MSBox<[FieldDesc]>,
+    pub args: MsBox<[FieldDesc]>,
 }
 
 use cafebabe::descriptors::ReturnDescriptor::*;
 impl MethodDesc {
-    pub fn build(parsed: &cafebabe::descriptors::MethodDescriptor, msa: &MSAllocator) -> Self {
+    pub fn build(parsed: &cafebabe::descriptors::MethodDescriptor, msa: &MsAllocator) -> Self {
         let raw = SymbolTable::intern(&parsed.to_string());
         let ret = match &parsed.return_type {
             Void => ReturnDesc::Void,
@@ -84,7 +84,7 @@ impl MethodDesc {
                 __: PhantomData,
                 raw,
                 ret,
-                args: MSBox::from_raw(args.assume_init_mut()),
+                args: MsBox::from_raw(args.assume_init_mut()),
             }
         }
     }

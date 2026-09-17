@@ -1,4 +1,5 @@
 #include "gc/gc_heap.h"
+#include "gc/gc.h"
 #include "memory/comp_space_defs.h"
 #include "obj_model/markword.h"
 
@@ -18,6 +19,18 @@ TEST(init_basic)
 {
     /* Heap was initialized in main(); reaching here means success. */
     ASSERT_TRUE(1, "unreachable");
+}
+
+TEST(reinitialization_preserves_heap)
+{
+    objptr_t before = gcheap_alloc((Klass*)(METASPACE_BASE + 64), 16);
+    ASSERT_NOT_NULL(before, "initial allocation failed");
+    uintptr_t mark = before->markword;
+    ASSERT_TRUE(!gc_init(8 * M), "second GC initialization must fail");
+    ASSERT_EQ(before->markword, mark, "reinitialization changed a live object");
+    objptr_t after = gcheap_alloc((Klass*)(METASPACE_BASE + 64), 16);
+    ASSERT_NOT_NULL(after, "allocation after rejected reinitialization failed");
+    ASSERT_TRUE((uintptr_t)after > (uintptr_t)before, "heap bump pointer was reset");
 }
 
 /* ---- single allocation -------------------------------------------- */
@@ -190,13 +203,20 @@ int main(void)
      * still reserves the full compressed-pointer addressable range
      * (COMPSPACE_WORD_SIZE), but only 4 MB are committed.
      */
-    bool ok = gcheap_init(4 * M);
+    if (gc_init(0) || gc_init(3 * sizeof(HeapWord) + 1) ||
+        gc_init(COMPSPACE_BYTE_SIZE + sizeof(HeapWord))) {
+        printf("  FAILED: invalid heap size accepted\n");
+        return EXIT_FAILURE;
+    }
+    /* A failed initialization must not prevent a subsequent valid attempt. */
+    bool ok = gc_init(4 * M);
     if (!ok) {
         printf("  FAILED: gcheap_init() returned false\n");
         return EXIT_FAILURE;
     }
 
     RUN_TEST(init_basic);
+    RUN_TEST(reinitialization_preserves_heap);
     RUN_TEST(alloc_single);
     RUN_TEST(alloc_markword_klass_roundtrip);
     RUN_TEST(alloc_non_null_klass);

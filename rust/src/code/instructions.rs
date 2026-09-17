@@ -1,8 +1,8 @@
 #[repr(transparent)]
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct LocalIdx(pub usize);
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum Instruction {
     ILoad(LocalIdx),
     IAdd,

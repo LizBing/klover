@@ -1,9 +1,9 @@
-use crate::class_loader::ms_api::MSAllocator;
+use crate::runtime::ms_api::MsAllocator;
 
 pub struct Fields {}
 
 impl Fields {
-    pub fn build(infos: &[cafebabe::FieldInfo], msa: &MSAllocator) -> Self {
+    pub fn build(infos: &[cafebabe::FieldInfo], msa: &MsAllocator) -> Self {
         unimplemented!()
     }
 }

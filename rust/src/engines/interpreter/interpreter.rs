@@ -60,35 +60,11 @@ impl Interpreter {
 
 #[cfg(test)]
 mod tests {
-    use crate::{class_loader::bs_cld::BootstrapCLD, engines::{exec_dispatcher::{EngineExit, ExecBudget, MethodReturn}, interpreter::{interpreter::Interpreter, interpreter_frame::InterpreterFrame}, invocation::Invocation}, oops::jvalue::JValue, runtime::{arguments::Arguments, vm::vm_init}};
-
+    use super::*;
+    use crate::{class_loader::bs_cld::BootstrapCLD, engines::invocation::Invocation, oops::jvalue::JValue};
     #[test]
     fn test_simple_addition() {
-        // VM initialization owns process-global native state. Run separately
-        // from allocator unit tests, which initialize metaspace themselves.
-        const CHILD: &str = "KLOVER_SIMPLE_ADDITION_CHILD";
-        if std::env::var_os(CHILD).is_none() {
-            let status = std::process::Command::new(std::env::current_exe().unwrap())
-                .args([
-                    "--exact",
-                    "engines::interpreter::interpreter::tests::test_simple_addition",
-                    "--nocapture",
-                ])
-                .env(CHILD, "1")
-                .status()
-                .expect("start isolated VM test");
-            assert!(status.success(), "isolated VM test failed: {status}");
-            return;
-        }
-        let args = Arguments {
-            bs_class_path: std::env::var("KLOVER_TEST_CLASSES").unwrap_or_else(|_| {
-                concat!(env!("CARGO_MANIFEST_DIR"), "/../build/test-classes").into()
-            }),
-            
-            xmx: 64 * 1024 * 1024,
-        };
-
-        vm_init(args);
+        crate::runtime::test_support::init_vm();
 
         let klass = BootstrapCLD::find_class("SimpleAddition")
             .expect("Failed to load 'SimpleAddition'.");

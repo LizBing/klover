@@ -24,7 +24,7 @@ make verify-classes       # explicitly recheck all generated class versions
 make test                 # CTest + all Rust tests + build-tool regression tests
 make test-c
 make test-rust
-make test-simple          # isolated SimpleAddition interpreter smoke test
+make test-simple          # SimpleAddition interpreter smoke test
 make test-build           # fixture lifecycle, version checks, and safe cleanup
 make compile-commands     # point compile_commands.json at the selected C build
 make clean                # remove configured build roots
@@ -49,8 +49,21 @@ rebuild replaces the output directory, removing stale classes. Failed compilatio
 preserves the last successful output but fails the build. Every generated class,
 including nested classes, must have major version 52.
 
-The interpreter smoke test runs in a child process because it initializes global
-VM state independently of the metaspace allocator unit tests.
+Rust unit tests run in one process. Metaspace initialization is shared through
+`runtime::ms_api::ensure_initialized()`. VM tests use
+`runtime::test_support::init_vm()` with one fixed configuration, without spawning
+child processes. The shared fixture preloads SimpleAddition before parallel tests
+because bootstrap class definition is not atomic yet.
+
+`runtime::vm::try_init(args)` serializes VM initialization and publishes arguments
+only after metaspace and GC initialization succeed. A second successful-VM init
+attempt is rejected, even with identical arguments. Errors return the original
+arguments and distinguish repeated initialization, metaspace failure (including
+unknown native status codes), and GC failure. Metaspace errors are cached; GC
+allocation failures leave the heap uninitialized and permit a subsequent attempt.
+The native GC rejects heap sizes that are not word-aligned, exceed 32 GiB, or
+cannot accommodate the null sentinel plus at least one word. Tests share VM state;
+they do not receive fresh class/static-field state between test cases.
 
 ## Configuration
 

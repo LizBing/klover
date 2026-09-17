@@ -1,33 +1,45 @@
 use std::marker::PhantomData;
 
-use crate::{class_loader::ms_api::MSRef, code::code::Code, engines::exec_error::{ExecError, ExecErrorKind, ExecResult}, oops::{jvalue::JValue, method::Method, normal_klass::NormalKlass}};
+use crate::{
+    runtime::ms_api::MsRef,
+    code::code::Code,
+    engines::exec_error::{ExecError, ExecErrorKind, ExecResult},
+    oops::{jvalue::JValue, method::Method, normal_klass::NormalKlass}
+};
 
+#[derive(Debug, Clone)]
 pub struct Invocation {
     __: PhantomData<()>,
     
-    pub owner: MSRef<NormalKlass>,
-    pub method: MSRef<Method>,
+    pub owner: MsRef<NormalKlass>,
+    pub method: MsRef<Method>,
     
     pub args: Box<[JValue]>,
 }
 
 impl Invocation {
-    pub fn try_new(owner: MSRef<NormalKlass>, mname: &str, desc: &str, args: &[JValue]) -> ExecResult<Self> {
+    pub fn try_new(
+        owner: MsRef<NormalKlass>,
+        mname: &str,
+        desc: &str,
+        args: &[JValue]
+    ) -> ExecResult<Self>
+    {
         let Some(method) = owner.find_declared_method(mname, desc) else {
-            return Err(ExecError::new(
-                owner.name.utf8(),
-                mname,
-                desc,
-                ExecErrorKind::MethodNotFound
-            ));
+            return Err(ExecError::new(ExecErrorKind::MethodNotFound {
+                owner: owner.name.utf8().into(),
+                name: mname.into(),
+                desc: desc.into(),
+            }))
         };
 
         if method.code.is_none() {
             return Err(ExecError::new(
-                owner.name.utf8(),
-                mname,
-                desc,
-                ExecErrorKind::NoCode,
+                ExecErrorKind::NoCode {
+                    owner: owner.name.utf8().into(),
+                    name: mname.into(),
+                    desc: desc.into(),
+                },
             ));
         }
 

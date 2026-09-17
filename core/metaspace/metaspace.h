@@ -11,7 +11,15 @@ struct MSChunk {
     uintptr_t start;
 };
 
-bool ms_init();
+typedef enum {
+    MS_INIT_OK                  = 0,
+    MS_INIT_ALREADY_INITIALIZED = 1,
+    MS_INIT_VSPACE_FAILED       = 2,
+} MSInitStatus;
+
+/* Returns an MSInitStatus code with a fixed-width FFI representation.
+ * Initialization must be serialized by the caller. */
+int32_t ms_init(void);
 
 MSChunk* ms_alloc_small_chunk();
 MSChunk* ms_alloc_sized_chunk(size_t byte_size);

@@ -1,14 +1,22 @@
 use std::marker::PhantomData;
 
-use crate::engines::invocation::{self, Invocation};
+use crate::engines::invocation::Invocation;
 
 #[derive(Debug)]
 pub enum ExecErrorKind {
     UnexpectedEOF,
     
-    MethodNotFound,
+    MethodNotFound {
+        owner: String,
+        name: String,
+        desc: String,
+    },
 
-    NoCode,
+    NoCode {
+        owner: String,
+        name: String,
+        desc: String,
+    },
 
     MismatchSlotType,
 
@@ -17,42 +25,34 @@ pub enum ExecErrorKind {
     InvalidLocalIndex(usize),
 
     UnsupportedInstruction,
+
+    NoFrame,
 }
 
 #[derive(Debug)]
 pub struct ExecError {
     __: PhantomData<()>,
     
-    pub owner: String,
-    pub name: String,
-    pub desc: String,
+    pub invocation: Option<Invocation>,
 
     pub kind: ExecErrorKind,
 }
 
 impl ExecError {
-    pub(super) fn new(
-        owner: &str,
-        name: &str,
-        desc: &str,
-        kind: ExecErrorKind,
-    ) -> Self {
+    pub(super) fn new(kind: ExecErrorKind) -> Self {
         Self {
             __: PhantomData,
-            owner: owner.into(),
-            name: name.into(),
-            desc: desc.into(),
+            invocation: None,
             kind,
         }
     }
     
-    pub(super) fn with_invocation(invocation: &Invocation, kind: ExecErrorKind) -> Self {
-        Self::new(
-            invocation.owner.name.utf8(),
-            invocation.method.name.utf8(),
-            invocation.method.desc.raw.utf8(),
+    pub(super) fn with_invocation(invocation: Invocation, kind: ExecErrorKind) -> Self {
+        Self {
+            __: PhantomData,
+            invocation: Some(invocation),
             kind,
-        )
+        }
     }
 }
 
