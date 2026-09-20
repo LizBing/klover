@@ -3,3 +3,6 @@ pub mod interpreter;
 pub mod interpreter_frame;
 mod slot;
 mod step_outcome;
+
+#[cfg(test)]
+mod tests;

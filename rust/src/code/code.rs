@@ -16,14 +16,14 @@ impl Code {
     }
 
     pub fn build(cd: &cafebabe::attributes::CodeData, msa: &MsAllocator) -> Self {
-        let opcodes = &cd.bytecode
+        let bytecode = cd.bytecode
             .as_ref()
-            .expect("Klover requires bytecode decoding to be enabled.")
-            .opcodes;
+            .expect("Klover requires bytecode decoding to be enabled.");
 
-        let insts = msa.calloc(opcodes.len());
-        for (i, v) in opcodes.iter().enumerate() {
-            insts[i].write(Instruction::from(&v.1));
+        let inst_count = bytecode.opcodes.len();
+        let insts = msa.calloc(inst_count);
+        for i in 0..inst_count {
+            insts[i].write(Instruction::lower(bytecode, i));
         }
 
         unsafe {

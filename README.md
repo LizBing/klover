@@ -65,6 +65,28 @@ The native GC rejects heap sizes that are not word-aligned, exceed 32 GiB, or
 cannot accommodate the null sentinel plus at least one word. Tests share VM state;
 they do not receive fresh class/static-field state between test cases.
 
+## Interpreter regression tests
+
+`make test` runs the C tests, Rust tests, and build-tool tests. Run
+`make test BUILD_TYPE=Release` to exercise the optimized C and Rust builds as well.
+`make verify-classes` explicitly checks that all compiled fixtures target Java 8.
+
+Interpreter tests load real class files through the bootstrap loader and execute
+static entry methods through `Invocation` and `ExecDispatcher`. Value-returning
+fixtures run with both one-unit and large execution budgets. Coverage includes
+the supported methods in `Arith`, `ArithmeticOps`, `ControlFlow`, `ConstantOps`,
+`StoreOps`, `ReferenceLoads`, `Wide`, `InstructionOps`, and `StaticCallee`, plus
+the `SimpleAddition` smoke test. `AlgorithmOps` adds iterative Fibonacci, GCD,
+primality, bit counting, nested loops, polynomial evaluation, and an infinite loop
+that must yield when its execution budget expires.
+
+Tests also exercise overflow, signed zero, NaN, numeric conversions, division by
+zero, and zero-budget polls interleaved with execution. Stack-instruction tests
+cover category-1/category-2 forms directly. Reference fixtures currently use null
+references. Unsupported constant-pool loads are tested as explicit execution
+errors; method invocation, object allocation, arrays, and Java exception handling
+are not covered as successful execution paths yet.
+
 ## Configuration
 
 ```bash

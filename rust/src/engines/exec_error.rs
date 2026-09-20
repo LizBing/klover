@@ -3,7 +3,7 @@ use crate::engines::invocation::Invocation;
 #[derive(Debug)]
 pub enum ExecErrorKind {
     UnexpectedEOF,
-    
+
     MethodNotFound {
         owner: String,
         name: String,
@@ -20,6 +20,12 @@ pub enum ExecErrorKind {
 
     StackUnderflow,
 
+    // Until Java exception dispatch is implemented, integer division by zero
+    // exits through the execution error channel.
+    DivisionByZero,
+
+    InvalidBranchTarget(usize),
+
     InvalidLocalIndex(usize),
 
     UnsupportedInstruction,
@@ -30,7 +36,7 @@ pub enum ExecErrorKind {
 #[derive(Debug)]
 pub struct ExecError {
     _private: (),
-    
+
     pub invocation: Option<Invocation>,
 
     pub kind: ExecErrorKind,
@@ -44,7 +50,7 @@ impl ExecError {
             kind,
         }
     }
-    
+
     pub(super) fn with_invocation(invocation: Invocation, kind: ExecErrorKind) -> Self {
         Self {
             _private: (),

@@ -1,7 +1,13 @@
 use crate::{
-    code::instructions::Instruction, engines::{
-        exec_dispatcher::{EngineExit, ExecBudget, MethodReturn}, exec_error::{ExecError, ExecErrorKind, ExecResult}, interpreter::{interpreter::Interpreter, slot::Slot}, invocation::Invocation, java_frame::JavaFrame,
-    }, oops::jvalue::{JDouble, JInt, JLong, JValue},
+    code::instructions::{InstIdx, Instruction},
+    engines::{
+        exec_dispatcher::{EngineExit, ExecBudget, MethodReturn},
+        exec_error::{ExecError, ExecErrorKind, ExecResult},
+        interpreter::{interpreter::Interpreter, slot::Slot},
+        invocation::Invocation,
+        java_frame::JavaFrame,
+    },
+    oops::jvalue::{JDouble, JInt, JLong, JValue},
 };
 
 pub struct InterpreterFrame {
@@ -66,19 +72,11 @@ impl InterpreterFrame {
 }
 
 impl JavaFrame for InterpreterFrame {
-    fn resume(
-        &mut self,
-        budget: &mut ExecBudget,
-    ) -> ExecResult<EngineExit>
-    {
+    fn resume(&mut self, budget: &mut ExecBudget) -> ExecResult<EngineExit> {
         Interpreter::execute(self, budget)
     }
 
-    fn accept_return(
-        &mut self,
-        value: MethodReturn,
-    ) -> ExecResult<()>
-    {
+    fn accept_return(&mut self, value: MethodReturn) -> ExecResult<()> {
         let jvalue = match value {
             MethodReturn::Void => return Ok(()),
             MethodReturn::Value(v) => v,
@@ -180,10 +178,94 @@ impl InterpreterFrame {
     pub(super) fn set_local(&mut self, idx: usize, slot: Slot) -> ExecResult<()> {
         match self.locals.get(idx) {
             Some(_) => {
+                self.invalidate_local(idx);
                 self.locals[idx] = slot;
                 Ok(())
             }
             None => Err(self.make_exec_error(ExecErrorKind::InvalidLocalIndex(idx))),
+        }
+    }
+}
+
+impl InterpreterFrame {
+    pub(super) fn jump_to(&mut self, target: InstIdx) -> ExecResult<()> {
+        if target.0 >= self.invocation.code().instructions().len() {
+            return Err(self.make_exec_error(ExecErrorKind::InvalidBranchTarget(target.0)));
+        }
+        self.pc = target.0;
+        Ok(())
+    }
+
+    pub(super) fn operand_stack(&self) -> &[Slot] {
+        &self.oprand_stack
+    }
+
+    // Used only after stack instructions have checked the entire replaced suffix.
+    pub(super) fn replace_stack_top(&mut self, count: usize, replacement: &[Slot]) {
+        self.oprand_stack.truncate(self.oprand_stack.len() - count);
+        self.oprand_stack.extend_from_slice(replacement);
+    }
+
+    fn invalidate_local(&mut self, idx: usize) {
+        match self.locals[idx] {
+            Slot::LongHigh(_) | Slot::DoubleHigh(_) if idx + 1 < self.locals.len() => {
+                self.locals[idx + 1] = Slot::Unused;
+            }
+            Slot::LongLow(_) | Slot::DoubleLow(_) if idx > 0 => {
+                self.locals[idx - 1] = Slot::Unused;
+            }
+            _ => {}
+        }
+        self.locals[idx] = Slot::Unused;
+    }
+
+    pub(super) fn set_wide_local(&mut self, idx: usize, high: Slot, low: Slot) -> ExecResult<()> {
+        self.get_local(idx)?;
+        self.get_local(idx + 1)?;
+        // Invalidate both old values before writing either new slot.
+        self.invalidate_local(idx);
+        self.invalidate_local(idx + 1);
+        self.locals[idx] = high;
+        self.locals[idx + 1] = low;
+        Ok(())
+    }
+}
+
+impl InterpreterFrame {
+    pub(super) fn push_int(&mut self, value: JInt) {
+        self.push(Slot::Int(value));
+    }
+
+    pub(super) fn pop_int(&mut self) -> ExecResult<JInt> {
+        match self.pop()? {
+            Slot::Int(value) => Ok(value),
+            _ => Err(self.make_exec_error(ExecErrorKind::MismatchSlotType)),
+        }
+    }
+}
+
+impl InterpreterFrame {
+    pub(super) fn push_float(&mut self, value: crate::oops::jvalue::JFloat) {
+        self.push(Slot::Float(value));
+    }
+
+    pub(super) fn pop_float(&mut self) -> ExecResult<crate::oops::jvalue::JFloat> {
+        match self.pop()? {
+            Slot::Float(value) => Ok(value),
+            _ => Err(self.make_exec_error(ExecErrorKind::MismatchSlotType)),
+        }
+    }
+}
+
+impl InterpreterFrame {
+    pub(super) fn push_ref(&mut self, value: crate::gc_bindings::oop_hierarchy::NObjPtr) {
+        self.push(Slot::Ref(value));
+    }
+
+    pub(super) fn pop_ref(&mut self) -> ExecResult<crate::gc_bindings::oop_hierarchy::NObjPtr> {
+        match self.pop()? {
+            Slot::Ref(value) => Ok(value),
+            _ => Err(self.make_exec_error(ExecErrorKind::MismatchSlotType)),
         }
     }
 }
