@@ -1,9 +1,12 @@
-use crate::engines::{
-    exec_error::ExecResult,
-    interpreter::{interpreter_frame::InterpreterFrame, step_outcome::StepControl},
-};
 use crate::{
     code::instructions::InstIdx, engines::exec_dispatcher::MethodReturn, oops::jvalue::JValue,
+};
+use crate::{
+    code::instructions::{LookupTable, RangeTable},
+    engines::{
+        exec_error::{ExecErrorKind, ExecResult},
+        interpreter::{interpreter_frame::InterpreterFrame, slot::Slot, step_outcome::StepControl},
+    },
 };
 
 pub fn ireturn(f: &mut InterpreterFrame) -> ExecResult<StepControl> {
@@ -46,4 +49,22 @@ pub fn branch(f: &mut InterpreterFrame, target: InstIdx, taken: bool) -> ExecRes
         f.jump_to(target)?;
     }
     Ok(StepControl::Continue)
+}
+
+pub fn table_switch(f: &mut InterpreterFrame, rt: &RangeTable) -> ExecResult<StepControl> {
+    let Slot::Int(index) = f.pop()? else {
+        return Err(f.make_exec_error(ExecErrorKind::MismatchSlotType));
+    };
+    let target = rt.get_inst_idx(index);
+
+    branch(f, target, true)
+}
+
+pub fn lookup_switch(f: &mut InterpreterFrame, lt: &LookupTable) -> ExecResult<StepControl> {
+    let Slot::Int(key) = f.pop()? else {
+        return Err(f.make_exec_error(ExecErrorKind::MismatchSlotType));
+    };
+    let target = lt.get_inst_idx(key);
+
+    branch(f, target, true)
 }

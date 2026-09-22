@@ -28,7 +28,7 @@ CMAKE_ARGS ?=
 CARGO_FLAGS := --manifest-path "$(ROOT)/rust/Cargo.toml" --locked $(CARGO_PROFILE_FLAG)
 CARGO_ENV = KLOVER_CORE_DIR="$(CORE_DIR)" CARGO_TARGET_DIR="$(CARGO_TARGET)" KLOVER_TEST_CLASSES="$(CLASSES_OUT)"
 
-.PHONY: all core rust check classes verify-classes test test-c test-rust test-simple test-build clean compile-commands help
+.PHONY: all core rust check classes verify-classes test test-c test-rust test-unit test-integration test-simple test-build clean compile-commands help
 
 all: rust
 
@@ -40,7 +40,7 @@ rust: core
 	$(CARGO_ENV) $(CARGO) build $(CARGO_FLAGS)
 
 check: core
-	$(CARGO_ENV) $(CARGO) check $(CARGO_FLAGS) --all-targets
+	$(CARGO_ENV) $(CARGO) check $(CARGO_FLAGS) --all-targets --features integration-tests
 
 classes:
 	$(PYTHON) "$(ROOT)/scripts/build-test-classes.py" --javac "$(JAVAC)" --output "$(CLASSES_OUT)"
@@ -52,10 +52,16 @@ test-c: core
 	$(CTEST) --test-dir "$(CORE_DIR)" --output-on-failure
 
 test-rust: core classes
-	$(CARGO_ENV) $(CARGO) test $(CARGO_FLAGS)
+	$(CARGO_ENV) $(CARGO) test $(CARGO_FLAGS) --features integration-tests
+
+test-unit: core
+	$(CARGO_ENV) $(CARGO) test $(CARGO_FLAGS) --lib
+
+test-integration: core classes
+	$(CARGO_ENV) $(CARGO) test $(CARGO_FLAGS) --features integration-tests --test jvm
 
 test-simple: core classes
-	$(CARGO_ENV) $(CARGO) test $(CARGO_FLAGS) --lib test_simple_addition -- --nocapture
+	$(CARGO_ENV) $(CARGO) test $(CARGO_FLAGS) --features integration-tests --test jvm simple_addition -- --nocapture
 
 test-build:
 	$(PYTHON) -B -m unittest discover -s "$(ROOT)/scripts/tests" -v
@@ -69,6 +75,6 @@ clean:
 	$(PYTHON) "$(ROOT)/scripts/clean-build.py" "$(BUILD_DIR)" "$(CARGO_TARGET)"
 
 help:
-	@echo "Targets: all core rust check classes verify-classes test test-c test-rust test-simple test-build clean compile-commands"
+	@echo "Targets: all core rust check classes verify-classes test test-c test-rust test-unit test-integration test-simple test-build clean compile-commands"
 	@echo "Variables: BUILD_TYPE=Debug|Release BUILD_DIR=... CARGO_TARGET=... JOBS=..."
 	@echo "Tools: CMAKE CTEST CARGO JAVAC PYTHON; extra CMake options: CMAKE_ARGS"

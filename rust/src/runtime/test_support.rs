@@ -12,9 +12,5 @@ pub fn init_vm() {
             xmx: 64 * 1024 * 1024,
         })
         .expect("initialize test VM");
-        // These smoke tests share this immutable class. Load it before they
-        // run concurrently; bootstrap class definition is not atomic yet.
-        crate::class_loader::bs_cld::BootstrapCLD::find_class("SimpleAddition")
-            .expect("load test class");
     });
 }

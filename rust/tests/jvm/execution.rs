@@ -1,12 +1,12 @@
-use super::{
+use klover::engines::interpreter::{
     interpreter::Interpreter, interpreter_frame::InterpreterFrame, slot::Slot,
     step_outcome::StepControl,
 };
-use crate::{
+use klover::{
     class_loader::bs_cld::BootstrapCLD,
     code::instructions::{InstIdx, Instruction, Instruction::*, LocalIdx},
     engines::{
-        exec_dispatcher::{DispatchOutcome, ExecBudget, ExecDispatcher, MethodReturn},
+        exec_dispatcher::{DispatchOutcome, EngineExit, ExecBudget, ExecDispatcher, MethodReturn},
         exec_error::ExecErrorKind,
         invocation::Invocation,
     },
@@ -17,7 +17,7 @@ use crate::{
 use std::sync::Mutex;
 
 fn invocation(class: &str, method: &str, desc: &str, args: &[JValue]) -> Invocation {
-    crate::runtime::test_support::init_vm();
+    crate::support::init_vm();
     // Bootstrap class definition is not atomic yet. Serialize test fixture loads.
     static LOADING: Mutex<()> = Mutex::new(());
     let _guard = LOADING.lock().unwrap();
@@ -105,6 +105,40 @@ fn check(class: &str, method: &str, desc: &str, args: &[JValue], expected: JValu
         };
         assert_value(value, expected);
     }
+}
+
+#[test]
+fn simple_addition_through_interpreter() {
+    let mut frame = InterpreterFrame::new(invocation(
+        "SimpleAddition",
+        "add",
+        "(II)I",
+        &[JValue::Int(1), JValue::Int(2)],
+    ));
+    let exit = Interpreter::execute(&mut frame, &mut ExecBudget::new(5)).unwrap();
+    assert!(matches!(
+        exit,
+        EngineExit::Return(MethodReturn::Value(JValue::Int(3)))
+    ));
+}
+
+#[test]
+fn simple_addition_through_dispatcher() {
+    let mut thread = JavaThread::new();
+    ExecDispatcher::start(
+        &mut thread,
+        invocation(
+            "SimpleAddition",
+            "add",
+            "(II)I",
+            &[JValue::Int(1), JValue::Int(2)],
+        ),
+    )
+    .unwrap();
+    assert!(matches!(
+        ExecDispatcher::poll(&mut thread, &mut ExecBudget::new(5)).unwrap(),
+        DispatchOutcome::Completed(MethodReturn::Value(JValue::Int(3)))
+    ));
 }
 
 #[test]
@@ -791,4 +825,4 @@ fn conversions_and_nan_comparisons() {
     );
 }
 
-mod extended;
+mod algorithms;

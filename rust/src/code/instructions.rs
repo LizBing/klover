@@ -1,10 +1,53 @@
-use crate::oops::jvalue::{JByte, JDouble, JFloat, JInt, JLong, JShort};
+use crate::{
+    oops::jvalue::{JByte, JDouble, JFloat, JInt, JLong, JShort},
+    runtime::ms_api::{MsAllocator, MsBox, MsRef},
+};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct LocalIdx(pub usize);
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct InstIdx(pub usize);
+
+#[derive(Debug, Clone)]
+pub struct RangeTable {
+    default: InstIdx,
+    low: JInt,
+    high: JInt,
+    jumps: MsRef<[InstIdx]>,
+}
+
+impl RangeTable {
+    pub fn get_inst_idx(&self, index: JInt) -> InstIdx {
+        if self.low <= index && index <= self.high {
+            let idx = (index - self.low) as usize;
+            self.jumps[idx]
+        } else {
+            self.default
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct LookupTable {
+    default: InstIdx,
+    pairs: MsRef<[(JInt, InstIdx)]>,
+}
+
+impl LookupTable {
+    pub fn get_inst_idx(&self, key: JInt) -> InstIdx {
+        for iter in self.pairs.iter() {
+            let match_value = iter.0;
+            if key == match_value {
+                return iter.1;
+            } else if key < match_value {
+                break;
+            }
+        }
+
+        self.default
+    }
+}
 
 #[derive(Debug, Clone)]
 pub enum Instruction {
@@ -122,6 +165,8 @@ pub enum Instruction {
 
     // --- Control ---
     Goto(InstIdx),
+    TableSwitch(RangeTable),
+    LookUpSwitch(LookupTable),
     IReturn,
     LReturn,
     FReturn,
@@ -140,7 +185,7 @@ use cafebabe::bytecode::{ByteCode, Opcode};
 
 impl Instruction {
     // Code keeps a one-to-one correspondence with the parser's opcode array.
-    pub(super) fn lower(bytecodes: &ByteCode<'_>, opcode_idx: usize) -> Self {
+    pub(super) fn lower(bytecodes: &ByteCode<'_>, opcode_idx: usize, msa: &MsAllocator) -> Self {
         let (bci, opcode) = &bytecodes.opcodes[opcode_idx];
         let target = |offset: i32| {
             let bci = usize::try_from(*bci as i64 + i64::from(offset))
@@ -263,6 +308,35 @@ impl Instruction {
             Opcode::Ifnull(offset) => Self::IfNull(target(*offset)),
             Opcode::Ifnonnull(offset) => Self::IfNonNull(target(*offset)),
             Opcode::Goto(offset) => Self::Goto(target(*offset)),
+            Opcode::Tableswitch(rt) => {
+                let default = target(rt.default);
+                let jumps = msa.calloc(rt.jumps.len());
+                for (i, v) in rt.jumps.iter().enumerate() {
+                    jumps[i].write(target(*v));
+                }
+
+                Self::TableSwitch(RangeTable {
+                    default,
+                    low: rt.low,
+                    high: rt.high,
+                    jumps: unsafe { MsBox::from_raw(jumps.assume_init_mut()).leak() },
+                })
+            }
+            Opcode::Lookupswitch(lt) => {
+                let default = target(lt.default);
+                let pairs = msa.calloc(lt.match_offsets.len());
+                for (i, v) in lt.match_offsets.iter().enumerate() {
+                    let key = v.0;
+                    let value = target(v.1);
+
+                    pairs[i].write((key, value));
+                }
+
+                Self::LookUpSwitch(LookupTable {
+                    default,
+                    pairs: unsafe { MsBox::from_raw(pairs.assume_init_mut()).leak() },
+                })
+            }
             Opcode::Ireturn => Self::IReturn,
             Opcode::Lreturn => Self::LReturn,
             Opcode::Freturn => Self::FReturn,
@@ -276,10 +350,14 @@ impl Instruction {
 
 #[cfg(test)]
 mod tests {
+    use crate::class_loader::bs_cld::BootstrapCLD;
+
     use super::*;
 
     #[test]
     fn lower_branches_use_byte_addresses_not_instruction_indices() {
+        let msa = BootstrapCLD::ms_allocator();
+
         let code = ByteCode {
             opcodes: vec![
                 (0, Opcode::Bipush(10)),
@@ -292,11 +370,11 @@ mod tests {
             ],
         };
         assert!(matches!(
-            Instruction::lower(&code, 2),
+            Instruction::lower(&code, 2, msa),
             Instruction::Goto(InstIdx(4))
         ));
         assert!(matches!(
-            Instruction::lower(&code, 5),
+            Instruction::lower(&code, 5, msa),
             Instruction::IfNe(InstIdx(0))
         ));
         // goto_w is normalized by cafebabe to the same Opcode::Goto variant.
@@ -304,13 +382,15 @@ mod tests {
             opcodes: vec![(0, Opcode::Goto(40_000)), (40_000, Opcode::Return)],
         };
         assert!(matches!(
-            Instruction::lower(&wide, 0),
+            Instruction::lower(&wide, 0, msa),
             Instruction::Goto(InstIdx(1))
         ));
     }
 
     #[test]
     fn lower_retains_wide_local_indices_and_signed_increments() {
+        let msa = BootstrapCLD::ms_allocator();
+
         let code = ByteCode {
             opcodes: vec![
                 (0, Opcode::Iinc(300, -1000)),
@@ -319,21 +399,23 @@ mod tests {
             ],
         };
         assert!(matches!(
-            Instruction::lower(&code, 0),
+            Instruction::lower(&code, 0, msa),
             Instruction::IInc(LocalIdx(300), -1000)
         ));
         assert!(matches!(
-            Instruction::lower(&code, 1),
+            Instruction::lower(&code, 1, msa),
             Instruction::ILoad(LocalIdx(300))
         ));
         assert!(matches!(
-            Instruction::lower(&code, 2),
+            Instruction::lower(&code, 2, msa),
             Instruction::LStore(LocalIdx(400))
         ));
     }
 
     #[test]
     fn lower_stack_variants_without_losing_their_forms() {
+        let msa = BootstrapCLD::ms_allocator();
+
         let opcodes = [
             Opcode::Nop,
             Opcode::Pop,
@@ -363,7 +445,7 @@ mod tests {
         };
         for (idx, expected) in expected.iter().enumerate() {
             assert_eq!(
-                std::mem::discriminant(&Instruction::lower(&code, idx)),
+                std::mem::discriminant(&Instruction::lower(&code, idx, msa)),
                 std::mem::discriminant(expected)
             );
         }

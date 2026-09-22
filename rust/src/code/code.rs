@@ -23,7 +23,7 @@ impl Code {
         let inst_count = bytecode.opcodes.len();
         let insts = msa.calloc(inst_count);
         for i in 0..inst_count {
-            insts[i].write(Instruction::lower(bytecode, i));
+            insts[i].write(Instruction::lower(bytecode, i, msa));
         }
 
         unsafe {

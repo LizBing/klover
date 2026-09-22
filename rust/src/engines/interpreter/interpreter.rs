@@ -44,7 +44,7 @@ impl Interpreter {
         StepOutcome::new(cost, Self::execute_instruction(f, inst))
     }
 
-    pub(super) fn execute_instruction(
+    pub fn execute_instruction(
         f: &mut InterpreterFrame,
         inst: Instruction,
     ) -> ExecResult<StepControl> {
@@ -150,6 +150,8 @@ impl Interpreter {
             IfNull(target) => if_null(f, target, true),
             IfNonNull(target) => if_null(f, target, false),
             Goto(target) => branch(f, target, true),
+            TableSwitch(rt) => table_switch(f, &rt),
+            LookUpSwitch(lt) => lookup_switch(f, &lt),
             IReturn => ireturn(f),
             LReturn => lreturn(f),
             FReturn => freturn(f),
@@ -158,38 +160,5 @@ impl Interpreter {
             Return => return_void(f),
             Unsupported => Err(f.make_exec_error(ExecErrorKind::UnsupportedInstruction)),
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::engines::exec_dispatcher::MethodReturn;
-    use crate::{
-        class_loader::bs_cld::BootstrapCLD, engines::invocation::Invocation, oops::jvalue::JValue,
-    };
-    #[test]
-    fn test_simple_addition() {
-        crate::runtime::test_support::init_vm();
-
-        let klass =
-            BootstrapCLD::find_class("SimpleAddition").expect("Failed to load 'SimpleAddition'.");
-
-        let owner = klass.as_normal_klass_ref().expect("Expected NormalKlass.");
-
-        let invocation =
-            Invocation::try_new(owner, "add", "(II)I", &[JValue::Int(1), JValue::Int(2)])
-                .expect("Failed to create invocation.");
-
-        let mut frame = InterpreterFrame::new(invocation);
-        let mut budget = ExecBudget::new(5);
-
-        let exit = Interpreter::execute(&mut frame, &mut budget).expect("Failed to execute.");
-
-        let EngineExit::Return(MethodReturn::Value(JValue::Int(value))) = exit else {
-            panic!("Wrong exit.");
-        };
-
-        assert!(value == 3, "Wrong result.");
     }
 }

@@ -66,7 +66,7 @@ impl InterpreterFrame {
 }
 
 impl InterpreterFrame {
-    pub(super) fn make_exec_error(&self, kind: ExecErrorKind) -> ExecError {
+    pub fn make_exec_error(&self, kind: ExecErrorKind) -> ExecError {
         ExecError::with_invocation(self.invocation.clone(), kind)
     }
 }
@@ -99,7 +99,7 @@ impl JavaFrame for InterpreterFrame {
 }
 
 impl InterpreterFrame {
-    pub(super) fn next_inst(&mut self) -> Option<Instruction> {
+    pub fn next_inst(&mut self) -> Option<Instruction> {
         let res = self.invocation.code().instructions().get(self.pc).cloned();
         if res.is_some() {
             self.last_pc = self.pc;
@@ -111,18 +111,18 @@ impl InterpreterFrame {
 }
 
 impl InterpreterFrame {
-    pub(super) fn push(&mut self, slot: Slot) {
+    pub fn push(&mut self, slot: Slot) {
         self.oprand_stack.push(slot);
     }
 
-    pub(super) fn pop(&mut self) -> ExecResult<Slot> {
+    pub fn pop(&mut self) -> ExecResult<Slot> {
         match self.oprand_stack.pop() {
             Some(s) => Ok(s),
             None => Err(self.make_exec_error(ExecErrorKind::StackUnderflow)),
         }
     }
 
-    pub(super) fn push_long(&mut self, value: JLong) {
+    pub fn push_long(&mut self, value: JLong) {
         let bytes = value.to_be_bytes();
 
         self.oprand_stack
@@ -131,7 +131,7 @@ impl InterpreterFrame {
             .push(Slot::LongLow([bytes[4], bytes[5], bytes[6], bytes[7]]));
     }
 
-    pub(super) fn pop_long(&mut self) -> ExecResult<JLong> {
+    pub fn pop_long(&mut self) -> ExecResult<JLong> {
         let Slot::LongLow(low) = self.pop()? else {
             return Err(self.make_exec_error(ExecErrorKind::MismatchSlotType));
         };
@@ -145,7 +145,7 @@ impl InterpreterFrame {
         ]))
     }
 
-    pub(super) fn push_double(&mut self, value: JDouble) {
+    pub fn push_double(&mut self, value: JDouble) {
         let bytes = value.to_be_bytes();
 
         self.oprand_stack
@@ -154,7 +154,7 @@ impl InterpreterFrame {
             .push(Slot::DoubleLow([bytes[4], bytes[5], bytes[6], bytes[7]]));
     }
 
-    pub(super) fn pop_double(&mut self) -> ExecResult<JDouble> {
+    pub fn pop_double(&mut self) -> ExecResult<JDouble> {
         let Slot::DoubleLow(low) = self.pop()? else {
             return Err(self.make_exec_error(ExecErrorKind::MismatchSlotType));
         };
@@ -168,14 +168,14 @@ impl InterpreterFrame {
         ]))
     }
 
-    pub(super) fn get_local(&self, idx: usize) -> ExecResult<Slot> {
+    pub fn get_local(&self, idx: usize) -> ExecResult<Slot> {
         match self.locals.get(idx) {
             Some(s) => Ok(*s),
             None => Err(self.make_exec_error(ExecErrorKind::InvalidLocalIndex(idx))),
         }
     }
 
-    pub(super) fn set_local(&mut self, idx: usize, slot: Slot) -> ExecResult<()> {
+    pub fn set_local(&mut self, idx: usize, slot: Slot) -> ExecResult<()> {
         match self.locals.get(idx) {
             Some(_) => {
                 self.invalidate_local(idx);
@@ -188,7 +188,7 @@ impl InterpreterFrame {
 }
 
 impl InterpreterFrame {
-    pub(super) fn jump_to(&mut self, target: InstIdx) -> ExecResult<()> {
+    pub fn jump_to(&mut self, target: InstIdx) -> ExecResult<()> {
         if target.0 >= self.invocation.code().instructions().len() {
             return Err(self.make_exec_error(ExecErrorKind::InvalidBranchTarget(target.0)));
         }
@@ -196,12 +196,12 @@ impl InterpreterFrame {
         Ok(())
     }
 
-    pub(super) fn operand_stack(&self) -> &[Slot] {
+    pub fn operand_stack(&self) -> &[Slot] {
         &self.oprand_stack
     }
 
     // Used only after stack instructions have checked the entire replaced suffix.
-    pub(super) fn replace_stack_top(&mut self, count: usize, replacement: &[Slot]) {
+    pub fn replace_stack_top(&mut self, count: usize, replacement: &[Slot]) {
         self.oprand_stack.truncate(self.oprand_stack.len() - count);
         self.oprand_stack.extend_from_slice(replacement);
     }
@@ -219,7 +219,7 @@ impl InterpreterFrame {
         self.locals[idx] = Slot::Unused;
     }
 
-    pub(super) fn set_wide_local(&mut self, idx: usize, high: Slot, low: Slot) -> ExecResult<()> {
+    pub fn set_wide_local(&mut self, idx: usize, high: Slot, low: Slot) -> ExecResult<()> {
         self.get_local(idx)?;
         self.get_local(idx + 1)?;
         // Invalidate both old values before writing either new slot.
@@ -232,11 +232,11 @@ impl InterpreterFrame {
 }
 
 impl InterpreterFrame {
-    pub(super) fn push_int(&mut self, value: JInt) {
+    pub fn push_int(&mut self, value: JInt) {
         self.push(Slot::Int(value));
     }
 
-    pub(super) fn pop_int(&mut self) -> ExecResult<JInt> {
+    pub fn pop_int(&mut self) -> ExecResult<JInt> {
         match self.pop()? {
             Slot::Int(value) => Ok(value),
             _ => Err(self.make_exec_error(ExecErrorKind::MismatchSlotType)),
@@ -245,11 +245,11 @@ impl InterpreterFrame {
 }
 
 impl InterpreterFrame {
-    pub(super) fn push_float(&mut self, value: crate::oops::jvalue::JFloat) {
+    pub fn push_float(&mut self, value: crate::oops::jvalue::JFloat) {
         self.push(Slot::Float(value));
     }
 
-    pub(super) fn pop_float(&mut self) -> ExecResult<crate::oops::jvalue::JFloat> {
+    pub fn pop_float(&mut self) -> ExecResult<crate::oops::jvalue::JFloat> {
         match self.pop()? {
             Slot::Float(value) => Ok(value),
             _ => Err(self.make_exec_error(ExecErrorKind::MismatchSlotType)),
@@ -258,11 +258,11 @@ impl InterpreterFrame {
 }
 
 impl InterpreterFrame {
-    pub(super) fn push_ref(&mut self, value: crate::gc_bindings::oop_hierarchy::NObjPtr) {
+    pub fn push_ref(&mut self, value: crate::gc_bindings::oop_hierarchy::NObjPtr) {
         self.push(Slot::Ref(value));
     }
 
-    pub(super) fn pop_ref(&mut self) -> ExecResult<crate::gc_bindings::oop_hierarchy::NObjPtr> {
+    pub fn pop_ref(&mut self) -> ExecResult<crate::gc_bindings::oop_hierarchy::NObjPtr> {
         match self.pop()? {
             Slot::Ref(value) => Ok(value),
             _ => Err(self.make_exec_error(ExecErrorKind::MismatchSlotType)),

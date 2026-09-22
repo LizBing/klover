@@ -346,6 +346,15 @@ impl<T: ?Sized> MsBox<T> {
     }
 }
 
+impl<T: ?Sized> MsBox<T> {
+    /// Transfer the value to an arena reference without running its destructor.
+    /// The reference remains valid only while the allocator is alive.
+    pub fn leak(self) -> MsRef<T> {
+        let owner = std::mem::ManuallyDrop::new(self);
+        MsRef { raw: owner.raw }
+    }
+}
+
 impl<T: ?Sized> Deref for MsBox<T> {
     type Target = T;
 
@@ -375,17 +384,17 @@ unsafe impl<T: Sync> Sync for MsBox<T> {}
 
 // Safety: guaranteed by developer.
 #[derive(Debug)]
-pub struct MsRef<T> {
+pub struct MsRef<T: ?Sized> {
     raw: NonNull<T>,
 }
 
-impl<T> Clone for MsRef<T> {
+impl<T: ?Sized> Clone for MsRef<T> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<T> Copy for MsRef<T> {}
+impl<T: ?Sized> Copy for MsRef<T> {}
 
 /// Metaspace 压缩指针。  32 位偏移量（以 `METASPACE_BASE` 为基准，
 /// 8 字节对齐）。  0 保留给 null。
@@ -430,7 +439,7 @@ impl<T> From<&MsBox<T>> for MsRef<T> {
     }
 }
 
-impl<T> Deref for MsRef<T> {
+impl<T: ?Sized> Deref for MsRef<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -447,7 +456,10 @@ mod tests {
     #[test]
     fn init_status_rejects_unknown_values() {
         assert_eq!(MsInitStatus::try_from(0), Ok(MsInitStatus::Initialized));
-        assert_eq!(MsInitStatus::try_from(1), Ok(MsInitStatus::AlreadyInitialized));
+        assert_eq!(
+            MsInitStatus::try_from(1),
+            Ok(MsInitStatus::AlreadyInitialized)
+        );
         assert_eq!(MsInitStatus::try_from(2), Ok(MsInitStatus::VSpaceFailed));
         assert_eq!(MsInitStatus::try_from(-1), Err(-1));
         assert_eq!(MsInitStatus::try_from(99), Err(99));
@@ -647,5 +659,79 @@ mod tests {
         let allocator = MsAllocator::default();
         let b = MsBox::new(&allocator, "hello");
         assert_eq!(*b, "hello");
+    }
+
+    struct DropProbe<'a> {
+        drops: &'a AtomicUsize,
+        text: String,
+    }
+
+    impl Drop for DropProbe<'_> {
+        fn drop(&mut self) {
+            self.drops.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+
+    #[test]
+    fn leak_transfers_value_without_dropping_it() {
+        ensure_initialized().expect("initialize test metaspace");
+        let allocator = MsAllocator::new();
+        let drops = AtomicUsize::new(0);
+        let mut value = MsBox::new(
+            &allocator,
+            DropProbe {
+                drops: &drops,
+                text: "still alive".into(),
+            },
+        );
+        let raw = &mut *value as *mut DropProbe<'_>;
+        let leaked = value.leak();
+        assert_eq!(drops.load(Ordering::SeqCst), 0);
+        assert_eq!(leaked.text, "still alive");
+        unsafe {
+            ptr::drop_in_place(raw);
+        }
+        assert_eq!(drops.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn leak_preserves_slice_metadata_without_dropping_elements() {
+        ensure_initialized().expect("initialize test metaspace");
+        let allocator = MsAllocator::new();
+        let drops = AtomicUsize::new(0);
+        let storage = allocator.calloc(2);
+        for (index, slot) in storage.iter_mut().enumerate() {
+            slot.write(DropProbe {
+                drops: &drops,
+                text: format!("element {index}"),
+            });
+        }
+        let raw = unsafe { storage.assume_init_mut() as *mut [DropProbe<'_>] };
+        let leaked = unsafe { MsBox::from_raw(raw) }.leak();
+        assert_eq!(drops.load(Ordering::SeqCst), 0);
+        assert_eq!(leaked.len(), 2);
+        assert_eq!(leaked[0].text, "element 0");
+        assert_eq!(leaked[1].text, "element 1");
+        unsafe {
+            ptr::drop_in_place(raw);
+        }
+        assert_eq!(drops.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn ordinary_msbox_still_drops_its_value() {
+        ensure_initialized().expect("initialize test metaspace");
+        let allocator = MsAllocator::new();
+        let drops = AtomicUsize::new(0);
+        {
+            let _value = MsBox::new(
+                &allocator,
+                DropProbe {
+                    drops: &drops,
+                    text: "owned".into(),
+                },
+            );
+        }
+        assert_eq!(drops.load(Ordering::SeqCst), 1);
     }
 }

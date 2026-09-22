@@ -13,3 +13,12 @@ crate-type = ["staticlib", "rlib"]
 "cesu8" = "1.1"
 "dashmap" = "6.2.1"
 "parking_lot" = "0.12.5"
+
+# Expose subsystem paths only for external integration tests.
+[features]
+integration-tests = []
+
+[[test]]
+name = "jvm"
+path = "tests/jvm.rs"
+required-features = ["integration-tests"]

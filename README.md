@@ -24,7 +24,9 @@ make verify-classes       # explicitly recheck all generated class versions
 make test                 # CTest + all Rust tests + build-tool regression tests
 make test-c
 make test-rust
-make test-simple          # SimpleAddition interpreter smoke test
+make test-unit            # Rust unit tests only
+make test-integration     # JVM class-file integration tests only
+make test-simple          # SimpleAddition interpreter and dispatcher smoke tests
 make test-build           # fixture lifecycle, version checks, and safe cleanup
 make compile-commands     # point compile_commands.json at the selected C build
 make clean                # remove configured build roots
@@ -49,11 +51,13 @@ rebuild replaces the output directory, removing stale classes. Failed compilatio
 preserves the last successful output but fails the build. Every generated class,
 including nested classes, must have major version 52.
 
-Rust unit tests run in one process. Metaspace initialization is shared through
+Rust unit tests run in one process. JVM integration tests use one dedicated
+Cargo test binary, so their VM state is shared within that binary. Metaspace initialization is shared through
 `runtime::ms_api::ensure_initialized()`. VM tests use
 `runtime::test_support::init_vm()` with one fixed configuration, without spawning
-child processes. The shared fixture preloads SimpleAddition before parallel tests
-because bootstrap class definition is not atomic yet.
+child processes. Unit tests do not load Java fixtures. JVM integration tests
+initialize their own VM and serialize fixture class loading because bootstrap
+class definition is not atomic yet.
 
 `runtime::vm::try_init(args)` serializes VM initialization and publishes arguments
 only after metaspace and GC initialization succeed. A second successful-VM init
@@ -76,7 +80,7 @@ static entry methods through `Invocation` and `ExecDispatcher`. Value-returning
 fixtures run with both one-unit and large execution budgets. Coverage includes
 the supported methods in `Arith`, `ArithmeticOps`, `ControlFlow`, `ConstantOps`,
 `StoreOps`, `ReferenceLoads`, `Wide`, `InstructionOps`, and `StaticCallee`, plus
-the `SimpleAddition` smoke test. `AlgorithmOps` adds iterative Fibonacci, GCD,
+the `SimpleAddition` interpreter and dispatcher smoke tests. `AlgorithmOps` adds iterative Fibonacci, GCD,
 primality, bit counting, nested loops, polynomial evaluation, and an infinite loop
 that must yield when its execution budget expires.
 
@@ -86,6 +90,26 @@ cover category-1/category-2 forms directly. Reference fixtures currently use nul
 references. Unsupported constant-pool loads are tested as explicit execution
 errors; method invocation, object allocation, arrays, and Java exception handling
 are not covered as successful execution paths yet.
+
+Switch regressions live in `rust/tests/jvm/switches.rs` and run real class files through
+the bootstrap loader and `ExecDispatcher`. `SwitchOps.java` covers both switch
+opcodes at all four alignments, cases/defaults, fall-through, and loops. Minimal
+class-file fixtures cover direct backward switch targets, single-entry tables,
+operand-stack preservation, and malformed operands. These generated fixtures live
+beside the compiled fixture directory in `switch-integration-classes/<pid>/`.
+The metaspace ownership checks live beside the allocator unit tests in
+`rust/src/runtime/ms_api.rs`.
+
+The `integration-tests` feature exposes only the subsystem paths needed by the
+single JVM integration target. `make test`, `make test-rust`, and `make check`
+enable it automatically. Use the separate targets when iterating:
+
+```bash
+make test-unit
+make test-integration
+make test-simple # Run both SimpleAddition smoke tests in the JVM integration target.
+cargo test --manifest-path rust/Cargo.toml --locked --features integration-tests --test jvm
+```
 
 ## Configuration
 
@@ -115,7 +139,7 @@ make classes
 KLOVER_CORE_DIR="$PWD/build/debug/core" \
 KLOVER_TEST_CLASSES="$PWD/build/test-classes" \
 CARGO_TARGET_DIR="$PWD/build/cargo" \
-cargo test --manifest-path rust/Cargo.toml --locked
+cargo test --manifest-path rust/Cargo.toml --locked --features integration-tests
 ```
 
 Without `KLOVER_CORE_DIR`, the build script uses `build/debug/core` or
@@ -128,7 +152,8 @@ requires matching native toolchain/linker configuration and is not automated her
 ## Module visibility
 
 Rust subsystem boundaries are controlled by `mod` / `pub mod` in `lib.rs` and
-`mod.rs`. Top-level modules are private to this crate. Callers use concrete module
+`mod.rs`. Top-level modules are private to this crate in normal builds; the
+`integration-tests` feature exposes the paths needed by external tests. Callers use concrete module
 paths; there is no module-level re-export facade. Cross-module types and methods
 use `pub`; `pub(super)` is reserved for members needed only by the parent subsystem.
 
