@@ -1,5 +1,6 @@
 use crate::{gc_bindings::oop_hierarchy::NObjPtr, runtime::ms_api::{MsAllocator, MsBox, MsRef}};
 
+#[derive(Debug)]
 pub struct OOPHandle {
     slot: MsRef<NObjPtr>,
 }

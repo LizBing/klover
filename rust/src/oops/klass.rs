@@ -2,6 +2,7 @@ use std::ops::Deref;
 
 use crate::{runtime::ms_api::MsRef, oops::normal_klass::NormalKlass};
 
+#[derive(Debug)]
 pub enum Klass {
     Normal(NormalKlass),
 }

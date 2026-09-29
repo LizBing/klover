@@ -1,3 +1,4 @@
+pub mod constant_entries;
 pub mod desc;
 mod field;
 mod fields;

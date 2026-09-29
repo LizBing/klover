@@ -23,7 +23,7 @@ fn main() {
     let lib_path = core_dir.join(filename);
     if !lib_path.is_file() {
         panic!(
-            "C core library missing: {}. Run make core (BUILD_TYPE=Release for release), \
+            "C core library missing: {}. Run make build-core (BUILD_TYPE=Release for release), \
              or set KLOVER_CORE_DIR to the matching CMake build directory.",
             lib_path.display()
         );

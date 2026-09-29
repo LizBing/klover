@@ -1,6 +1,5 @@
 use crate::{
-    oops::jvalue::{JByte, JDouble, JFloat, JInt, JLong, JShort},
-    runtime::ms_api::{MsAllocator, MsBox, MsRef},
+    oops::{constant_entries::{LdC2Loadable, LdCLoadable}, jvalue::{JByte, JDouble, JFloat, JInt, JLong, JShort}}, runtime::ms_api::{MsAllocator, MsBox, MsRef},
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -60,6 +59,8 @@ pub enum Instruction {
     DConst(JDouble),
     BIPush(JByte),
     SIPush(JShort),
+    // LdC(LdCLoadable),
+    // LdC2(LdC2Loadable),
 
     // --- Loads ---
     ILoad(LocalIdx),

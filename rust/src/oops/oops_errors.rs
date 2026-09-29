@@ -1,19 +1,8 @@
 use crate::class_loader::load_error::LoadError;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum ResolveError {
-    // 运行时解析错误（CP 引用解析阶段）
-    ClassNotFound,
-    MethodNotFound,
-    FieldNotFound,
-
-    DuplicatedAttr,
-
-    WrongRefType,
-
-    InvalidCPIndex,
-
-    IllegalMethodName(String),
+    Load(LoadError),
 }
 
 #[derive(Debug)]

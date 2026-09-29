@@ -1,153 +1,179 @@
 # Klover
 
-A small HotSpot-inspired JVM (C core + Rust). MVP target: **JVMS 8** (classfile major 52).
+A small HotSpot-inspired JVM (C core + Rust). MVP target: **JVMS 8**
+(classfile major 52). The current interpreter supports a limited JVM subset.
 
-## Dependencies
+## Requirements
 
-- C11 compiler (Apple Clang, Clang, or GCC), CMake 3.20+, CTest, Make
-- Rust toolchain supporting edition 2024 (Rust 1.85+)
-- JDK 9+ whose `javac` supports `--release 8` (JDK 17 or 21 works)
-- Python 3.9+
+- C11 compiler, CMake 3.20+, CTest, and Make
+- Rust 1.85+ (edition 2024)
+- JDK 9+ with `javac --release 8`; a HotSpot runtime for differential tests
+- Python 3.9+, with no additional packages
 
-## Build
+## Build and test
 
-The top-level Makefile coordinates CMake, Cargo, and Java test fixtures.
+Run from the repository root, or use `make -C /path/to/klover`.
 
-```bash
-make                      # Debug C core + Rust library
-make BUILD_TYPE=Release    # Release C core + Cargo --release
-make core                 # C library and C tests
-make rust                 # Rust library, after building the C core
-make check                # cargo check --all-targets
-make classes              # incrementally compile and verify Java 8 fixtures
-make verify-classes       # explicitly recheck all generated class versions
-make test                 # CTest + all Rust tests + build-tool regression tests
-make test-c
-make test-rust
-make test-unit            # Rust unit tests only
-make test-integration     # JVM class-file integration tests only
-make test-simple          # SimpleAddition interpreter and dispatcher smoke tests
-make test-build           # fixture lifecycle, version checks, and safe cleanup
-make compile-commands     # point compile_commands.json at the selected C build
-make clean                # remove configured build roots
+| Component | Build only | Run tests |
+|---|---|---|
+| C core | `make build-core` | `make test-core` |
+| Rust | `make build-rust` | `make test-rust` |
+| Differential | `make build-differential` | `make test-differential` |
+| Everything | `make build-all` (also plain `make`) | `make test-all` |
+
+Each test target builds its prerequisites automatically and stops on build
+failure. Build targets never execute tests. `build-core` includes the native test
+executables; `build-rust` builds the Rust library; `build-differential` builds the
+Rust invocation adapter and compiles the shared Java fixtures and HotSpot wrapper.
+`test-rust` runs fixture-builder checks plus Rust unit and JVM integration tests.
+`test-differential` runs harness checks followed by the HotSpot comparison.
+
+```sh
+make
+make test-all
+make test-rust BUILD_TYPE=Release
+make test-all BUILD_TYPE=Release
+make test-differential DIFF_ARGS='--filter arithmetic/*'
+make clean
 ```
 
-Only `BUILD_TYPE=Debug` and `BUILD_TYPE=Release` are supported. Their C libraries
-are isolated, so changing profile does not overwrite the other profile's library:
+`BUILD_TYPE` accepts Debug (default) or Release. `JOBS` controls native build
+parallelism (default 4). Tool overrides are `CMAKE`, `CTEST`, `CARGO`, `JAVAC`,
+`JAVA`, and `PYTHON`. For example:
+
+```sh
+make test-differential JAVA=/path/to/hotspot/bin/java JAVAC=/path/to/jdk/bin/javac
+```
+
+All Make outputs use fixed repository-local paths:
 
 ```text
 build/
-  debug/core/
-  release/core/
-  cargo/debug/
-  cargo/release/
-  test-classes/
+  debug/core/                 C Debug library and test executables
+  release/core/               C Release library and test executables
+  cargo/debug/                Rust Debug artifacts
+  cargo/release/              Rust Release artifacts
+  test-classes/               shared Java fixtures and reference wrapper
+  switch-integration-classes/ generated Rust integration fixtures
+  differential/report.json   latest differential results
 ```
 
-Java sources remain in `test_data/classes/`; generated classes are never written
-there. The fixture builder tracks source contents (including additions/deletions),
-javac identity/version, compiler flags, and generated class contents. A successful
-rebuild replaces the output directory, removing stale classes. Failed compilation
-preserves the last successful output but fails the build. Every generated class,
-including nested classes, must have major version 52.
+CMake and Cargo retain their normal incremental builds. Java fixtures are
+recompiled once per Make invocation that needs them, including `make -j4 test-all`.
+The small builder recreates `build/test-classes`, runs `javac --release 8`, and
+removes partial output on failure. There is no fixture cache, fingerprint file,
+or separate class-version verification step. Rust and differential tests consume
+these same compiled fixtures. Old `.class` files in the source tree are unused.
 
-Rust unit tests run in one process. JVM integration tests use one dedicated
-Cargo test binary, so their VM state is shared within that binary. Metaspace initialization is shared through
-`runtime::ms_api::ensure_initialized()`. VM tests use
-`runtime::test_support::init_vm()` with one fixed configuration, without spawning
-child processes. Unit tests do not load Java fixtures. JVM integration tests
-initialize their own VM and serialize fixture class loading because bootstrap
-class definition is not atomic yet.
+`make clean` removes `build/` and the optional root `compile_commands.json`
+symlink. The former custom build-directory variables and overlapping target names
+have been removed. For editor integration, CMake writes its compilation database
+to `build/debug/core/compile_commands.json` (or the Release equivalent).
 
-`runtime::vm::try_init(args)` serializes VM initialization and publishes arguments
-only after metaspace and GC initialization succeed. A second successful-VM init
-attempt is rejected, even with identical arguments. Errors return the original
-arguments and distinguish repeated initialization, metaspace failure (including
-unknown native status codes), and GC failure. Metaspace errors are cached; GC
-allocation failures leave the heap uninitialized and permit a subsequent attempt.
-The native GC rejects heap sizes that are not word-aligned, exceed 32 GiB, or
-cannot accommodate the null sentinel plus at least one word. Tests share VM state;
-they do not receive fresh class/static-field state between test cases.
+Cargo uses the committed lockfile. Make selects the matching C library explicitly
+through `KLOVER_CORE_DIR`. Direct Cargo commands still work after the prerequisites
+have been built; for example, to select one Rust integration test:
 
-## Interpreter regression tests
-
-`make test` runs the C tests, Rust tests, and build-tool tests. Run
-`make test BUILD_TYPE=Release` to exercise the optimized C and Rust builds as well.
-`make verify-classes` explicitly checks that all compiled fixtures target Java 8.
-
-Interpreter tests load real class files through the bootstrap loader and execute
-static entry methods through `Invocation` and `ExecDispatcher`. Value-returning
-fixtures run with both one-unit and large execution budgets. Coverage includes
-the supported methods in `Arith`, `ArithmeticOps`, `ControlFlow`, `ConstantOps`,
-`StoreOps`, `ReferenceLoads`, `Wide`, `InstructionOps`, and `StaticCallee`, plus
-the `SimpleAddition` interpreter and dispatcher smoke tests. `AlgorithmOps` adds iterative Fibonacci, GCD,
-primality, bit counting, nested loops, polynomial evaluation, and an infinite loop
-that must yield when its execution budget expires.
-
-Tests also exercise overflow, signed zero, NaN, numeric conversions, division by
-zero, and zero-budget polls interleaved with execution. Stack-instruction tests
-cover category-1/category-2 forms directly. Reference fixtures currently use null
-references. Unsupported constant-pool loads are tested as explicit execution
-errors; method invocation, object allocation, arrays, and Java exception handling
-are not covered as successful execution paths yet.
-
-Switch regressions live in `rust/tests/jvm/switches.rs` and run real class files through
-the bootstrap loader and `ExecDispatcher`. `SwitchOps.java` covers both switch
-opcodes at all four alignments, cases/defaults, fall-through, and loops. Minimal
-class-file fixtures cover direct backward switch targets, single-entry tables,
-operand-stack preservation, and malformed operands. These generated fixtures live
-beside the compiled fixture directory in `switch-integration-classes/<pid>/`.
-The metaspace ownership checks live beside the allocator unit tests in
-`rust/src/runtime/ms_api.rs`.
-
-The `integration-tests` feature exposes only the subsystem paths needed by the
-single JVM integration target. `make test`, `make test-rust`, and `make check`
-enable it automatically. Use the separate targets when iterating:
-
-```bash
-make test-unit
-make test-integration
-make test-simple # Run both SimpleAddition smoke tests in the JVM integration target.
-cargo test --manifest-path rust/Cargo.toml --locked --features integration-tests --test jvm
-```
-
-## Configuration
-
-```bash
-make test BUILD_DIR=/tmp/klover-build JOBS=8
-make core CMAKE_ARGS='-DCMAKE_C_COMPILER=clang'
-make core CMAKE_ARGS='-DBUILD_TESTING=OFF'  # library only
-make test-c CMAKE_ARGS='-DBUILD_TESTING=ON'
-```
-
-`BUILD_DIR` defaults to this repository's `build/`. `CARGO_TARGET` can override the
-Cargo output directory. Tool overrides: `CMAKE`, `CTEST`, `CARGO`, `JAVAC`, `PYTHON`.
-Use a fresh build directory when changing the C compiler. CMake options persist
-in that directory's cache. `make clean` removes both configured build roots,
-including an overridden `CARGO_TARGET`, and removes the compile database symlink
-only when it points into those roots. It refuses source directories. Old `.class`
-files left in the source tree by earlier builds are unused.
-
-Cargo commands use the committed lockfile (`--locked`). Make passes an explicit
-`KLOVER_CORE_DIR`; an invalid explicit path fails instead of finding an older
-library elsewhere. Manual builds are also supported:
-
-```bash
-cmake -S . -B build/debug/core -DCMAKE_BUILD_TYPE=Debug
-cmake --build build/debug/core
-make classes
-KLOVER_CORE_DIR="$PWD/build/debug/core" \
-KLOVER_TEST_CLASSES="$PWD/build/test-classes" \
+```sh
+make build-differential
 CARGO_TARGET_DIR="$PWD/build/cargo" \
-cargo test --manifest-path rust/Cargo.toml --locked --features integration-tests
+cargo test --manifest-path rust/Cargo.toml --locked \
+  --features integration-tests --test jvm simple_addition
 ```
 
-Without `KLOVER_CORE_DIR`, the build script uses `build/debug/core` or
-`build/release/core` according to Cargo's profile. Tests default to
-`build/test-classes`; set `KLOVER_TEST_CLASSES` when running Cargo directly against
-fixtures in a custom directory. Native runtime paths reference the build directory;
-these are development artifacts, not a relocatable distribution. Cross-compilation
-requires matching native toolchain/linker configuration and is not automated here.
+Without an explicit `KLOVER_CORE_DIR`, Cargo's build script uses the corresponding
+`build/debug/core` or `build/release/core` directory. Native runtime paths refer to
+that build directory; these are development artifacts, not a relocatable package.
+
+## Differential tests
+
+Edit `tests/differential/cases.py` to add a case or review feature support. All Java
+case sources live in `test_data/classes/`. For example, a row can invoke:
+
+```python
+case("arithmetic/add_overflow", "ArithmeticOps", "iadd", "(II)I",
+     (2147483647, 1), "locals", "int_arithmetic")
+```
+
+The `case` helper adds the `primitive_entries` requirement and converts argument
+values to strings. It does not compute an expected result: HotSpot is the oracle.
+Keep methods deterministic and use parameters or locals where needed to avoid
+javac folding away the operation being tested. Future categories can use new
+case-name prefixes and Java fixtures.
+
+The runner starts a fresh process on each side for each enabled case:
+
+- `HotSpotRunner.java` reflects the declared public static method on HotSpot.
+- `rust/examples/differential_invoke.rs` uses Klover's existing bootstrap loader,
+  `Invocation`, and `ExecDispatcher`. It is gated by `integration-tests`.
+
+The Java wrapper is compiled separately against the JDK APIs. Only HotSpot
+executes it and uses its own bootstrap Object. Klover loads the repository's
+minimal Object fixture. Entries must extend Object directly, have no interfaces
+and no class initializer; the adapter checks this restriction. Klover does not
+need Java main, reflection, boxing, or printing support.
+
+Current coverage includes constants, primitive arithmetic/overflow, locals,
+conversions, branches, loops, switches, and primitive arguments/returns. The
+73 cases currently yield **68 PASS / 0 FAIL / 5 SKIP**. Skips cover bytecode static
+calls, constant-pool loads, and Java exceptions. Objects, arrays, virtual calls,
+class initialization, and GC behavior remain outside this suite's supported scope.
+
+False feature requirements produce SKIP before launching either VM. Unknown
+requirements and empty selections are errors. Unexpected unsupported instructions,
+crashes, timeouts, or invalid output produce FAIL, even if both sides fail.
+Do not disable supported features to conceal mismatches. Reference and exception
+results require a protocol extension before those categories can be enabled.
+
+Primitive descriptors use `Z/B/C/S/I/J/F/D`, with `V` allowed only for returns.
+Integer arguments use decimal values; booleans use 0 or 1 and chars use unsigned
+UTF-16 code units. Float/double arguments use strings containing exactly 8/16
+lowercase hexadecimal IEEE bits, without `0x` (`"80000000"` is float negative zero).
+Successful output is one tab-separated line:
+
+```text
+KLOVER_DIFF_V1<TAB>I<TAB>-2147483648
+```
+
+The fields are protocol version, return type, and value. Values use decimal
+integers, IEEE hex bits, `nan`, or `void`. Floating comparisons preserve signed
+zero and compare finite values exactly. NaN payloads/signs normalize to `nan`.
+Extra stdout or an incorrect type/range is a failure.
+
+Failures show both results, exit statuses, stderr, arguments, descriptors, and
+shell-quoted reproduction commands. The simple JSON report keeps these details
+and skip reasons; every run overwrites it. Exit codes are 0 for no failures,
+1 for differential failures, and 2 for infrastructure/configuration errors.
+A build failure stops before the runner and leaves any previous report unchanged.
+Save a failing report and the corresponding source revision before further edits.
+An optional `seed` field on a case is retained and printed for future generators.
+
+After building, the runner can be used directly:
+
+```sh
+python3 -B tests/differential/run.py --filter 'loops/*' --quantum 1
+python3 -B tests/differential/run.py --profile release
+```
+
+The runner accepts `--java`, `--profile`, `--filter`, `--timeout` (seconds per
+process, default 10), `--fuel` (default 1,000,000), and `--quantum` (budget per poll,
+default 1,000). Fuel follows the dispatcher's existing saturating budget charges;
+it is an execution bound rather than an instruction count. Reaching either
+execution limit fails the case.
+
+## Rust test organization
+
+Unit tests live beside their Rust modules. JVM integration tests are collected in
+`rust/tests/jvm.rs`, with execution, algorithm, and switch coverage under
+`rust/tests/jvm/`. They load real fixtures and exercise both one-unit and large
+execution budgets. Handcrafted class files cover malformed and boundary switch
+cases that javac cannot conveniently produce.
+
+The integration tests share a VM within their test binary and serialize fixture
+loading because bootstrap class definition is not atomic yet. Unit tests do not
+load Java fixtures. VM initialization remains centralized in `vm::try_init`, and
+metaspace initialization is shared through `ms_api::ensure_initialized`.
+Differential cases have fresh process state instead.
 
 ## Module visibility
 

@@ -22,3 +22,8 @@ integration-tests = []
 name = "jvm"
 path = "tests/jvm.rs"
 required-features = ["integration-tests"]
+
+[[example]]
+name = "differential_invoke"
+path = "examples/differential_invoke.rs"
+required-features = ["integration-tests"]

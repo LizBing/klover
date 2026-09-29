@@ -1,3 +1,5 @@
+use cafebabe::descriptors::FieldType::*;
+use cafebabe::descriptors::ReturnDescriptor::*;
 use crate::{runtime::ms_api::{MsAllocator, MsBox}, oops::symbol_table::{SymbolHandle, SymbolTable}};
 
 #[derive(Debug)]
@@ -20,7 +22,6 @@ pub struct FieldDesc {
     elem: ElemDesc,
 }
 
-use cafebabe::descriptors::FieldType::*;
 impl From<&cafebabe::descriptors::FieldDescriptor<'_>> for FieldDesc {
     fn from(value: &cafebabe::descriptors::FieldDescriptor) -> Self {
         let raw = SymbolTable::intern(&value.to_string());
@@ -58,7 +59,6 @@ pub struct MethodDesc {
     args: MsBox<[FieldDesc]>,
 }
 
-use cafebabe::descriptors::ReturnDescriptor::*;
 impl MethodDesc {
     pub fn raw(&self) -> &SymbolHandle {
         &self.raw
@@ -83,5 +83,9 @@ impl MethodDesc {
                 args: MsBox::from_raw(args.assume_init_mut()),
             }
         }
+    }
+
+    pub fn parse(raw: &str, msa: &MsAllocator) -> Option<Self> {
+        unimplemented!()
     }
 }

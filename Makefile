@@ -1,8 +1,7 @@
-# Klover build entry point: Make coordinates CMake, Cargo, and Java fixtures.
-.DEFAULT_GOAL := all
+# Run from the repository root (or use make -C /path/to/klover).
+.DEFAULT_GOAL := build-all
+override ROOT := $(CURDIR)
 
-ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
-BUILD_DIR ?= $(ROOT)/build
 BUILD_TYPE ?= Debug
 ifeq ($(BUILD_TYPE),Debug)
 PROFILE := debug
@@ -13,68 +12,50 @@ else
 $(error BUILD_TYPE must be Debug or Release)
 endif
 
-# Make's abspath treats spaces as separators; preserve the directory as one path.
-BUILD_ROOT := $(if $(filter /%,$(BUILD_DIR)),$(BUILD_DIR),$(CURDIR)/$(BUILD_DIR))
-CORE_DIR := $(BUILD_ROOT)/$(PROFILE)/core
-CARGO_TARGET ?= $(BUILD_ROOT)/cargo
-CLASSES_OUT := $(BUILD_ROOT)/test-classes
 CMAKE ?= cmake
 CTEST ?= ctest
 CARGO ?= cargo
 JAVAC ?= javac
+JAVA ?= java
 PYTHON ?= python3
-JOBS ?= $(shell sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)
-CMAKE_ARGS ?=
+JOBS ?= 4
+DIFF_ARGS ?=
+
+CORE_DIR := $(ROOT)/build/$(PROFILE)/core
 CARGO_FLAGS := --manifest-path "$(ROOT)/rust/Cargo.toml" --locked $(CARGO_PROFILE_FLAG)
-CARGO_ENV = KLOVER_CORE_DIR="$(CORE_DIR)" CARGO_TARGET_DIR="$(CARGO_TARGET)" KLOVER_TEST_CLASSES="$(CLASSES_OUT)"
+CARGO_ENV = KLOVER_CORE_DIR="$(CORE_DIR)" CARGO_TARGET_DIR="$(ROOT)/build/cargo" KLOVER_TEST_CLASSES="$(ROOT)/build/test-classes"
 
-.PHONY: all core rust check classes verify-classes test test-c test-rust test-unit test-integration test-simple test-build clean compile-commands help
+.PHONY: build-core build-rust build-differential build-all test-core test-rust test-differential test-all _classes clean
 
-all: rust
-
-core:
-	$(CMAKE) -S "$(ROOT)" -B "$(CORE_DIR)" -DCMAKE_BUILD_TYPE=$(BUILD_TYPE) $(CMAKE_ARGS)
+build-core:
+	$(CMAKE) -S "$(ROOT)" -B "$(CORE_DIR)" -DCMAKE_BUILD_TYPE=$(BUILD_TYPE) -DBUILD_TESTING=ON
 	$(CMAKE) --build "$(CORE_DIR)" --parallel $(JOBS)
 
-rust: core
+build-rust: build-core
 	$(CARGO_ENV) $(CARGO) build $(CARGO_FLAGS)
 
-check: core
-	$(CARGO_ENV) $(CARGO) check $(CARGO_FLAGS) --all-targets --features integration-tests
+# Shared by both test groups: Make runs this once per invocation, including -j.
+_classes:
+	$(PYTHON) -B "$(ROOT)/scripts/build-test-classes.py" --javac "$(JAVAC)"
 
-classes:
-	$(PYTHON) "$(ROOT)/scripts/build-test-classes.py" --javac "$(JAVAC)" --output "$(CLASSES_OUT)"
+build-differential: build-core _classes
+	$(CARGO_ENV) $(CARGO) build $(CARGO_FLAGS) --features integration-tests --example differential_invoke
 
-verify-classes: classes
-	$(PYTHON) "$(ROOT)/scripts/verify-class-major.py" 52 "$(CLASSES_OUT)"
+build-all: build-rust build-differential
 
-test-c: core
+test-core: build-core
 	$(CTEST) --test-dir "$(CORE_DIR)" --output-on-failure
 
-test-rust: core classes
+test-rust: build-core _classes
+	$(PYTHON) -B -m unittest discover -s "$(ROOT)/scripts/tests" -v
 	$(CARGO_ENV) $(CARGO) test $(CARGO_FLAGS) --features integration-tests
 
-test-unit: core
-	$(CARGO_ENV) $(CARGO) test $(CARGO_FLAGS) --lib
+test-differential: build-differential
+	$(PYTHON) -B -m unittest discover -s "$(ROOT)/tests/differential" -p 'test_*.py' -v
+	$(PYTHON) -B "$(ROOT)/tests/differential/run.py" --java "$(JAVA)" --profile $(PROFILE) $(DIFF_ARGS)
 
-test-integration: core classes
-	$(CARGO_ENV) $(CARGO) test $(CARGO_FLAGS) --features integration-tests --test jvm
-
-test-simple: core classes
-	$(CARGO_ENV) $(CARGO) test $(CARGO_FLAGS) --features integration-tests --test jvm simple_addition -- --nocapture
-
-test-build:
-	$(PYTHON) -B -m unittest discover -s "$(ROOT)/scripts/tests" -v
-
-test: test-c test-rust test-build
-
-compile-commands: core
-	ln -sfn "$(CORE_DIR)/compile_commands.json" "$(ROOT)/compile_commands.json"
+test-all: test-core test-rust test-differential
 
 clean:
-	$(PYTHON) "$(ROOT)/scripts/clean-build.py" "$(BUILD_DIR)" "$(CARGO_TARGET)"
-
-help:
-	@echo "Targets: all core rust check classes verify-classes test test-c test-rust test-unit test-integration test-simple test-build clean compile-commands"
-	@echo "Variables: BUILD_TYPE=Debug|Release BUILD_DIR=... CARGO_TARGET=... JOBS=..."
-	@echo "Tools: CMAKE CTEST CARGO JAVAC PYTHON; extra CMake options: CMAKE_ARGS"
+	rm -rf -- "$(ROOT)/build"
+	@if [ -L "$(ROOT)/compile_commands.json" ]; then rm -- "$(ROOT)/compile_commands.json"; fi
