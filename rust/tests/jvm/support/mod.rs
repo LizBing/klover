@@ -10,7 +10,10 @@ use klover::{
     oops::jvalue::JValue,
     runtime::{arguments::Arguments, java_thread::JavaThread, vm},
 };
-use std::{path::PathBuf, sync::Once};
+use std::{
+    path::PathBuf,
+    sync::{Mutex, Once},
+};
 
 pub fn fixture_root() -> PathBuf {
     std::env::var_os("KLOVER_TEST_CLASSES")
@@ -85,4 +88,29 @@ pub fn invoke(
 pub fn run(class: &str, method: &str, desc: &str, args: &[JValue], fuel: u64) -> MethodReturn {
     invoke(class, method, desc, args, fuel)
         .unwrap_or_else(|error| panic!("{class}.{method}{desc}: {error:?}"))
+}
+
+pub fn invocation(class: &str, method: &str, desc: &str, args: &[JValue]) -> Invocation {
+    init_vm();
+    // Bootstrap class definition is not atomic yet. Serialize test fixture loads.
+    static LOADING: Mutex<()> = Mutex::new(());
+    let _guard = LOADING.lock().unwrap();
+    let owner = BootstrapCLD::find_class(class)
+        .unwrap()
+        .as_normal_klass_ref()
+        .unwrap();
+    Invocation::try_new(owner, method, desc, args).unwrap()
+}
+
+pub fn assert_value(actual: JValue, expected: JValue) {
+    match (actual, expected) {
+        (JValue::Int(a), JValue::Int(b)) => assert_eq!(a, b),
+        (JValue::Long(a), JValue::Long(b)) => assert_eq!(a, b),
+        (JValue::Float(a), JValue::Float(b)) if b.is_nan() => assert!(a.is_nan()),
+        (JValue::Double(a), JValue::Double(b)) if b.is_nan() => assert!(a.is_nan()),
+        (JValue::Float(a), JValue::Float(b)) => assert_eq!(a.to_bits(), b.to_bits()),
+        (JValue::Double(a), JValue::Double(b)) => assert_eq!(a.to_bits(), b.to_bits()),
+        (JValue::Ref(a), JValue::Ref(b)) => assert_eq!(a.as_u32(), b.as_u32()),
+        other => panic!("value mismatch: {other:?}"),
+    }
 }

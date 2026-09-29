@@ -163,11 +163,19 @@ execution limit fails the case.
 
 ## Rust test organization
 
-Unit tests live beside their Rust modules. JVM integration tests are collected in
-`rust/tests/jvm.rs`, with execution, algorithm, and switch coverage under
-`rust/tests/jvm/`. They load real fixtures and exercise both one-unit and large
-execution budgets. Handcrafted class files cover malformed and boundary switch
-cases that javac cannot conveniently produce.
+Unit tests live beside their Rust modules and check subsystem-local behavior
+without initializing the full VM or loading Java classes. Allocator tests may
+initialize native metaspace. JVM integration tests are collected in
+`rust/tests/jvm.rs`, with these responsibilities under `rust/tests/jvm/`:
+
+- `execution.rs` and `algorithms.rs`: run complete methods from Java fixtures.
+- `instructions.rs`: directly check instructions and frame state. These remain
+  integration tests because constructing a frame currently requires a loaded method.
+- `runtime.rs`: check VM initialization and lifecycle behavior.
+- `switches.rs`: exercise compiled and handcrafted switch methods.
+
+Execution tests use both one-unit and large budgets. Handcrafted class files
+cover malformed and boundary switch cases that javac cannot conveniently produce.
 
 The integration tests share a VM within their test binary and serialize fixture
 loading because bootstrap class definition is not atomic yet. Unit tests do not
