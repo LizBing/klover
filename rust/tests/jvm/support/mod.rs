@@ -1,3 +1,4 @@
+use klover::oops::symbol_table::SymbolTable;
 mod classfile;
 
 use klover::{
@@ -52,7 +53,7 @@ pub fn init_vm() {
         .unwrap();
         // Avoid racing the bootstrap loader's non-atomic class definition.
         for class in ["SwitchOps", "SwitchBytecodeOps"] {
-            BootstrapCLD::find_class(class).unwrap();
+            BootstrapCLD::find_class(&SymbolTable::intern(class)).unwrap();
         }
     });
 }
@@ -65,9 +66,9 @@ pub fn invoke(
     fuel: u64,
 ) -> ExecResult<MethodReturn> {
     init_vm();
-    let owner = BootstrapCLD::find_class(class)
+    let owner = BootstrapCLD::find_class(&SymbolTable::intern(class))
         .unwrap()
-        .as_normal_klass_ref()
+        .as_normal_klass()
         .unwrap();
     let mut thread = JavaThread::new();
     ExecDispatcher::start(&mut thread, Invocation::try_new(owner, method, desc, args)?)?;
@@ -90,14 +91,14 @@ pub fn run(class: &str, method: &str, desc: &str, args: &[JValue], fuel: u64) ->
         .unwrap_or_else(|error| panic!("{class}.{method}{desc}: {error:?}"))
 }
 
-pub fn invocation(class: &str, method: &str, desc: &str, args: &[JValue]) -> Invocation {
+pub fn invocation(class: &str, method: &str, desc: &str, args: &[JValue]) -> Invocation<'static> {
     init_vm();
     // Bootstrap class definition is not atomic yet. Serialize test fixture loads.
     static LOADING: Mutex<()> = Mutex::new(());
     let _guard = LOADING.lock().unwrap();
-    let owner = BootstrapCLD::find_class(class)
+    let owner = BootstrapCLD::find_class(&SymbolTable::intern(class))
         .unwrap()
-        .as_normal_klass_ref()
+        .as_normal_klass()
         .unwrap();
     Invocation::try_new(owner, method, desc, args).unwrap()
 }

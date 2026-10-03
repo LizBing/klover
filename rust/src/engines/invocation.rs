@@ -1,21 +1,20 @@
 use crate::{
-    runtime::ms_api::MsRef,
     code::code::Code,
     engines::exec_error::{ExecError, ExecErrorKind, ExecResult},
     oops::{jvalue::JValue, method::Method, normal_klass::NormalKlass}
 };
 
 #[derive(Debug, Clone)]
-pub struct Invocation {
-    owner: MsRef<NormalKlass>,
-    method: MsRef<Method>,
+pub struct Invocation<'klass> {
+    owner: &'klass NormalKlass<'klass>,
+    method: &'klass Method<'klass>,
     
     args: Box<[JValue]>,
 }
 
-impl Invocation {
+impl<'klass> Invocation<'klass> {
     pub fn try_new(
-        owner: MsRef<NormalKlass>,
+        owner: &'klass NormalKlass<'klass>,
         mname: &str,
         desc: &str,
         args: &[JValue]
@@ -47,12 +46,12 @@ impl Invocation {
     }
 }
 
-impl Invocation {
-    pub fn owner(&self) -> &NormalKlass {
+impl<'klass> Invocation<'klass> {
+    pub fn owner(&self) -> &NormalKlass<'klass> {
         &self.owner
     }
 
-    pub fn method(&self) -> &Method {
+    pub fn method(&self) -> &Method<'klass> {
         &self.method
     }
 
@@ -60,7 +59,7 @@ impl Invocation {
         &self.args
     }
 
-    pub fn code(&self) -> &Code {
+    pub fn code(&self) -> &Code<'klass> {
         self.method.code().unwrap()
     }
 }

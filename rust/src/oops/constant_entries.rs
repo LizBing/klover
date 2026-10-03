@@ -1,15 +1,15 @@
 use std::sync::OnceLock;
 
-use crate::{class_loader::oop_storage::{OOPHandle, OOPStorage}, gc_bindings::oop_hierarchy::NObjPtr, oops::{desc::MethodDesc, jvalue::{JDouble, JFloat, JInt, JLong}, klass::Klass, oops_errors::ResolveResult, symbol_table::{SymbolHandle, SymbolTable}}, runtime::ms_api::{MsAllocator, MsRef}};
+use crate::{class_loader::oop_storage::{OOPHandle, OOPStorage}, gc_bindings::oop_hierarchy::NObjPtr, oops::{jvalue::{JDouble, JFloat, JInt, JLong}, klass::Klass, oops_errors::ResolveResult, symbol_table::{SymbolHandle, SymbolTable}}};
 
 #[derive(Debug)]
-pub struct StringConstant {
+pub struct StringConstant<'klass> {
     raw: SymbolHandle,
-    obj: OOPHandle,
+    obj: OOPHandle<'klass>,
 }
 
-impl StringConstant {
-    pub fn new(raw: &str, storage: &OOPStorage) -> Self {
+impl<'klass> StringConstant<'klass> {
+    pub fn new(raw: &str, storage: &'klass OOPStorage<'_>) -> Self {
         Self {
             raw: SymbolTable::intern(raw),
             obj: storage.create_strong(),
@@ -22,12 +22,12 @@ impl StringConstant {
 }
 
 #[derive(Debug)]
-pub struct ClassConstant {
+pub struct ClassConstant<'klass> {
     name: SymbolHandle,
-    resolved: OnceLock<ResolveResult<MsRef<Klass>>>,
+    resolved: OnceLock<ResolveResult<&'klass Klass<'klass>>>,
 }
 
-impl ClassConstant {
+impl<'klass> ClassConstant<'klass> {
     pub fn new(name: &str) -> Self {
         Self {
             name: SymbolTable::intern(name),
@@ -35,33 +35,28 @@ impl ClassConstant {
         }
     }
     
-    pub fn resolve(&self) -> ResolveResult<MsRef<Klass>> {
+    pub fn resolve(&self) -> ResolveResult<&Klass<'klass>> {
         unimplemented!()
     }
 }
 
 #[derive(Debug)]
-pub struct MethodTypeConstant {
-    desc: MethodDesc,
-    obj: OOPHandle,
-}
+pub struct MethodTypeConstant {}
 
 #[derive(Debug)]
-pub struct MethodHandleConstant {
-    obj: OOPHandle,
-}
+pub struct MethodHandleConstant {}
 
-#[derive(Debug)]
-pub enum LdCLoadable {
+#[derive(Debug, Clone)]
+pub enum LdCLoadable<'klass> {
     Integer(JInt),
     Float(JFloat),
-    String(StringConstant),
-    Class(ClassConstant),
-    MethodType(MethodTypeConstant),
-    MethodHandle(MethodHandleConstant),
+    String(&'klass StringConstant<'klass>),
+    Class(&'klass ClassConstant<'klass>),
+    MethodType(&'klass MethodTypeConstant),
+    MethodHandle(&'klass MethodHandleConstant),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum LdC2Loadable {
     Long(JLong),
     Double(JDouble),

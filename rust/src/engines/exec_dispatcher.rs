@@ -56,7 +56,7 @@ pub enum DispatchOutcome {
 pub struct ExecDispatcher;
 
 impl ExecDispatcher {
-    pub fn start(thread: &mut JavaThread, invocation: Invocation) -> ExecResult<()> {
+    pub fn start<'metadata>(thread: &mut JavaThread<'metadata>, invocation: Invocation<'metadata>) -> ExecResult<()> {
         // directly create Interpreter frame for now
         let frame = InterpreterFrame::new(invocation);
         thread.start_with_frame(frame);

@@ -1,5 +1,5 @@
 use crate::{
-    oops::{constant_entries::{LdC2Loadable, LdCLoadable}, jvalue::{JByte, JDouble, JFloat, JInt, JLong, JShort}}, runtime::ms_api::{MsAllocator, MsBox, MsRef},
+    class_loader::oop_storage::OOPStorage, oops::{jvalue::{JByte, JDouble, JFloat, JInt, JLong, JShort}}, runtime::ms_api::{MsAllocator, MsBox},
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -9,14 +9,14 @@ pub struct LocalIdx(pub usize);
 pub struct InstIdx(pub usize);
 
 #[derive(Debug, Clone)]
-pub struct RangeTable {
+pub struct RangeTable<'inst> {
     default: InstIdx,
     low: JInt,
     high: JInt,
-    jumps: MsRef<[InstIdx]>,
+    jumps: &'inst [InstIdx],
 }
 
-impl RangeTable {
+impl RangeTable<'_> {
     pub fn get_inst_idx(&self, index: JInt) -> InstIdx {
         if self.low <= index && index <= self.high {
             let idx = (index - self.low) as usize;
@@ -28,12 +28,12 @@ impl RangeTable {
 }
 
 #[derive(Debug, Clone)]
-pub struct LookupTable {
+pub struct LookupTable<'inst> {
     default: InstIdx,
-    pairs: MsRef<[(JInt, InstIdx)]>,
+    pairs: &'inst [(JInt, InstIdx)],
 }
 
-impl LookupTable {
+impl LookupTable<'_> {
     pub fn get_inst_idx(&self, key: JInt) -> InstIdx {
         for iter in self.pairs.iter() {
             let match_value = iter.0;
@@ -49,7 +49,7 @@ impl LookupTable {
 }
 
 #[derive(Debug, Clone)]
-pub enum Instruction {
+pub enum Instruction<'inst> {
     // --- Constants ---
     NOp,
     AConstNull,
@@ -59,7 +59,7 @@ pub enum Instruction {
     DConst(JDouble),
     BIPush(JByte),
     SIPush(JShort),
-    // LdC(LdCLoadable),
+    // LdC(LdCLoadable<'inst>),
     // LdC2(LdC2Loadable),
 
     // --- Loads ---
@@ -166,8 +166,8 @@ pub enum Instruction {
 
     // --- Control ---
     Goto(InstIdx),
-    TableSwitch(RangeTable),
-    LookUpSwitch(LookupTable),
+    TableSwitch(RangeTable<'inst>),
+    LookUpSwitch(LookupTable<'inst>),
     IReturn,
     LReturn,
     FReturn,
@@ -184,9 +184,9 @@ pub enum Instruction {
 
 use cafebabe::bytecode::{ByteCode, Opcode};
 
-impl Instruction {
+impl<'inst> Instruction<'inst> {
     // Code keeps a one-to-one correspondence with the parser's opcode array.
-    pub(super) fn lower(bytecodes: &ByteCode<'_>, opcode_idx: usize, msa: &MsAllocator) -> Self {
+    pub(super) fn lower(bytecodes: &ByteCode<'_>, opcode_idx: usize, msa: &'inst MsAllocator, _storage: &OOPStorage) -> Self {
         let (bci, opcode) = &bytecodes.opcodes[opcode_idx];
         let target = |offset: i32| {
             let bci = usize::try_from(*bci as i64 + i64::from(offset))
@@ -310,32 +310,27 @@ impl Instruction {
             Opcode::Ifnonnull(offset) => Self::IfNonNull(target(*offset)),
             Opcode::Goto(offset) => Self::Goto(target(*offset)),
             Opcode::Tableswitch(rt) => {
-                let default = target(rt.default);
-                let jumps = msa.calloc(rt.jumps.len());
-                for (i, v) in rt.jumps.iter().enumerate() {
-                    jumps[i].write(target(*v));
+                let mut jumps = MsBox::new_uninit_slice(msa, rt.jumps.len());
+                for (slot, offset) in jumps.iter_mut().zip(&rt.jumps) {
+                    slot.write(target(*offset));
                 }
-
                 Self::TableSwitch(RangeTable {
-                    default,
+                    default: target(rt.default),
                     low: rt.low,
                     high: rt.high,
-                    jumps: unsafe { MsBox::from_raw(jumps.assume_init_mut()).leak() },
+                    // Every slot was initialized above; targets contain no
+                    // resources requiring destruction when the arena is freed.
+                    jumps: unsafe { jumps.assume_init() }.leak(),
                 })
             }
             Opcode::Lookupswitch(lt) => {
-                let default = target(lt.default);
-                let pairs = msa.calloc(lt.match_offsets.len());
-                for (i, v) in lt.match_offsets.iter().enumerate() {
-                    let key = v.0;
-                    let value = target(v.1);
-
-                    pairs[i].write((key, value));
+                let mut pairs = MsBox::new_uninit_slice(msa, lt.match_offsets.len());
+                for (slot, (key, offset)) in pairs.iter_mut().zip(&lt.match_offsets) {
+                    slot.write((*key, target(*offset)));
                 }
-
                 Self::LookUpSwitch(LookupTable {
-                    default,
-                    pairs: unsafe { MsBox::from_raw(pairs.assume_init_mut()).leak() },
+                    default: target(lt.default),
+                    pairs: unsafe { pairs.assume_init() }.leak(),
                 })
             }
             Opcode::Ireturn => Self::IReturn,
@@ -358,6 +353,7 @@ mod tests {
     #[test]
     fn lower_branches_use_byte_addresses_not_instruction_indices() {
         let msa = BootstrapCLD::ms_allocator();
+        let storage = OOPStorage::new(msa);
 
         let code = ByteCode {
             opcodes: vec![
@@ -371,11 +367,11 @@ mod tests {
             ],
         };
         assert!(matches!(
-            Instruction::lower(&code, 2, msa),
+            Instruction::lower(&code, 2, msa, &storage),
             Instruction::Goto(InstIdx(4))
         ));
         assert!(matches!(
-            Instruction::lower(&code, 5, msa),
+            Instruction::lower(&code, 5, msa, &storage),
             Instruction::IfNe(InstIdx(0))
         ));
         // goto_w is normalized by cafebabe to the same Opcode::Goto variant.
@@ -383,7 +379,7 @@ mod tests {
             opcodes: vec![(0, Opcode::Goto(40_000)), (40_000, Opcode::Return)],
         };
         assert!(matches!(
-            Instruction::lower(&wide, 0, msa),
+            Instruction::lower(&wide, 0, msa, &storage),
             Instruction::Goto(InstIdx(1))
         ));
     }
@@ -391,6 +387,7 @@ mod tests {
     #[test]
     fn lower_retains_wide_local_indices_and_signed_increments() {
         let msa = BootstrapCLD::ms_allocator();
+        let storage = OOPStorage::new(msa);
 
         let code = ByteCode {
             opcodes: vec![
@@ -400,15 +397,15 @@ mod tests {
             ],
         };
         assert!(matches!(
-            Instruction::lower(&code, 0, msa),
+            Instruction::lower(&code, 0, msa, &storage),
             Instruction::IInc(LocalIdx(300), -1000)
         ));
         assert!(matches!(
-            Instruction::lower(&code, 1, msa),
+            Instruction::lower(&code, 1, msa, &storage),
             Instruction::ILoad(LocalIdx(300))
         ));
         assert!(matches!(
-            Instruction::lower(&code, 2, msa),
+            Instruction::lower(&code, 2, msa, &storage),
             Instruction::LStore(LocalIdx(400))
         ));
     }
@@ -416,6 +413,7 @@ mod tests {
     #[test]
     fn lower_stack_variants_without_losing_their_forms() {
         let msa = BootstrapCLD::ms_allocator();
+        let storage = OOPStorage::new(msa);
 
         let opcodes = [
             Opcode::Nop,
@@ -446,7 +444,7 @@ mod tests {
         };
         for (idx, expected) in expected.iter().enumerate() {
             assert_eq!(
-                std::mem::discriminant(&Instruction::lower(&code, idx, msa)),
+                std::mem::discriminant(&Instruction::lower(&code, idx, msa, &storage)),
                 std::mem::discriminant(expected)
             );
         }

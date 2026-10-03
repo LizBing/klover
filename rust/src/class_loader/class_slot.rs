@@ -1,18 +1,17 @@
-use crate::{oops::klass::Klass, runtime::ms_api::{MsBox, MsRef}};
+use crate::oops::klass::Klass;
 
-pub struct ClassSlot {
-    klass: MsBox<Klass>,
+pub struct ClassSlot<'cld> {
+    klass: &'cld Klass<'cld>,
 }
 
-unsafe impl Send for ClassSlot {}
-unsafe impl Sync for ClassSlot {}
-
-impl ClassSlot {
-    pub fn klass(&self) -> MsRef<Klass> {
-        MsRef::from(&self.klass)
+impl<'cld> ClassSlot<'cld> {
+    pub fn klass(&self) -> &'cld Klass<'cld> {
+        self.klass
     }
 
-    pub fn new(klass: MsBox<Klass>) -> Self {
-        Self { klass }
+    pub fn new(klass: &'cld Klass<'cld>) -> Self {
+        Self {
+            klass,
+        }
     }
 }

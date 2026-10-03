@@ -1,16 +1,14 @@
-use std::ops::Deref;
-
-use crate::{runtime::ms_api::MsRef, oops::normal_klass::NormalKlass};
+use crate::oops::normal_klass::NormalKlass;
 
 #[derive(Debug)]
-pub enum Klass {
-    Normal(NormalKlass),
+pub enum Klass<'cld> {
+    Normal(NormalKlass<'cld>),
 }
 
-impl MsRef<Klass> {
-    pub fn as_normal_klass_ref(self) -> Option<MsRef<NormalKlass>> {
-        match self.deref() {
-            Klass::Normal(nk) => unsafe { Some(MsRef::from_raw(nk.into())) }
+impl<'cld> Klass<'cld> {
+    pub fn as_normal_klass(&self) -> Option<&NormalKlass<'cld>> {
+        match self {
+            Self::Normal(klass) => Some(klass),
         }
     }
 }

@@ -1,4 +1,4 @@
-use crate::engines::invocation::Invocation;
+use crate::{engines::invocation::Invocation, oops::jvalue::JValue};
 
 #[derive(Debug)]
 pub enum ExecErrorKind {
@@ -34,10 +34,19 @@ pub enum ExecErrorKind {
 }
 
 #[derive(Debug)]
+pub struct InvocationBrief {
+    _private: (),
+    
+    pub klass: String,
+    pub method: String,
+    pub args: Box<[JValue]>,
+}
+
+#[derive(Debug)]
 pub struct ExecError {
     _private: (),
 
-    pub invocation: Option<Invocation>,
+    pub brief: Option<InvocationBrief>,
 
     pub kind: ExecErrorKind,
 }
@@ -46,15 +55,22 @@ impl ExecError {
     pub(super) fn new(kind: ExecErrorKind) -> Self {
         Self {
             _private: (),
-            invocation: None,
+            brief: None,
             kind,
         }
     }
 
     pub(super) fn with_invocation(invocation: Invocation, kind: ExecErrorKind) -> Self {
+        let brief = InvocationBrief {
+            _private: (),
+            klass: invocation.owner().name().utf8().into(),
+            method: invocation.method().name().utf8().into(),
+            args: invocation.args().into(),
+        };
+        
         Self {
             _private: (),
-            invocation: Some(invocation),
+            brief: Some(brief),
             kind,
         }
     }

@@ -14,7 +14,7 @@ use klover::{
     oops::jvalue::JValue,
 };
 
-fn frame() -> InterpreterFrame {
+fn frame() -> InterpreterFrame<'static> {
     InterpreterFrame::new(invocation(
         "InstructionOps",
         "scratch",

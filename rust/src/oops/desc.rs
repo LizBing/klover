@@ -53,35 +53,33 @@ pub enum ReturnDesc {
 }
 
 #[derive(Debug)]
-pub struct MethodDesc {
+pub struct MethodDesc<'a> {
     raw: SymbolHandle,
     ret: ReturnDesc,
-    args: MsBox<[FieldDesc]>,
+    args: MsBox<'a, [FieldDesc]>,
 }
 
-impl MethodDesc {
+impl<'a> MethodDesc<'a> {
     pub fn raw(&self) -> &SymbolHandle {
         &self.raw
     }
 
-    pub fn build(parsed: &cafebabe::descriptors::MethodDescriptor, msa: &MsAllocator) -> Self {
+    pub fn build(parsed: &cafebabe::descriptors::MethodDescriptor, msa: &'a MsAllocator) -> Self {
         let raw = SymbolTable::intern(&parsed.to_string());
         let ret = match &parsed.return_type {
             Void => ReturnDesc::Void,
             Return(fd) => ReturnDesc::Type(FieldDesc::from(fd)),
         };
 
-        let args = msa.calloc(parsed.parameters.len());
+        let mut args = MsBox::new_uninit_slice(msa, parsed.parameters.len());
         for (i, v) in parsed.parameters.iter().enumerate() {
             args[i].write(FieldDesc::from(v));
         }
 
-        unsafe {
-            Self {
-                raw,
-                ret,
-                args: MsBox::from_raw(args.assume_init_mut()),
-            }
+        Self {
+            raw,
+            ret,
+            args: unsafe { args.assume_init() }
         }
     }
 

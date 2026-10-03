@@ -39,6 +39,36 @@ fn check(class: &str, method: &str, desc: &str, args: &[JValue], expected: JValu
 }
 
 #[test]
+fn dispatcher_borrows_metadata_from_a_local_loader_and_arena() {
+    use klover::{
+        class_loader::class_loader_data::ClassLoaderData,
+        engines::invocation::Invocation,
+        oops::normal_klass::{NormalKlass, UnlinkedNormalKlass},
+        runtime::ms_api::MsAllocator,
+    };
+
+    crate::support::init_vm();
+    let bytes = std::fs::read(crate::support::fixture_root().join("SimpleAddition.class")).unwrap();
+    let mut options = cafebabe::ParseOptions::default();
+    options.parse_bytecode(true);
+    let mut parsed = cafebabe::parse_class_with_options(&bytes, &options).unwrap();
+    // Non-bootstrap superclass loading is still a stub. This test exercises
+    // local ownership and execution without invoking that unfinished feature.
+    parsed.super_class = None;
+    let arena = MsAllocator::new();
+    let loader = ClassLoaderData::new(&arena);
+    let klass = NormalKlass::try_from(UnlinkedNormalKlass::build(parsed, Some(&loader))).unwrap();
+    let invocation = Invocation::try_new(&klass, "add", "(II)I", &[JValue::Int(1), JValue::Int(2)]).unwrap();
+    let mut thread = JavaThread::new();
+    ExecDispatcher::start(&mut thread, invocation).unwrap();
+    match ExecDispatcher::poll(&mut thread, &mut ExecBudget::new(100)).unwrap() {
+        DispatchOutcome::Completed(MethodReturn::Value(value)) => assert_value(value, JValue::Int(3)),
+        _ => panic!("expected the local class's method to return 3"),
+    }
+    // Destruction is ordered: thread, class, loader, then arena.
+}
+
+#[test]
 fn simple_addition_through_interpreter() {
     let mut frame = InterpreterFrame::new(invocation(
         "SimpleAddition",

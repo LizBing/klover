@@ -1,4 +1,5 @@
 //! Test-only process adapter. No invocation, loading, or interpreter semantics live here.
+use klover::oops::symbol_table::SymbolTable;
 use klover::{
     class_loader::bs_cld::BootstrapCLD,
     engines::{
@@ -134,9 +135,9 @@ fn run() -> Result<(), String> {
         xmx: 64 * 1024 * 1024,
     })
     .map_err(|e| format!("VM initialization: {e:?}"))?;
-    let owner = BootstrapCLD::find_class(&args[1])
+    let owner = BootstrapCLD::find_class(&SymbolTable::intern(&args[1]))
         .map_err(|e| format!("load: {e:?}"))?
-        .as_normal_klass_ref()
+        .as_normal_klass()
         .ok_or("not a normal class")?;
     let invocation = Invocation::try_new(owner, &args[2], &args[3], &values)
         .map_err(|e| format!("invocation: {e:?}"))?;

@@ -1,4 +1,4 @@
-use std::{ffi::c_void, ptr::null_mut};
+use std::{ffi::c_void, ptr::null_mut, sync::atomic::AtomicU32};
 
 type ObjPtrImpl = c_void;
 
@@ -47,5 +47,15 @@ impl NObjPtr {
 
     pub fn decode(self) -> ObjPtr {
         unimplemented!()
+    }
+}
+
+#[repr(transparent)]
+#[derive(Debug)]
+pub struct AtomicNObjPtr(AtomicU32);
+
+impl AtomicNObjPtr {
+    pub fn new() -> Self {
+        Self(AtomicU32::new(0))
     }
 }

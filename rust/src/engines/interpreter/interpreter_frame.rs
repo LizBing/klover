@@ -10,8 +10,8 @@ use crate::{
     oops::jvalue::{JDouble, JInt, JLong, JValue},
 };
 
-pub struct InterpreterFrame {
-    invocation: Invocation,
+pub struct InterpreterFrame<'thread> {
+    invocation: Invocation<'thread>,
 
     oprand_stack: Vec<Slot>,
     locals: Box<[Slot]>,
@@ -20,9 +20,9 @@ pub struct InterpreterFrame {
     last_pc: usize,
 }
 
-impl InterpreterFrame {
+impl<'thread> InterpreterFrame<'thread> {
     // Todo: make try_new()
-    pub fn new(invocation: Invocation) -> Self {
+    pub fn new(invocation: Invocation<'thread>) -> Self {
         let oprand_stack = Vec::new();
 
         let mut locals: Box<[Slot]> = std::iter::repeat(Slot::Unused)
@@ -65,13 +65,13 @@ impl InterpreterFrame {
     }
 }
 
-impl InterpreterFrame {
+impl InterpreterFrame<'_> {
     pub fn make_exec_error(&self, kind: ExecErrorKind) -> ExecError {
         ExecError::with_invocation(self.invocation.clone(), kind)
     }
 }
 
-impl JavaFrame for InterpreterFrame {
+impl JavaFrame for InterpreterFrame<'_> {
     fn resume(&mut self, budget: &mut ExecBudget) -> ExecResult<EngineExit> {
         Interpreter::execute(self, budget)
     }
@@ -98,8 +98,8 @@ impl JavaFrame for InterpreterFrame {
     }
 }
 
-impl InterpreterFrame {
-    pub fn next_inst(&mut self) -> Option<Instruction> {
+impl<'thread> InterpreterFrame<'thread> {
+    pub fn next_inst(&mut self) -> Option<Instruction<'thread>> {
         let res = self.invocation.code().instructions().get(self.pc).cloned();
         if res.is_some() {
             self.last_pc = self.pc;
@@ -110,7 +110,7 @@ impl InterpreterFrame {
     }
 }
 
-impl InterpreterFrame {
+impl InterpreterFrame<'_> {
     pub fn push(&mut self, slot: Slot) {
         self.oprand_stack.push(slot);
     }
@@ -187,7 +187,7 @@ impl InterpreterFrame {
     }
 }
 
-impl InterpreterFrame {
+impl InterpreterFrame<'_> {
     pub fn jump_to(&mut self, target: InstIdx) -> ExecResult<()> {
         if target.0 >= self.invocation.code().instructions().len() {
             return Err(self.make_exec_error(ExecErrorKind::InvalidBranchTarget(target.0)));
@@ -231,7 +231,7 @@ impl InterpreterFrame {
     }
 }
 
-impl InterpreterFrame {
+impl InterpreterFrame<'_> {
     pub fn push_int(&mut self, value: JInt) {
         self.push(Slot::Int(value));
     }
@@ -242,9 +242,7 @@ impl InterpreterFrame {
             _ => Err(self.make_exec_error(ExecErrorKind::MismatchSlotType)),
         }
     }
-}
-
-impl InterpreterFrame {
+    
     pub fn push_float(&mut self, value: crate::oops::jvalue::JFloat) {
         self.push(Slot::Float(value));
     }
@@ -255,9 +253,7 @@ impl InterpreterFrame {
             _ => Err(self.make_exec_error(ExecErrorKind::MismatchSlotType)),
         }
     }
-}
 
-impl InterpreterFrame {
     pub fn push_ref(&mut self, value: crate::gc_bindings::oop_hierarchy::NObjPtr) {
         self.push(Slot::Ref(value));
     }

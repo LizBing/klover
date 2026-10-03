@@ -290,7 +290,7 @@ fn real_class_division_errors_reach_dispatcher() {
                 )
                 .expect("division by zero must terminate with an error");
             assert!(matches!(error.kind, ExecErrorKind::DivisionByZero));
-            assert!(error.invocation.is_some());
+            assert!(error.brief.is_some());
         }
     }
 }

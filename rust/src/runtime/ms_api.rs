@@ -1,3 +1,4 @@
+use std::marker::PhantomData;
 use std::mem::MaybeUninit;
 use std::ops::{Deref, DerefMut};
 use std::ptr::NonNull;
@@ -124,6 +125,7 @@ struct MSChunk {
 unsafe impl Send for MSChunk {}
 unsafe impl Sync for MSChunk {}
 
+#[derive(Debug)]
 pub struct MsAllocator {
     chunks: Mutex<Vec<NonNull<MSChunk>>>,
     /// Current chunk used for bump allocation. Protected by RwLock:
@@ -167,7 +169,7 @@ impl MsAllocator {
         }
     }
 
-    pub fn calloc<T>(&self, count: usize) -> &mut [MaybeUninit<T>] {
+    fn calloc<T>(&self, count: usize) -> &mut [MaybeUninit<T>] {
         let size = size_of::<T>() * count;
         let mem = if size < BUMP_THRESHOLD {
             self.bump_alloc(size)
@@ -323,39 +325,100 @@ impl Default for MsAllocator {
 /// semantics); memory is reclaimed when the underlying chunks are
 /// destroyed together with the allocator.
 #[derive(Debug)]
-pub struct MsBox<T: ?Sized> {
+pub struct MsBox<'alloc, T: ?Sized> {
+    _marker: PhantomData<(&'alloc MsAllocator, T)>,
     raw: NonNull<T>,
 }
 
-impl<T> MsBox<T> {
+impl<'alloc, T> MsBox<'alloc, T> {
     /// Allocate memory through `allocator` and move `value` into it.
-    pub fn new(allocator: &MsAllocator, value: T) -> Self {
+    pub fn new(allocator: &'alloc MsAllocator, value: T) -> Self {
         let uninit = allocator.alloc::<T>();
         let ptr = uninit.write(value);
         MsBox {
+            _marker: PhantomData,
             raw: unsafe { NonNull::new_unchecked(ptr) },
         }
     }
-}
 
-impl<T: ?Sized> MsBox<T> {
-    pub unsafe fn from_raw(raw: *mut T) -> Self {
-        Self {
-            raw: NonNull::new(raw).unwrap(),
+    pub fn new_uninit_slice(
+        allocator: &'alloc MsAllocator,
+        count: usize,
+    ) -> MsBox<'alloc, [MaybeUninit<T>]> {
+        MsBox {
+            _marker: PhantomData,
+            raw: allocator.calloc(count).into(),
         }
     }
 }
 
-impl<T: ?Sized> MsBox<T> {
-    /// Transfer the value to an arena reference without running its destructor.
-    /// The reference remains valid only while the allocator is alive.
-    pub fn leak(self) -> MsRef<T> {
+impl<'alloc, T> MsBox<'alloc, [MaybeUninit<T>]> {
+    /// Transfer ownership of a fully initialized slice.
+    ///
+    /// # Safety
+    /// Every element must contain an initialized, valid `T`.
+    pub unsafe fn assume_init(self) -> MsBox<'alloc, [T]> {
         let owner = std::mem::ManuallyDrop::new(self);
-        MsRef { raw: owner.raw }
+        MsBox {
+            _marker: PhantomData,
+            // Preserve the slice length and unique ownership without creating
+            // a shared reference to memory that the new owner may mutate.
+            raw: unsafe { NonNull::new_unchecked(owner.raw.as_ptr() as *mut [T]) },
+        }
     }
 }
 
-impl<T: ?Sized> Deref for MsBox<T> {
+impl<'alloc, T: ?Sized> MsBox<'alloc, T> {
+    /// Consume this owner and publish an arena-lived shared reference.
+    /// Neither this value nor its owned resources will have their destructors
+    /// run. The allocator eventually reclaims only the arena memory.
+    ///
+    /// ```compile_fail
+    /// use klover::runtime::ms_api::{MsAllocator, MsBox};
+    /// let arena = MsAllocator::new();
+    /// let published = MsBox::new(&arena, 42).leak();
+    /// drop(arena);
+    /// println!("{published}");
+    /// ```
+    pub fn leak(self) -> &'alloc T
+    where
+        T: 'alloc,
+    {
+        let owner = std::mem::ManuallyDrop::new(self);
+        unsafe { owner.raw.as_ref() }
+    }
+}
+
+impl<T: ?Sized> MsBox<'_, T> {
+    /// Borrow the value for no longer than this owner is borrowed.
+    ///
+    /// ```compile_fail
+    /// use klover::runtime::ms_api::{MsAllocator, MsBox};
+    /// let arena = MsAllocator::new();
+    /// let owner = MsBox::new(&arena, String::from("metadata"));
+    /// let borrowed = owner.share();
+    /// drop(owner);
+    /// println!("{borrowed}");
+    /// ```
+    ///
+    /// ```compile_fail
+    /// use klover::runtime::ms_api::{MsAllocator, MsBox};
+    /// let arena = MsAllocator::new();
+    /// let mut owner = MsBox::new(&arena, 1);
+    /// let borrowed = owner.share();
+    /// *owner = 2;
+    /// println!("{borrowed}");
+    /// ```
+    pub fn share(&self) -> &T {
+        unsafe { self.raw.as_ref() }
+    }
+
+    pub fn as_mut(&mut self) -> &mut T {
+        unsafe { self.raw.as_mut() }
+    }
+}
+
+impl<T: ?Sized> Deref for MsBox<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &T {
@@ -363,13 +426,13 @@ impl<T: ?Sized> Deref for MsBox<T> {
     }
 }
 
-impl<T: ?Sized> DerefMut for MsBox<T> {
+impl<T: ?Sized> DerefMut for MsBox<'_, T> {
     fn deref_mut(&mut self) -> &mut T {
         unsafe { self.raw.as_mut() }
     }
 }
 
-impl<T: ?Sized> Drop for MsBox<T> {
+impl<T: ?Sized> Drop for MsBox<'_, T> {
     fn drop(&mut self) {
         unsafe {
             ptr::drop_in_place(self.raw.as_ptr());
@@ -379,73 +442,8 @@ impl<T: ?Sized> Drop for MsBox<T> {
 
 // SAFETY: MsBox owns a uniquely-allocated region of metaspace memory,
 // so it is Send/Sync under the same conditions as Box<T>.
-unsafe impl<T: Send> Send for MsBox<T> {}
-unsafe impl<T: Sync> Sync for MsBox<T> {}
-
-// Safety: guaranteed by developer.
-#[derive(Debug)]
-pub struct MsRef<T: ?Sized> {
-    raw: NonNull<T>,
-}
-
-impl<T: ?Sized> Clone for MsRef<T> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl<T: ?Sized> Copy for MsRef<T> {}
-
-/// Metaspace 压缩指针。  32 位偏移量（以 `METASPACE_BASE` 为基准，
-/// 8 字节对齐）。  0 保留给 null。
-pub type CompPtr = u32;
-
-impl<T> MsRef<T> {
-    /// 将引用编码为压缩指针。
-    pub fn encode(&self) -> CompPtr {
-        ms_comp_ptr_encode(self.raw.as_ptr())
-    }
-
-    /// 将压缩指针解码为引用。
-    ///
-    /// # Safety
-    /// `cp` 必须是之前由 `encode` 或 `ms_comp_ptr_encode` 生成的合法值，
-    /// 指向 metaspace 内类型为 `T` 的对象。
-    pub unsafe fn decode(cp: CompPtr) -> Option<Self> {
-        if cp == 0 {
-            return None;
-        }
-
-        let ptr = ms_comp_ptr_decode::<T>(cp);
-        // SAFETY: 由调用方保证 cp 合法。
-        Some(Self {
-            raw: unsafe { NonNull::new_unchecked(ptr) },
-        })
-    }
-
-    /// 判断两个 MsRef 是否指向同一个对象（指针相等）。
-    pub fn equals<U>(&self, other: &MsRef<U>) -> bool {
-        self.raw.as_ptr() as *const () == other.raw.as_ptr() as *const ()
-    }
-
-    pub unsafe fn from_raw(ptr: NonNull<T>) -> Self {
-        Self { raw: ptr }
-    }
-}
-
-impl<T> From<&MsBox<T>> for MsRef<T> {
-    fn from(value: &MsBox<T>) -> Self {
-        Self { raw: value.raw }
-    }
-}
-
-impl<T: ?Sized> Deref for MsRef<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        unsafe { self.raw.as_ref() }
-    }
-}
+unsafe impl<T: ?Sized + Send> Send for MsBox<'_, T> {}
+unsafe impl<T: ?Sized + Sync> Sync for MsBox<'_, T> {}
 
 // ── tests ───────────────────────────────────────────────────────────────
 
@@ -616,29 +614,26 @@ mod tests {
     #[test]
     fn concurrent_allocations() {
         ensure_initialized().expect("initialize test metaspace");
-        use std::sync::Arc;
 
-        let allocator = Arc::new(MsAllocator::new());
-        let mut handles = Vec::new();
-
-        for tid in 0..8 {
-            let a = Arc::clone(&allocator);
-            handles.push(std::thread::spawn(move || {
-                let mut boxes = Vec::new();
-                for i in 0..100 {
-                    boxes.push(MsBox::new(&a, (tid, i)));
-                }
-                boxes
-            }));
-        }
-
-        for h in handles {
-            let boxes = h.join().unwrap();
-            for (tid, i) in boxes.iter().map(|b| **b) {
-                assert!(tid < 8);
-                assert!(i < 100);
+        let allocator = MsAllocator::new();
+        std::thread::scope(|scope| {
+            let mut handles = Vec::new();
+            for tid in 0..8 {
+                let allocator = &allocator;
+                handles.push(scope.spawn(move || {
+                    (0..100)
+                        .map(|i| MsBox::new(allocator, (tid, i)))
+                        .collect::<Vec<_>>()
+                }));
             }
-        }
+            for handle in handles {
+                for value in handle.join().unwrap() {
+                    let (tid, i) = *value;
+                    assert!(tid < 8);
+                    assert!(i < 100);
+                }
+            }
+        });
     }
 
     #[test]
@@ -673,49 +668,48 @@ mod tests {
     }
 
     #[test]
-    fn leak_transfers_value_without_dropping_it() {
+    fn initialized_slice_can_mutate_and_drops_each_element_once() {
         ensure_initialized().expect("initialize test metaspace");
         let allocator = MsAllocator::new();
         let drops = AtomicUsize::new(0);
-        let mut value = MsBox::new(
-            &allocator,
-            DropProbe {
-                drops: &drops,
-                text: "still alive".into(),
-            },
-        );
-        let raw = &mut *value as *mut DropProbe<'_>;
-        let leaked = value.leak();
-        assert_eq!(drops.load(Ordering::SeqCst), 0);
-        assert_eq!(leaked.text, "still alive");
-        unsafe {
-            ptr::drop_in_place(raw);
-        }
-        assert_eq!(drops.load(Ordering::SeqCst), 1);
-    }
-
-    #[test]
-    fn leak_preserves_slice_metadata_without_dropping_elements() {
-        ensure_initialized().expect("initialize test metaspace");
-        let allocator = MsAllocator::new();
-        let drops = AtomicUsize::new(0);
-        let storage = allocator.calloc(2);
+        let mut storage = MsBox::new_uninit_slice(&allocator, 2);
         for (index, slot) in storage.iter_mut().enumerate() {
             slot.write(DropProbe {
                 drops: &drops,
                 text: format!("element {index}"),
             });
         }
-        let raw = unsafe { storage.assume_init_mut() as *mut [DropProbe<'_>] };
-        let leaked = unsafe { MsBox::from_raw(raw) }.leak();
+        let mut values = unsafe { storage.assume_init() };
         assert_eq!(drops.load(Ordering::SeqCst), 0);
-        assert_eq!(leaked.len(), 2);
-        assert_eq!(leaked[0].text, "element 0");
-        assert_eq!(leaked[1].text, "element 1");
-        unsafe {
-            ptr::drop_in_place(raw);
-        }
+        values[1].text.push_str(" updated");
+        assert_eq!(values.len(), 2);
+        assert_eq!(values[1].text, "element 1 updated");
+        drop(values);
         assert_eq!(drops.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn leak_preserves_slice_metadata_and_skips_destructors() {
+        struct CountDrop<'a>(&'a AtomicUsize);
+        impl Drop for CountDrop<'_> {
+            fn drop(&mut self) {
+                self.0.fetch_add(1, Ordering::SeqCst);
+            }
+        }
+        ensure_initialized().expect("initialize test metaspace");
+        let drops = AtomicUsize::new(0);
+        {
+            let allocator = MsAllocator::new();
+            let mut storage = MsBox::new_uninit_slice(&allocator, 2);
+            for slot in storage.iter_mut() {
+                slot.write(CountDrop(&drops));
+            }
+            let leaked = unsafe { storage.assume_init() }.leak();
+            assert_eq!(leaked.len(), 2);
+            assert_eq!(leaked[0].0.load(Ordering::SeqCst), 0);
+        }
+        // Reclaiming arena memory does not run leaked values' destructors.
+        assert_eq!(drops.load(Ordering::SeqCst), 0);
     }
 
     #[test]
