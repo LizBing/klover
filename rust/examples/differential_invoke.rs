@@ -132,6 +132,7 @@ fn run() -> Result<(), String> {
 
     vm::try_init(Arguments {
         bs_class_path: args[0].clone(),
+        ms_pretouch: false,
         xmx: 64 * 1024 * 1024,
     })
     .map_err(|e| format!("VM initialization: {e:?}"))?;

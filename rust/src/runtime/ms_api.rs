@@ -7,8 +7,16 @@ use std::{ptr, slice};
 
 use parking_lot::{Mutex, RwLock};
 
-const SMALL_CHUNK_BYTE_SIZE: usize = 8 * 1024; // 8 KB
-const BUMP_THRESHOLD: usize = SMALL_CHUNK_BYTE_SIZE / 2; // 4 KB
+use crate::runtime::metaspace::{METASPACE_BASE, MSCHUNK_UNIT_SIZE, Metaspace, MsChunk};
+
+pub use crate::runtime::metaspace::MsInitError;
+
+/// Initialize the shared Rust metaspace; mapping failures are cached.
+pub fn ensure_initialized() -> Result<(), MsInitError> {
+    Metaspace::ensure_initialized()
+}
+
+const BUMP_THRESHOLD: usize = MSCHUNK_UNIT_SIZE / 2; // 4 KB
 
 // ── Metaspace 压缩指针 ────────────────────────────────────────────────
 //
@@ -21,9 +29,6 @@ const BUMP_THRESHOLD: usize = SMALL_CHUNK_BYTE_SIZE / 2; // 4 KB
 //
 // 任何 metaspace 内分配的、可被 MsRef 引用的结构（Klass、Field、Method 等）
 // 都可以用这套编解码。
-
-/// Metaspace 的虚拟内存基址（与 C 层 `METASPACE_BASE` 一致）。
-const METASPACE_BASE: usize = 1usize << 43;
 
 /// 压缩指针的对齐粒度（与 C 层 `COMP_PTR_SHIFT` 一致）。
 const COMP_PTR_SHIFT: u32 = 3;
@@ -50,8 +55,13 @@ fn ms_comp_ptr_encode<T>(ptr: *const T) -> u32 {
         off >> COMP_PTR_SHIFT <= u32::MAX as usize,
         "ms_comp_ptr_encode: offset overflow"
     );
-    let narrow = (off >> COMP_PTR_SHIFT) as u32;
-    narrow
+    assert!(off != 0, "ms_comp_ptr_encode: base is the null sentinel");
+    assert_eq!(
+        off & ((1 << COMP_PTR_SHIFT) - 1),
+        0,
+        "ms_comp_ptr_encode: pointer is not 8-byte aligned"
+    );
+    (off >> COMP_PTR_SHIFT) as u32
 }
 
 /// 将 32 位 narrow ptr 解码为 metaspace 内的裸指针。
@@ -65,82 +75,18 @@ fn ms_comp_ptr_decode<T>(narrow: u32) -> *mut T {
     addr as *mut T
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum MsInitStatus {
-    Initialized,
-    AlreadyInitialized,
-    VSpaceFailed,
-}
-
-impl TryFrom<i32> for MsInitStatus {
-    type Error = i32;
-
-    fn try_from(raw: i32) -> Result<Self, Self::Error> {
-        match raw {
-            0 => Ok(Self::Initialized),
-            1 => Ok(Self::AlreadyInitialized),
-            2 => Ok(Self::VSpaceFailed),
-            other => Err(other),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MsInitError {
-    VSpaceFailed,
-    UnknownStatus(i32),
-}
-
-unsafe extern "C" {
-    fn c_ms_try_init() -> i32;
-    fn ms_alloc_small_chunk() -> *mut MSChunk;
-    fn ms_alloc_sized_chunk(byte_size: usize) -> *mut MSChunk;
-    fn ms_free_chunk(chunk: *mut MSChunk);
-}
-
-/// Initialize the process-wide metaspace once. Failures are cached as well:
-/// callers must not retry a failed native initialization implicitly.
-pub fn ensure_initialized() -> Result<(), MsInitError> {
-    static INIT: std::sync::OnceLock<Result<(), MsInitError>> = std::sync::OnceLock::new();
-    *INIT.get_or_init(|| {
-        // SAFETY: all Rust initialization calls are serialized by INIT.
-        let raw = unsafe { c_ms_try_init() };
-        match MsInitStatus::try_from(raw) {
-            Ok(MsInitStatus::Initialized | MsInitStatus::AlreadyInitialized) => Ok(()),
-            Ok(MsInitStatus::VSpaceFailed) => Err(MsInitError::VSpaceFailed),
-            Err(raw) => Err(MsInitError::UnknownStatus(raw)),
-        }
-    })
-}
-
-#[repr(C)]
-struct MSChunk {
-    _next: *mut MSChunk,
-    byte_size: usize,
-    start: usize,
-}
-
-// SAFETY: chunks are allocated by the C metaspace layer and protected
-// by internal synchronisation (Mutex / RwLock) in MsAllocator.
-unsafe impl Send for MSChunk {}
-unsafe impl Sync for MSChunk {}
-
 #[derive(Debug)]
 pub struct MsAllocator {
-    chunks: Mutex<Vec<NonNull<MSChunk>>>,
-    /// Current chunk used for bump allocation. Protected by RwLock:
+    chunks: Mutex<Vec<MsChunk>>,
+    /// Owns the current bump chunk. Retired and dedicated chunks live in `chunks`.
+    /// Protected by RwLock:
     /// read-lock for the fast path (peek + CAS on offset),
     /// write-lock for the slow path (chunk swap).
-    cur_chunk: RwLock<Option<NonNull<MSChunk>>>,
+    cur_chunk: RwLock<Option<MsChunk>>,
     /// Bump-pointer offset inside the current chunk.
     /// Lock-free – allocated via CAS in the fast path.
     cur_offset: AtomicUsize,
 }
-
-// SAFETY: all mutable state is behind internal synchronisation
-// (Mutex, RwLock, AtomicUsize).
-unsafe impl Send for MsAllocator {}
-unsafe impl Sync for MsAllocator {}
 
 impl MsAllocator {
     pub const fn new() -> Self {
@@ -151,161 +97,111 @@ impl MsAllocator {
         }
     }
 
-    /// Allocate memory for a value of type `T`.
-    ///
-    /// Objects smaller than `BUMP_THRESHOLD` (4 KB) are allocated via
-    /// bump-pointer allocation inside a small chunk.  Larger objects
-    /// receive their own dedicated chunk obtained from the C metaspace
-    /// layer.
+    /// Small values bump within an 8 KB chunk; large values get a sized chunk.
     fn alloc<T>(&self) -> &mut MaybeUninit<T> {
-        let size = size_of::<T>();
-
-        unsafe {
-            if size < BUMP_THRESHOLD {
-                &mut *self.bump_alloc(size)
-            } else {
-                &mut *self.sized_alloc(size)
-            }
-        }
+        unsafe { &mut *self.alloc_raw::<MaybeUninit<T>>(size_of::<T>()) }
     }
 
     fn calloc<T>(&self, count: usize) -> &mut [MaybeUninit<T>] {
-        let size = size_of::<T>() * count;
-        let mem = if size < BUMP_THRESHOLD {
+        let size = size_of::<T>()
+            .checked_mul(count)
+            .filter(|size| *size <= isize::MAX as usize)
+            .expect("metaspace allocation size overflow");
+        let mem = self.alloc_raw::<MaybeUninit<T>>(size);
+        unsafe { slice::from_raw_parts_mut(mem, count) }
+    }
+
+    fn alloc_raw<T>(&self, size: usize) -> *mut T {
+        if size == 0 {
+            return NonNull::<T>::dangling().as_ptr();
+        }
+        if size < BUMP_THRESHOLD && std::mem::align_of::<T>() <= MSCHUNK_UNIT_SIZE {
             self.bump_alloc(size)
         } else {
             self.sized_alloc(size)
-        };
-        let slice = unsafe { slice::from_raw_parts_mut(mem, count) };
-
-        slice
+        }
     }
 
-    // ── bump-pointer allocation ──────────────────────────────────────
-    //
-    //  Two-tier strategy:
-    //   1. Fast path  – read-lock on cur_chunk + CAS on cur_offset.
-    //      No writer blocking; multiple threads can bump in parallel.
-    //   2. Slow path  – write-lock on cur_chunk; retry or acquire a
-    //      fresh small chunk.
+    fn aligned_offset<T>(chunk: &MsChunk, offset: usize) -> usize {
+        // All arena addresses must also be representable as compressed pointers.
+        let align = std::mem::align_of::<T>().max(1 << COMP_PTR_SHIFT);
+        let address = chunk.start() + offset;
+        ((address + align - 1) & !(align - 1)) - chunk.start()
+    }
 
     fn bump_alloc<T>(&self, size: usize) -> *mut T {
-        let align = std::mem::align_of::<T>();
-
         loop {
-            // ── fast path ────────────────────────────────────────────
             {
                 let cur = self.cur_chunk.read();
-                if let Some(chunk) = *cur {
-                    let chunk = unsafe { chunk.as_ref() };
-
-                    let old_offset = self.cur_offset.load(Ordering::Relaxed);
-                    let aligned = (old_offset + align - 1) & !(align - 1);
-
-                    if aligned + size <= chunk.byte_size {
-                        // Try to atomically reserve the space.
+                if let Some(chunk) = cur.as_ref() {
+                    let offset = self.cur_offset.load(Ordering::Relaxed);
+                    let aligned = Self::aligned_offset::<T>(chunk, offset);
+                    if aligned + size <= chunk.byte_size() {
                         if self
                             .cur_offset
                             .compare_exchange_weak(
-                                old_offset,
+                                offset,
                                 aligned + size,
                                 Ordering::AcqRel,
                                 Ordering::Relaxed,
                             )
                             .is_ok()
                         {
-                            return (chunk.start + aligned) as *mut T;
+                            return (chunk.start() + aligned) as *mut T;
                         }
-                        // CAS raced with another thread – retry.
                         continue;
                     }
                 }
-                // No current chunk or it is full → drop read-lock and
-                // fall through to the slow path.
             }
-
-            // ── slow path ────────────────────────────────────────────
             return self.bump_alloc_slow::<T>(size);
         }
     }
 
-    /// Slow path: acquire write-lock, check again, and if necessary
-    /// obtain a new small chunk from the C metaspace layer.
     fn bump_alloc_slow<T>(&self, size: usize) -> *mut T {
-        let align = std::mem::align_of::<T>();
         let mut cur = self.cur_chunk.write();
-
-        // Re-check: another thread may have refreshed the chunk while
-        // we were waiting for the write-lock.  Use CAS even here
-        // because fast-path threads that read the old chunk pointer
-        // before we took the lock may still be racing on cur_offset.
-        if let Some(chunk) = *cur {
-            let chunk = unsafe { chunk.as_ref() };
-            loop {
-                let offset = self.cur_offset.load(Ordering::Relaxed);
-                let aligned = (offset + align - 1) & !(align - 1);
-
-                if aligned + size <= chunk.byte_size {
-                    if self
-                        .cur_offset
-                        .compare_exchange_weak(
-                            offset,
-                            aligned + size,
-                            Ordering::AcqRel,
-                            Ordering::Relaxed,
-                        )
-                        .is_ok()
-                    {
-                        return (chunk.start + aligned) as *mut T;
-                    }
-                    // CAS failed – retry.
-                    continue;
-                }
-                break; // chunk still full
+        // The writer excludes every fast-path reader, so no CAS is needed here.
+        if let Some(chunk) = cur.as_ref() {
+            let offset = self.cur_offset.load(Ordering::Relaxed);
+            let aligned = Self::aligned_offset::<T>(chunk, offset);
+            if aligned + size <= chunk.byte_size() {
+                self.cur_offset.store(aligned + size, Ordering::Relaxed);
+                return (chunk.start() + aligned) as *mut T;
             }
         }
 
-        // Acquire a fresh small chunk.
-        let new_chunk = unsafe { NonNull::new(ms_alloc_small_chunk()) }
-            .expect("ms_alloc_small_chunk: out of metaspace memory");
-
-        // Record the chunk.
-        {
-            let mut chunks = self.chunks.lock();
-            chunks.push(new_chunk);
+        let new_chunk =
+            Metaspace::alloc_one_chunk_fast_path().unwrap_or_else(|| Metaspace::alloc_chunk(1));
+        let aligned = Self::aligned_offset::<T>(&new_chunk, 0);
+        let start = new_chunk.start() + aligned;
+        if let Some(old_chunk) = cur.replace(new_chunk) {
+            self.chunks.lock().push(old_chunk);
         }
-
-        // Install the new chunk and reset offset.
-        let chunk = unsafe { new_chunk.as_ref() };
-        *cur = Some(new_chunk);
-        self.cur_offset.store(size, Ordering::Release);
-
-        chunk.start as *mut T
+        self.cur_offset.store(aligned + size, Ordering::Relaxed);
+        start as *mut T
     }
 
-    // ── sized (large-object) allocation ───────────────────────────────
-
     fn sized_alloc<T>(&self, size: usize) -> *mut T {
-        let chunk = unsafe { NonNull::new(ms_alloc_sized_chunk(size)) }
-            .expect("ms_alloc_sized_chunk: out of metaspace memory");
-
-        // Record the chunk.
-        {
-            let mut chunks = self.chunks.lock();
-            chunks.push(chunk);
-        }
-
-        unsafe { chunk.as_ref() }.start as *mut T
+        let align = std::mem::align_of::<T>().max(1 << COMP_PTR_SHIFT);
+        // Every chunk starts at an 8 KB boundary. Only larger alignments need padding.
+        let padding = align.saturating_sub(MSCHUNK_UNIT_SIZE);
+        let bytes = size
+            .checked_add(padding)
+            .expect("metaspace allocation size overflow");
+        let count = bytes.div_ceil(MSCHUNK_UNIT_SIZE);
+        let chunk = Metaspace::alloc_chunk(count);
+        let start = chunk.start() + Self::aligned_offset::<T>(&chunk, 0);
+        self.chunks.lock().push(chunk);
+        start as *mut T
     }
 }
 
 impl Drop for MsAllocator {
     fn drop(&mut self) {
-        // All chunks — including the current bump chunk — are tracked
-        // in `chunks`.  Drain and free each one through the C layer.
-        let chunks = self.chunks.get_mut();
-        for chunk in chunks.drain(..) {
-            unsafe { ms_free_chunk(chunk.as_ptr()) };
+        if let Some(chunk) = self.cur_chunk.get_mut().take() {
+            Metaspace::release_chunk(chunk);
+        }
+        for chunk in self.chunks.get_mut().drain(..) {
+            Metaspace::release_chunk(chunk);
         }
     }
 }
@@ -322,8 +218,8 @@ impl Default for MsAllocator {
 /// [`MsAllocator`]'s metaspace arena.
 ///
 /// Individual deallocations are not supported (bump-allocator
-/// semantics); memory is reclaimed when the underlying chunks are
-/// destroyed together with the allocator.
+/// semantics); memory is recycled when the underlying chunks are
+/// released together with the allocator.
 #[derive(Debug)]
 pub struct MsBox<'alloc, T: ?Sized> {
     _marker: PhantomData<(&'alloc MsAllocator, T)>,
@@ -450,18 +346,6 @@ unsafe impl<T: ?Sized + Sync> Sync for MsBox<'_, T> {}
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn init_status_rejects_unknown_values() {
-        assert_eq!(MsInitStatus::try_from(0), Ok(MsInitStatus::Initialized));
-        assert_eq!(
-            MsInitStatus::try_from(1),
-            Ok(MsInitStatus::AlreadyInitialized)
-        );
-        assert_eq!(MsInitStatus::try_from(2), Ok(MsInitStatus::VSpaceFailed));
-        assert_eq!(MsInitStatus::try_from(-1), Err(-1));
-        assert_eq!(MsInitStatus::try_from(99), Err(99));
-    }
 
     #[derive(Debug, PartialEq, Eq)]
     struct Point {
@@ -593,6 +477,58 @@ mod tests {
     }
 
     #[test]
+    fn dedicated_allocation_respects_alignment_larger_than_a_chunk() {
+        #[repr(align(32768))]
+        struct Aligned([u8; 32768]);
+        let allocator = MsAllocator::new();
+        let value = MsBox::new(&allocator, Aligned([0xAB; 32768]));
+        assert_eq!((&*value as *const Aligned as usize) % 32768, 0);
+        assert!(value.0.iter().all(|byte| *byte == 0xAB));
+    }
+
+    #[test]
+    fn small_allocations_round_trip_through_compressed_pointers() {
+        let allocator = MsAllocator::new();
+        for byte in 0..32u8 {
+            let value = MsBox::new(&allocator, byte);
+            let pointer = &*value as *const u8;
+            let narrow = ms_comp_ptr_encode(pointer);
+            assert_ne!(narrow, 0);
+            assert_eq!(ms_comp_ptr_decode::<u8>(narrow).cast_const(), pointer);
+        }
+        assert_eq!(ms_comp_ptr_encode::<u8>(ptr::null()), 0);
+        assert!(ms_comp_ptr_decode::<u8>(0).is_null());
+    }
+
+    #[test]
+    fn compressed_pointer_encoding_rejects_invalid_addresses() {
+        for address in [
+            METASPACE_BASE,
+            METASPACE_BASE + 1,
+            METASPACE_BASE - 8,
+            METASPACE_BASE + (1usize << 35),
+        ] {
+            assert!(std::panic::catch_unwind(|| ms_comp_ptr_encode(address as *const u8)).is_err());
+        }
+    }
+
+    #[test]
+    fn empty_and_zero_sized_slices_are_supported() {
+        let allocator = MsAllocator::new();
+        let empty = MsBox::<u64>::new_uninit_slice(&allocator, 0);
+        assert!(empty.is_empty());
+        let zero_sized = MsBox::<()>::new_uninit_slice(&allocator, 8);
+        assert_eq!(zero_sized.len(), 8);
+    }
+
+    #[test]
+    #[should_panic(expected = "metaspace allocation size overflow")]
+    fn overflowing_slice_size_is_rejected_before_allocation() {
+        let allocator = MsAllocator::new();
+        let _ = MsBox::<u64>::new_uninit_slice(&allocator, usize::MAX);
+    }
+
+    #[test]
     fn drop_allocator_does_not_crash() {
         ensure_initialized().expect("initialize test metaspace");
         {
@@ -621,18 +557,21 @@ mod tests {
             for tid in 0..8 {
                 let allocator = &allocator;
                 handles.push(scope.spawn(move || {
-                    (0..100)
+                    (0..1000)
                         .map(|i| MsBox::new(allocator, (tid, i)))
                         .collect::<Vec<_>>()
                 }));
             }
-            for handle in handles {
-                for value in handle.join().unwrap() {
+            let mut addresses = std::collections::HashSet::new();
+            for (expected_tid, handle) in handles.into_iter().enumerate() {
+                for (expected_i, value) in handle.join().unwrap().into_iter().enumerate() {
                     let (tid, i) = *value;
-                    assert!(tid < 8);
-                    assert!(i < 100);
+                    assert_eq!(tid, expected_tid);
+                    assert_eq!(i, expected_i);
+                    assert!(addresses.insert(&*value as *const _ as usize));
                 }
             }
+            assert_eq!(addresses.len(), 8000);
         });
     }
 

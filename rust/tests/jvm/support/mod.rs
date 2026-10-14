@@ -48,6 +48,7 @@ pub fn init_vm() {
         std::fs::write(root.join("SwitchBytecodeOps.class"), classfile::build()).unwrap();
         vm::try_init(Arguments {
             bs_class_path: root.to_string_lossy().into_owned(),
+            ms_pretouch: true,
             xmx: 64 * 1024 * 1024,
         })
         .unwrap();

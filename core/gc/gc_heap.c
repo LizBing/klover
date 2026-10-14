@@ -15,11 +15,11 @@ bool gcheap_init(size_t xmx) {
         xmx > COMPSPACE_BYTE_SIZE || xmx % sizeof(HeapWord) != 0) {
         return false;
     }
-    VirtSpace* vs = create_virt_space(GCHEAP_BASE, COMPSPACE_WORD_SIZE, false);
+    VirtSpace* vs = create_virt_space(GCHEAP_BASE, COMPSPACE_BYTE_SIZE, false);
     if (vs == NULL) {
         return false;
     }
-    if (!vs_expand(vs, xmx / sizeof(HeapWord), false)) {
+    if (vs_expand_by(vs, xmx, false) == 0) {
         destroy_virt_space(vs);
         return false;
     }
@@ -28,7 +28,7 @@ bool gcheap_init(size_t xmx) {
     /* Skip the first word so that the first allocation never lands at offset 0
      * – offset 0 is the NULL sentinel for compressed pointers.
      * See comp_space_defs.h: "Zero-sentinel null preservation". */
-    BUMPING_TOP = VS->start + 1;
+    BUMPING_TOP = (HeapWord*)vs_start(VS) + 1;
 
     return true;
 }
@@ -39,7 +39,7 @@ objptr_t gcheap_alloc(Klass* klass_ptr, size_t word_size) {
 
     for (;;) {
         new_top = cur_top + word_size;
-        if (new_top > VS->commit_top) { return NULL; }
+        if ((uintptr_t)new_top > vs_commit_top(VS)) { return NULL; }
 
         if (atomic_compare_exchange_weak_explicit(&BUMPING_TOP, &cur_top, new_top, memory_order_release, memory_order_acquire)) {
             break;

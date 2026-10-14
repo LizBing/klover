@@ -2,6 +2,7 @@
 #define MEMORY_COMP_SPACE_DEFS_H_
 
 #include "utils/global_defs.h"
+#include "memory/heap_word.h"
 
 static const uintptr_t METASPACE_BASE = 1ul << 43;
 static const uintptr_t GCHEAP_BASE = 1ul << 44;

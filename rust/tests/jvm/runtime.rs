@@ -17,6 +17,7 @@ fn concurrent_reinitialization_returns_arguments_without_changing_vm() {
                 let xmx = (i + 1) * 1024 * 1024;
                 let error = try_init(Arguments {
                     bs_class_path: path.clone(),
+                    ms_pretouch: false,
                     xmx,
                 })
                 .expect_err("a live VM must reject reinitialization");

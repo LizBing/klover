@@ -2,6 +2,7 @@
 #define CORE_OOPS_OBJ_DESC_H_
 
 #include "utils/global_defs.h"
+#include "memory/heap_word.h"
 
 typedef struct Klass Klass;
 

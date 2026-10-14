@@ -5,10 +5,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-typedef struct WordImpl WordImpl;
-typedef WordImpl* Word;
-typedef Word HeapWord;
-
 static const size_t K = 1024;
 static const size_t M = 1024 * K;
 static const size_t G = 1024 * M;

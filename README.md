@@ -165,8 +165,9 @@ execution limit fails the case.
 
 Unit tests live beside their Rust modules and check subsystem-local behavior
 without initializing the full VM or loading Java classes. Allocator tests may
-initialize native metaspace. JVM integration tests are collected in
-`rust/tests/jvm.rs`, with these responsibilities under `rust/tests/jvm/`:
+initialize the Rust metaspace backed by native virtual memory. JVM integration
+tests are collected in `rust/tests/jvm.rs`, with these responsibilities under
+`rust/tests/jvm/`:
 
 - `execution.rs` and `algorithms.rs`: run complete methods from Java fixtures.
 - `instructions.rs`: directly check instructions and frame state. These remain
