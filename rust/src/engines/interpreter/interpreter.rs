@@ -66,6 +66,7 @@ impl Interpreter {
             DStore(LocalIdx(idx)) => dstore(f, idx),
             ALoad(LocalIdx(idx)) => aload(f, idx),
             AStore(LocalIdx(idx)) => astore(f, idx),
+            LdC(loadable) => ldc(f, loadable),
             LdC2(loadable) => ldc2(f, loadable),
             Pop => stack::pop(f),
             Pop2 => stack::pop2(f),

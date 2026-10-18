@@ -81,6 +81,13 @@ impl Metaspace {
     }
 
     pub fn initialize() -> Result<(), MsInitError> {
+        // Serialize the check and reservation: a second caller must not try
+        // mapping the address range already owned by the first initialization.
+        static INIT_LOCK: Mutex<()> = Mutex::new(());
+        let _guard = INIT_LOCK.lock();
+        if METASPACE.get().is_some() {
+            return Err(MsInitError::AlreadyInitialized);
+        }
         let metaspace = Self::try_new(METASPACE_BASE, METASPACE_SIZE)?;
         
         METASPACE.set(metaspace)
@@ -138,6 +145,16 @@ impl Metaspace {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn repeated_initialization_reports_already_initialized() {
+        // Other tests may already own the process-wide metaspace.
+        assert!(matches!(
+            Metaspace::initialize(),
+            Ok(()) | Err(MsInitError::AlreadyInitialized)
+        ));
+        assert_eq!(Metaspace::initialize(), Err(MsInitError::AlreadyInitialized));
+    }
 
     #[test]
     fn mapping_failure_is_reported() {

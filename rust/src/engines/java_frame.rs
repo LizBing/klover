@@ -1,6 +1,5 @@
 use crate::engines::{exec_error::ExecResult, protocol::{EngineExit, ExecBudget, MethodReturn}};
 
-
 pub trait JavaFrame {
     fn resume(
         &mut self,

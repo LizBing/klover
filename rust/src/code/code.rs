@@ -2,19 +2,14 @@ use crate::{class_loader::oop_storage::OOPStorage, code::instructions::Instructi
 
 #[derive(Debug)]
 pub struct Code<'method> {
-    max_stack: usize,
-    max_locals: usize,
-    insts: &'method [Instruction<'method>],
+    _private: (),
+    
+    pub max_stack: usize,
+    pub max_locals: usize,
+    pub insts: &'method [Instruction<'method>],
 }
 
 impl<'method> Code<'method> {
-    pub fn max_locals(&self) -> usize {
-        self.max_locals
-    }
-    pub fn instructions(&self) -> &[Instruction<'method>] {
-        &self.insts
-    }
-
     pub fn build(cd: &cafebabe::attributes::CodeData, msa: &'method MsAllocator, storage: &OOPStorage) -> Self {
         let bytecode = cd.bytecode
             .as_ref()
@@ -27,6 +22,7 @@ impl<'method> Code<'method> {
         }
 
         Self {
+            _private: (),
             max_locals: cd.max_locals as usize,
             max_stack: cd.max_stack as usize,
             insts: unsafe { insts.assume_init().leak() },

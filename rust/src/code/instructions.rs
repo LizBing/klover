@@ -1,5 +1,5 @@
 use crate::{
-    class_loader::oop_storage::OOPStorage, oops::{constant_entries::LdC2Loadable, jvalue::{JByte, JDouble, JFloat, JInt, JLong, JShort}}, runtime::ms_api::{MsAllocator, MsBox},
+    class_loader::oop_storage::OOPStorage, oops::{constant_entries::{LdC2Loadable, LdCLoadable}, jvalue::{JByte, JDouble, JFloat, JInt, JLong, JShort}}, runtime::ms_api::{MsAllocator, MsBox},
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -59,7 +59,7 @@ pub enum Instruction<'inst> {
     DConst(JDouble),
     BIPush(JByte),
     SIPush(JShort),
-    // LdC(LdCLoadable<'inst>),
+    LdC(LdCLoadable),
     LdC2(LdC2Loadable),
 
     // --- Loads ---
@@ -216,6 +216,21 @@ impl<'inst> Instruction<'inst> {
             Opcode::IconstM1 => Self::IConst(-1),
             Opcode::Bipush(v) => Self::BIPush(*v),
             Opcode::Sipush(v) => Self::SIPush(*v),
+            Opcode::Ldc(loadable) => match loadable {
+                cafebabe::constant_pool::Loadable::LiteralConstant(cafebabe::constant_pool::LiteralConstant::Integer(i)) => Self::LdC(LdCLoadable::Integer(*i)),
+                cafebabe::constant_pool::Loadable::LiteralConstant(cafebabe::constant_pool::LiteralConstant::Float(f)) => Self::LdC(LdCLoadable::Float(*f)),
+                _ => Self::Unsupported,
+            },
+            Opcode::LdcW(loadable) => match loadable {
+                cafebabe::constant_pool::Loadable::LiteralConstant(cafebabe::constant_pool::LiteralConstant::Integer(i)) => Self::LdC(LdCLoadable::Integer(*i)),
+                cafebabe::constant_pool::Loadable::LiteralConstant(cafebabe::constant_pool::LiteralConstant::Float(f)) => Self::LdC(LdCLoadable::Float(*f)),
+                _ => Self::Unsupported,
+            },
+            Opcode::Ldc2W(loadable) => match loadable {
+                cafebabe::constant_pool::Loadable::LiteralConstant(cafebabe::constant_pool::LiteralConstant::Long(l)) => Self::LdC2(LdC2Loadable::Long(*l)),
+                cafebabe::constant_pool::Loadable::LiteralConstant(cafebabe::constant_pool::LiteralConstant::Double(d)) => Self::LdC2(LdC2Loadable::Double(*d)),
+                _ => unreachable!("Impossible LdC2 variant"),
+            },
             Opcode::Iload(idx) => Self::ILoad(LocalIdx(*idx as usize)),
             Opcode::Istore(idx) => Self::IStore(LocalIdx(*idx as usize)),
             Opcode::Lload(idx) => Self::LLoad(LocalIdx(*idx as usize)),

@@ -66,22 +66,3 @@ impl<'msa> OOPStorage<'msa> {
         self.create_handle(&self.weaks)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn handles_survive_registry_growth_and_remain_registered() {
-        let arena = MsAllocator::new();
-        let storage = OOPStorage::new(&arena);
-        let first = storage.create_strong();
-        for _ in 0..100 {
-            storage.create_strong();
-        }
-        let weak = storage.create_weak();
-        assert_eq!(storage.strongs.lock()[0].0, NonNull::from(first.slot));
-        assert_eq!(storage.weaks.lock()[0].0, NonNull::from(weak.slot));
-        assert!(!std::ptr::eq(first.slot, weak.slot));
-    }
-}

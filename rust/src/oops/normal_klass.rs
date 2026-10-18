@@ -91,7 +91,7 @@ impl<'cld> NormalKlass<'cld> {
 
     pub fn find_declared_method(&self, name: &str, desc: &str) -> Option<&Method<'cld>> {
         for method in self.methods.deref() {
-            if method.name().utf8() == name && method.desc().raw().utf8() == desc {
+            if method.name.utf8() == name && method.desc.raw().utf8() == desc {
                 return Some(method);
             }
         }

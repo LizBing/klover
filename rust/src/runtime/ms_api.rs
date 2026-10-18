@@ -11,7 +11,7 @@ use crate::runtime::metaspace::{METASPACE_BASE, MSCHUNK_UNIT_SIZE, Metaspace, Ms
 
 pub use crate::runtime::metaspace::MsInitError;
 
-/// Initialize the shared Rust metaspace; mapping failures are cached.
+/// Initialize the shared Rust metaspace; repeated calls are rejected.
 pub fn initialize() -> Result<(), MsInitError> {
     Metaspace::initialize()
 }

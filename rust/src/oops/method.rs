@@ -4,24 +4,16 @@ use crate::{class_loader::oop_storage::OOPStorage, code::code::Code, oops::{desc
 
 #[derive(Debug)]
 pub struct Method<'klass> {
-    acc_flags: MethodAccessFlags,
-    name: SymbolHandle,
-    desc: MethodDesc<'klass>,
+    _private: (),
 
-    code: Option<Code<'klass>>,
+    pub acc_flags: MethodAccessFlags,
+    pub name: SymbolHandle,
+    pub desc: MethodDesc<'klass>,
+
+    pub code: Option<Code<'klass>>,
 }
 
 impl<'klass> Method<'klass> {
-    pub fn name(&self) -> &SymbolHandle {
-        &self.name
-    }
-    pub fn desc(&self) -> &MethodDesc<'klass> {
-        &self.desc
-    }
-    pub fn code(&self) -> Option<&Code<'klass>> {
-        self.code.as_ref()
-    }
-
     pub(super) fn build(info: &cafebabe::MethodInfo, msa: &'klass MsAllocator, storage: &OOPStorage) -> Self {
         let name = SymbolTable::intern(&info.name);
         let desc = MethodDesc::build(&info.descriptor, msa);
@@ -34,6 +26,7 @@ impl<'klass> Method<'klass> {
         }
 
         Self {
+            _private: (),
             acc_flags: info.access_flags,
             name,
             desc,

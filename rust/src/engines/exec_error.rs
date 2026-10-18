@@ -16,6 +16,18 @@ pub enum ExecErrorKind {
         desc: String,
     },
 
+    ArgumentCountMismatch {
+        expected: usize,
+        actual: usize,
+    },
+
+    ArgumentTypeMismatch {
+        /// Zero-based index into Invocation::args, including the receiver.
+        index: usize,
+        expected: String,
+        actual: JValue,
+    },
+
     MismatchSlotType,
 
     StackUnderflow,
@@ -63,11 +75,11 @@ impl ExecError {
     pub(super) fn with_invocation(invocation: Invocation, kind: ExecErrorKind) -> Self {
         let brief = InvocationBrief {
             _private: (),
-            klass: invocation.owner().name().utf8().into(),
-            method: invocation.method().name().utf8().into(),
-            args: invocation.args().into(),
+            klass: invocation.owner.name().utf8().into(),
+            method: invocation.method.name.utf8().into(),
+            args: invocation.args.into(),
         };
-        
+
         Self {
             _private: (),
             brief: Some(brief),

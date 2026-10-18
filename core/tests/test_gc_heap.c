@@ -143,12 +143,13 @@ TEST(alloc_memory_writable)
      *
      * (The markword sits at offset 0; payload starts right after.)
      */
-    for (size_t i = 0; i < 16; i++) {
+    const size_t payload_words = 15; /* 16 allocated words minus the header. */
+    for (size_t i = 0; i < payload_words; i++) {
         obj->payload[i] = (HeapWord)(uintptr_t)(0xCAFE0000 + i);
     }
 
     /* Read back */
-    for (size_t i = 0; i < 16; i++) {
+    for (size_t i = 0; i < payload_words; i++) {
         ASSERT_EQ(obj->payload[i],
                   (HeapWord)(uintptr_t)(0xCAFE0000 + i),
                   "payload readback mismatch");

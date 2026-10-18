@@ -1,7 +1,7 @@
 use crate::{engines::{
     exec_error::ExecResult,
     interpreter::{interpreter_frame::InterpreterFrame, step_outcome::StepControl},
-}, oops::constant_entries::LdC2Loadable};
+}, oops::constant_entries::{LdC2Loadable, LdCLoadable}};
 use crate::{gc_bindings::oop_hierarchy::NObjPtr, oops::jvalue::*};
 
 pub fn nop(_: &mut InterpreterFrame) -> ExecResult<StepControl> {
@@ -40,6 +40,15 @@ pub fn bipush(f: &mut InterpreterFrame, value: JByte) -> ExecResult<StepControl>
 
 pub fn sipush(f: &mut InterpreterFrame, value: JShort) -> ExecResult<StepControl> {
     f.push_int(value.into());
+    Ok(StepControl::Continue)
+}
+
+pub fn ldc(f: &mut InterpreterFrame, loadable: LdCLoadable) -> ExecResult<StepControl> {
+    match loadable {
+        LdCLoadable::Float(value) => f.push_float(value),
+        LdCLoadable::Integer(value) => f.push_int(value),
+    }
+
     Ok(StepControl::Continue)
 }
 

@@ -1,6 +1,12 @@
+use crate::{
+    oops::{
+        jvalue::JValue,
+        symbol_table::{SymbolHandle, SymbolTable},
+    },
+    runtime::ms_api::{MsAllocator, MsBox},
+};
 use cafebabe::descriptors::FieldType::*;
 use cafebabe::descriptors::ReturnDescriptor::*;
-use crate::{runtime::ms_api::{MsAllocator, MsBox}, oops::symbol_table::{SymbolHandle, SymbolTable}};
 
 #[derive(Debug)]
 pub enum ElemDesc {
@@ -20,6 +26,32 @@ pub struct FieldDesc {
     raw: SymbolHandle,
     dimensions: usize,
     elem: ElemDesc,
+}
+
+impl FieldDesc {
+    pub fn raw(&self) -> &SymbolHandle {
+        &self.raw
+    }
+
+    /// Checks the value kind only; reference assignability requires runtime class metadata.
+    pub fn matches_value(&self, value: &JValue) -> bool {
+        if self.dimensions > 0 {
+            return matches!(value, JValue::Ref(_));
+        }
+
+        matches!(
+            (&self.elem, value),
+            (ElemDesc::Boolean, JValue::Boolean(_))
+                | (ElemDesc::Byte, JValue::Byte(_))
+                | (ElemDesc::Char, JValue::Char(_))
+                | (ElemDesc::Double, JValue::Double(_))
+                | (ElemDesc::Float, JValue::Float(_))
+                | (ElemDesc::Int, JValue::Int(_))
+                | (ElemDesc::Long, JValue::Long(_))
+                | (ElemDesc::Short, JValue::Short(_))
+                | (ElemDesc::Class(_), JValue::Ref(_))
+        )
+    }
 }
 
 impl From<&cafebabe::descriptors::FieldDescriptor<'_>> for FieldDesc {
@@ -64,6 +96,10 @@ impl<'a> MethodDesc<'a> {
         &self.raw
     }
 
+    pub fn args(&self) -> &[FieldDesc] {
+        &self.args
+    }
+
     pub fn build(parsed: &cafebabe::descriptors::MethodDescriptor, msa: &'a MsAllocator) -> Self {
         let raw = SymbolTable::intern(&parsed.to_string());
         let ret = match &parsed.return_type {
@@ -79,7 +115,7 @@ impl<'a> MethodDesc<'a> {
         Self {
             raw,
             ret,
-            args: unsafe { args.assume_init() }
+            args: unsafe { args.assume_init() },
         }
     }
 
