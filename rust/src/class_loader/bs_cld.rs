@@ -1,4 +1,4 @@
-use std::sync::LazyLock;
+use std::{collections::HashMap, sync::LazyLock};
 
 use dashmap::{DashMap, Entry};
 
@@ -7,8 +7,8 @@ use crate::{class_loader::{class_path::ClassPath, class_slot::ClassSlot, load_er
 pub struct BootstrapCLD;
 
 static MSA: MsAllocator = MsAllocator::new();
-static OOP_STORAGE: OOPStorage<'static> = OOPStorage::new(&MSA);
-static CLASS_TABLE: LazyLock<DashMap<SymbolHandle, ClassSlot<'static>>> = LazyLock::new(|| DashMap::new());
+static OOP_STORAGE: OOPStorage = OOPStorage::new(&MSA);
+static CLASS_TABLE: LazyLock<DashMap<SymbolHandle, &Klass>> = LazyLock::new(|| DashMap::new());
 
 impl BootstrapCLD {
     pub fn ms_allocator() -> &'static MsAllocator {
@@ -48,8 +48,7 @@ impl BootstrapCLD {
     }
 
     fn find_loaded_class(name: &SymbolHandle) -> Option<&'static Klass<'static>> {
-        CLASS_TABLE.get(name)
-            .map(|r| r.klass() )
+        CLASS_TABLE.get(name).map(|r| *r)
     }
 
     fn define_class(name: &SymbolHandle, bytes: &[u8]) -> LoadResult<&'static Klass<'static>> {
@@ -60,18 +59,22 @@ impl BootstrapCLD {
             .map_err(|e| Self::make_load_error(name, LoadErrorKind::Parse(e)))?;
 
         let unlinked = UnlinkedNormalKlass::build(cf, None);
-        let normal = NormalKlass::try_from(unlinked)
+
+        let super_name = unlinked.super_name.as_ref();
+        let super_klass = match super_name {
+            Some(n) => Some(Self::find_normal_klass(&n)?),
+            None => None,
+        };
+
+        let normal = NormalKlass::link(unlinked, super_klass)
             .map_err(|e| Self::make_load_error(name, LoadErrorKind::Linkage(e)))?;
 
-        let boxed = MsBox::new(&MSA, Klass::Normal(normal));
+        let res = MsBox::new(&MSA, Klass::Normal(normal)).leak();
 
-        match CLASS_TABLE.entry(name.clone()) {
-            Entry::Occupied(_) => return Err(Self::make_load_error(name, LoadErrorKind::Duplicated)),
-            Entry::Vacant(v) => {
-                let klass = boxed.leak();
-                v.insert(ClassSlot::new(klass)).downgrade();
-                Ok(klass)
-            }
+        if CLASS_TABLE.insert(name.clone(), res).is_some() {
+            return Err(Self::make_load_error(name, LoadErrorKind::Duplicated));
         }
+
+        Ok(res)
     }
 }

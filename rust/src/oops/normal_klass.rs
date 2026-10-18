@@ -1,4 +1,4 @@
-use crate::{class_loader::oop_storage::OOPStorage, runtime::ms_api::{MsAllocator, MsBox}};
+use crate::{class_loader::oop_storage::OOPStorage, oops::oops_errors::LinkageResult, runtime::ms_api::{MsAllocator, MsBox}};
 use std::ops::Deref;
 
 pub use cafebabe::ClassAccessFlags;
@@ -24,7 +24,7 @@ pub struct UnlinkedNormalKlass<'cld> {
     acc_flags: ClassAccessFlags,
     cld: Option<&'cld ClassLoaderData<'cld>>,
 
-    super_name: Option<SymbolHandle>,
+    pub super_name: Option<SymbolHandle>,
     interfaces: Box<[SymbolHandle]>,
 
     methods: MsBox<'cld, [Method<'cld>]>,
@@ -70,31 +70,16 @@ pub struct NormalKlass<'cld> {
     methods: MsBox<'cld, [Method<'cld>]>,
 }
 
-impl<'cld> TryFrom<UnlinkedNormalKlass<'cld>> for NormalKlass<'cld> {
-    type Error = LinkageError;
-
-    fn try_from(value: UnlinkedNormalKlass<'cld>) -> Result<Self, Self::Error> {
-        let cld = value.cld;
-
-        let super_klass = match value.super_name {
-            None => None,
-
-            Some(skn) => {
-                let sk = match value.cld {
-                    None => BootstrapCLD::find_normal_klass(&skn),
-                    Some(cld) => cld.load_class(skn.utf8()),
-                }.map_err(|_| LinkageError::SuperNotFound { name: skn.utf8().into() })?;
-
-                Some(sk)
-            }
-        };
+impl<'cld> NormalKlass<'cld> {
+    pub fn link(unlinked: UnlinkedNormalKlass<'cld>, super_klass: Option<&'cld NormalKlass<'cld>>) -> LinkageResult<Self> {
+        let cld = unlinked.cld;
 
         Ok(Self {
-            name: value.name,
-            acc_flags: value.acc_flags,
+            name: unlinked.name,
+            acc_flags: unlinked.acc_flags,
             cld,
             super_klass,
-            methods: value.methods,
+            methods: unlinked.methods,
         })
     }
 }

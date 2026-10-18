@@ -73,7 +73,6 @@ mod tests {
 
     #[test]
     fn handles_survive_registry_growth_and_remain_registered() {
-        crate::runtime::ms_api::ensure_initialized().unwrap();
         let arena = MsAllocator::new();
         let storage = OOPStorage::new(&arena);
         let first = storage.create_strong();
