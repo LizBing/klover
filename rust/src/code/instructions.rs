@@ -1,5 +1,5 @@
 use crate::{
-    class_loader::oop_storage::OOPStorage, oops::{jvalue::{JByte, JDouble, JFloat, JInt, JLong, JShort}}, runtime::ms_api::{MsAllocator, MsBox},
+    class_loader::oop_storage::OOPStorage, oops::{constant_entries::LdC2Loadable, jvalue::{JByte, JDouble, JFloat, JInt, JLong, JShort}}, runtime::ms_api::{MsAllocator, MsBox},
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -60,7 +60,7 @@ pub enum Instruction<'inst> {
     BIPush(JByte),
     SIPush(JShort),
     // LdC(LdCLoadable<'inst>),
-    // LdC2(LdC2Loadable),
+    LdC2(LdC2Loadable),
 
     // --- Loads ---
     ILoad(LocalIdx),

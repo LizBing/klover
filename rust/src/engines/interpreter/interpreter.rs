@@ -2,14 +2,13 @@ use super::instructions::{
     comparisons::*, constants::*, control::*, conversions::*, loads::*, math::*, stack,
 };
 use crate::{
-    code::instructions::{Instruction, Instruction::*, LocalIdx},
+    code::instructions::{Instruction::{self, *}, LocalIdx},
     engines::{
-        exec_dispatcher::{EngineExit, ExecBudget},
         exec_error::{ExecErrorKind, ExecResult},
         interpreter::{
             interpreter_frame::InterpreterFrame,
             step_outcome::{StepControl, StepOutcome},
-        },
+        }, protocol::{EngineExit, ExecBudget},
     },
 };
 
@@ -67,6 +66,7 @@ impl Interpreter {
             DStore(LocalIdx(idx)) => dstore(f, idx),
             ALoad(LocalIdx(idx)) => aload(f, idx),
             AStore(LocalIdx(idx)) => astore(f, idx),
+            LdC2(loadable) => ldc2(f, loadable),
             Pop => stack::pop(f),
             Pop2 => stack::pop2(f),
             Dup => stack::dup(f),

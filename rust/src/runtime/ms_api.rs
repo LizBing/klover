@@ -12,8 +12,8 @@ use crate::runtime::metaspace::{METASPACE_BASE, MSCHUNK_UNIT_SIZE, Metaspace, Ms
 pub use crate::runtime::metaspace::MsInitError;
 
 /// Initialize the shared Rust metaspace; mapping failures are cached.
-pub fn ensure_initialized() -> Result<(), MsInitError> {
-    Metaspace::ensure_initialized()
+pub fn initialize() -> Result<(), MsInitError> {
+    Metaspace::initialize()
 }
 
 const BUMP_THRESHOLD: usize = MSCHUNK_UNIT_SIZE / 2; // 4 KB
@@ -356,6 +356,17 @@ mod tests {
     #[repr(C, align(64))]
     struct OverAligned {
         data: [u8; 64],
+    }
+
+    fn ensure_initialized() -> Result<(), MsInitError> {
+        let res = initialize();
+        match res {
+            Ok(_) => Ok(()),
+            Err(e) => match e {
+                MsInitError::AlreadyInitialized => Ok(()),
+                MsInitError::VSpaceFailed => Err(e),
+            }
+        }
     }
 
     #[test]

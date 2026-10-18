@@ -1,4 +1,5 @@
-use crate::engines::{exec_dispatcher::{EngineExit, ExecBudget, MethodReturn}, exec_error::ExecResult};
+use crate::engines::{exec_error::ExecResult, protocol::{EngineExit, ExecBudget, MethodReturn}};
+
 
 pub trait JavaFrame {
     fn resume(

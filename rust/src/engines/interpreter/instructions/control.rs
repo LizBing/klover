@@ -1,5 +1,6 @@
+use crate::engines::protocol::MethodReturn;
 use crate::{
-    code::instructions::InstIdx, engines::exec_dispatcher::MethodReturn, oops::jvalue::JValue,
+    code::instructions::InstIdx, oops::jvalue::JValue,
 };
 use crate::{
     code::instructions::{LookupTable, RangeTable},

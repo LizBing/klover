@@ -1,4 +1,4 @@
-use crate::{engines::{exec_dispatcher::MethodReturn, exec_error::ExecResult}, oops::jvalue::JValue};
+use crate::engines::{exec_error::ExecResult, protocol::MethodReturn};
 
 pub enum StepControl {
     Continue,

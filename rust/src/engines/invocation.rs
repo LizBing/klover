@@ -5,16 +5,16 @@ use crate::{
 };
 
 #[derive(Debug, Clone)]
-pub struct Invocation<'klass> {
-    owner: &'klass NormalKlass<'klass>,
-    method: &'klass Method<'klass>,
+pub struct Invocation<'metadata> {
+    owner: &'metadata NormalKlass<'metadata>,
+    method: &'metadata Method<'metadata>,
     
     args: Box<[JValue]>,
 }
 
-impl<'klass> Invocation<'klass> {
+impl<'metadata> Invocation<'metadata> {
     pub fn try_new(
-        owner: &'klass NormalKlass<'klass>,
+        owner: &'metadata NormalKlass<'metadata>,
         mname: &str,
         desc: &str,
         args: &[JValue]
@@ -38,6 +38,8 @@ impl<'klass> Invocation<'klass> {
             ));
         }
 
+        // todo: verify args
+
         Ok(Self {
             owner,
             method,
@@ -46,12 +48,12 @@ impl<'klass> Invocation<'klass> {
     }
 }
 
-impl<'klass> Invocation<'klass> {
-    pub fn owner(&self) -> &NormalKlass<'klass> {
+impl<'metadata> Invocation<'metadata> {
+    pub fn owner(&self) -> &NormalKlass<'metadata> {
         &self.owner
     }
 
-    pub fn method(&self) -> &Method<'klass> {
+    pub fn method(&self) -> &Method<'metadata> {
         &self.method
     }
 
@@ -59,7 +61,7 @@ impl<'klass> Invocation<'klass> {
         &self.args
     }
 
-    pub fn code(&self) -> &Code<'klass> {
+    pub fn code(&self) -> &Code<'metadata> {
         self.method.code().unwrap()
     }
 }

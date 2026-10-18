@@ -36,7 +36,7 @@ pub fn try_init(args: Arguments) -> VmInitResult {
             kind: VmInitErrorKind::AlreadyInitialized,
         });
     }
-    if let Err(error) = ms_api::ensure_initialized() {
+    if let Err(error) = ms_api::initialize() {
         return Err(VmInitError {
             _private: (),
             args,

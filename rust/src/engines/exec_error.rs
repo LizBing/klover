@@ -36,7 +36,7 @@ pub enum ExecErrorKind {
 #[derive(Debug)]
 pub struct InvocationBrief {
     _private: (),
-    
+
     pub klass: String,
     pub method: String,
     pub args: Box<[JValue]>,

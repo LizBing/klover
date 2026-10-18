@@ -1,11 +1,10 @@
 use crate::{
     code::instructions::{InstIdx, Instruction},
     engines::{
-        exec_dispatcher::{EngineExit, ExecBudget, MethodReturn},
         exec_error::{ExecError, ExecErrorKind, ExecResult},
         interpreter::{interpreter::Interpreter, slot::Slot},
         invocation::Invocation,
-        java_frame::JavaFrame,
+        java_frame::JavaFrame, protocol::{EngineExit, ExecBudget, MethodReturn},
     },
     oops::jvalue::{JDouble, JInt, JLong, JValue},
 };

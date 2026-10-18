@@ -43,58 +43,56 @@ impl MsChunk {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MsInitError {
     VSpaceFailed,
+    AlreadyInitialized,
 }
 
-static METASPACE: OnceLock<Result<Metaspace, MsInitError>> = OnceLock::new();
-
-/// Owns the native mapping. Mutable native operations require the enclosing lock.
-struct Reservation(NonNull<VirtSpace>);
-
-// SAFETY: the mapping is not thread-affine, and all access is serialized by a Mutex.
-unsafe impl Send for Reservation {}
-
-impl Drop for Reservation {
-    fn drop(&mut self) {
-        unsafe { destroy_virt_space(self.0.as_ptr()) };
-    }
-}
+static METASPACE: OnceLock<Metaspace> = OnceLock::new();
 
 pub struct Metaspace {
-    vs: Mutex<Reservation>,
+    vs: Mutex<NonNull<VirtSpace>>,
     // A synchronized list supports multiple consumers and reuses sized chunks too.
     free_list: Mutex<Vec<MsChunk>>,
 }
 
+unsafe impl Send for Metaspace {}
+unsafe impl Sync for Metaspace {}
+
+impl Drop for Metaspace {
+    fn drop(&mut self) {
+        unsafe { destroy_virt_space(self.vs.get_mut().as_ptr()); }
+    }
+}
+
 impl Metaspace {
-    fn new(base: usize, size: usize) -> Result<Self, MsInitError> {
+    fn try_new(base: usize, size: usize) -> Result<Self, MsInitError> {
         let vs = NonNull::new(unsafe { create_virt_space(base, size, false) })
             .ok_or(MsInitError::VSpaceFailed)?;
-        let reservation = Reservation(vs);
+
         // Leave the first unit unused: compressed pointer zero is the null sentinel.
         // Keeping chunk starts aligned to 8 KB also simplifies arena alignment.
         if unsafe { vs_expand_by(vs.as_ptr(), MSCHUNK_UNIT_SIZE, false) } == 0 {
             return Err(MsInitError::VSpaceFailed);
         }
+
         Ok(Self {
-            vs: Mutex::new(reservation),
+            vs: Mutex::new(vs),
             free_list: Mutex::new(Vec::new()),
         })
     }
 
-    pub fn ensure_initialized() -> Result<(), MsInitError> {
-        Self::global().map(|_| ())
+    pub fn initialize() -> Result<(), MsInitError> {
+        let metaspace = Self::try_new(METASPACE_BASE, METASPACE_SIZE)?;
+        
+        METASPACE.set(metaspace)
+            .map_err(|_| MsInitError::AlreadyInitialized)
     }
 
-    fn global() -> Result<&'static Self, MsInitError> {
-        METASPACE
-            .get_or_init(|| Self::new(METASPACE_BASE, METASPACE_SIZE))
-            .as_ref()
-            .map_err(|error| *error)
+    fn global() -> &'static Metaspace {
+        METASPACE.get().unwrap()
     }
 
     pub fn release_chunk(chunk: MsChunk) {
         Self::global()
-            .expect("initialize metaspace")
             .free_list
             .lock()
             .push(chunk);
@@ -108,7 +106,6 @@ impl Metaspace {
 
     pub fn alloc_one_chunk_fast_path() -> Option<MsChunk> {
         Self::global()
-            .expect("initialize metaspace")
             .take_free_chunk(1)
     }
 
@@ -120,7 +117,7 @@ impl Metaspace {
             return Some(chunk);
         }
         let guard = self.vs.lock();
-        let start = unsafe { vs_expand_by(guard.0.as_ptr(), bytes, touch) };
+        let start = unsafe { vs_expand_by(guard.as_ptr(), bytes, touch) };
         if start == 0 {
             return None;
         }
@@ -133,7 +130,6 @@ impl Metaspace {
 
     pub fn alloc_chunk(count: usize) -> MsChunk {
         Self::global()
-            .expect("initialize metaspace")
             .try_alloc_chunk(count, Arguments::ms_pretouch())
             .expect("invalid chunk count or out of metaspace memory")
     }
@@ -147,25 +143,14 @@ mod tests {
     fn mapping_failure_is_reported() {
         // A fixed address must be page aligned; this fails without replacing a mapping.
         assert!(matches!(
-            Metaspace::new(1, MSCHUNK_UNIT_SIZE),
+            Metaspace::try_new(1, MSCHUNK_UNIT_SIZE),
             Err(MsInitError::VSpaceFailed)
         ));
     }
 
     #[test]
-    fn initialization_is_shared_across_threads() {
-        std::thread::scope(|scope| {
-            let handles: Vec<_> = (0..8)
-                .map(|_| scope.spawn(|| Metaspace::global().unwrap() as *const _ as usize))
-                .collect();
-            let addresses: Vec<_> = handles.into_iter().map(|h| h.join().unwrap()).collect();
-            assert!(addresses.iter().all(|address| *address == addresses[0]));
-        });
-    }
-
-    #[test]
     fn chunks_are_distinct_and_exhaustion_does_not_advance_top() {
-        let ms = Metaspace::new(0, 4 * MSCHUNK_UNIT_SIZE).unwrap();
+        let ms = Metaspace::try_new(0, 4 * MSCHUNK_UNIT_SIZE).unwrap();
         let first = ms.try_alloc_chunk(1, true).unwrap();
         assert!(ms.try_alloc_chunk(3, false).is_none());
         let second = ms.try_alloc_chunk(2, false).unwrap();
@@ -182,7 +167,7 @@ mod tests {
 
     #[test]
     fn released_chunks_keep_their_memory_range_and_are_reused_whole() {
-        let ms = Metaspace::new(0, 4 * MSCHUNK_UNIT_SIZE).unwrap();
+        let ms = Metaspace::try_new(0, 4 * MSCHUNK_UNIT_SIZE).unwrap();
         let chunk = ms.try_alloc_chunk(3, false).unwrap();
         let start = chunk.start();
         ms.free_list.lock().push(chunk);
@@ -196,7 +181,7 @@ mod tests {
 
     #[test]
     fn recycling_selects_chunks_with_enough_units_in_lifo_order() {
-        let ms = Metaspace::new(0, 8 * MSCHUNK_UNIT_SIZE).unwrap();
+        let ms = Metaspace::try_new(0, 8 * MSCHUNK_UNIT_SIZE).unwrap();
         let small = ms.try_alloc_chunk(1, false).unwrap();
         let medium = ms.try_alloc_chunk(2, false).unwrap();
         let large = ms.try_alloc_chunk(3, false).unwrap();
@@ -215,7 +200,7 @@ mod tests {
 
     #[test]
     fn insufficient_free_chunks_cannot_satisfy_a_larger_request() {
-        let ms = Metaspace::new(0, 4 * MSCHUNK_UNIT_SIZE).unwrap();
+        let ms = Metaspace::try_new(0, 4 * MSCHUNK_UNIT_SIZE).unwrap();
         let small = ms.try_alloc_chunk(1, false).unwrap();
         let medium = ms.try_alloc_chunk(2, false).unwrap();
         let small_start = small.start();
@@ -233,7 +218,7 @@ mod tests {
 
     #[test]
     fn invalid_counts_leave_capacity_available() {
-        let ms = Metaspace::new(0, 2 * MSCHUNK_UNIT_SIZE).unwrap();
+        let ms = Metaspace::try_new(0, 2 * MSCHUNK_UNIT_SIZE).unwrap();
         assert!(ms.try_alloc_chunk(0, false).is_none());
         assert!(ms.try_alloc_chunk(usize::MAX, false).is_none());
         assert!(ms.try_alloc_chunk(1, false).is_some());
@@ -241,7 +226,7 @@ mod tests {
 
     #[test]
     fn concurrent_recycling_never_returns_the_same_live_chunk() {
-        let ms = Metaspace::new(0, 9 * MSCHUNK_UNIT_SIZE).unwrap();
+        let ms = Metaspace::try_new(0, 9 * MSCHUNK_UNIT_SIZE).unwrap();
         let chunks: Vec<_> = (0..8)
             .map(|_| ms.try_alloc_chunk(1, false).unwrap())
             .collect();

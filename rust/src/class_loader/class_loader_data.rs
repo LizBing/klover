@@ -1,6 +1,5 @@
 use crate::{
-    class_loader::{load_error::LoadResult, oop_storage::OOPStorage},
-    oops::normal_klass::NormalKlass,
+    class_loader::oop_storage::OOPStorage,
     runtime::ms_api::MsAllocator,
 };
 
@@ -26,9 +25,5 @@ impl<'cld> ClassLoaderData<'cld> {
 
     pub fn ms_allocator(&self) -> &MsAllocator {
         self.msa
-    }
-
-    pub fn load_class(&'cld self, name: &str) -> LoadResult<&'cld NormalKlass<'cld>> {
-        unimplemented!()
     }
 }
