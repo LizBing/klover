@@ -269,13 +269,8 @@ impl<'alloc, T: ?Sized> MsBox<'alloc, T> {
     /// Neither this value nor its owned resources will have their destructors
     /// run. The allocator eventually reclaims only the arena memory.
     ///
-    /// ```compile_fail
-    /// use klover::runtime::ms_api::{MsAllocator, MsBox};
-    /// let arena = MsAllocator::new();
-    /// let published = MsBox::new(&arena, 42).leak();
-    /// drop(arena);
-    /// println!("{published}");
-    /// ```
+    /// Ownership is checked against the real private modules by `make test-compile`
+    /// (`rust/compile/ownership.rs`), including a matching valid example.
     pub fn leak(self) -> &'alloc T
     where
         T: 'alloc,
@@ -288,23 +283,8 @@ impl<'alloc, T: ?Sized> MsBox<'alloc, T> {
 impl<T: ?Sized> MsBox<'_, T> {
     /// Borrow the value for no longer than this owner is borrowed.
     ///
-    /// ```compile_fail
-    /// use klover::runtime::ms_api::{MsAllocator, MsBox};
-    /// let arena = MsAllocator::new();
-    /// let owner = MsBox::new(&arena, String::from("metadata"));
-    /// let borrowed = owner.share();
-    /// drop(owner);
-    /// println!("{borrowed}");
-    /// ```
-    ///
-    /// ```compile_fail
-    /// use klover::runtime::ms_api::{MsAllocator, MsBox};
-    /// let arena = MsAllocator::new();
-    /// let mut owner = MsBox::new(&arena, 1);
-    /// let borrowed = owner.share();
-    /// *owner = 2;
-    /// println!("{borrowed}");
-    /// ```
+    /// Ownership is checked against the real private modules by `make test-compile`
+    /// (`rust/compile/ownership.rs`), including a matching valid example.
     pub fn share(&self) -> &T {
         unsafe { self.raw.as_ref() }
     }

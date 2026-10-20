@@ -3,3 +3,7 @@ pub mod interpreter;
 pub mod interpreter_frame;
 mod slot;
 mod step_outcome;
+
+#[cfg(test)]
+#[path = "../../tests/interpreter.rs"]
+mod tests;

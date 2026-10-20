@@ -19,15 +19,18 @@ static int _tests_fail  = 0;
         _tests_run++;                                       \
         printf("  %-50s", #name);                           \
         fflush(stdout);                                     \
+        int failures_before = _tests_fail;                   \
         test_##name();                                      \
-        _tests_pass++;                                      \
-        printf("  PASSED\n");                               \
+        if (_tests_fail == failures_before) {                \
+            _tests_pass++;                                  \
+            printf("  PASSED\n");                           \
+        }                                                   \
     } while (0)
 
 #define FAIL(msg)  do {                                     \
-        printf("  FAILED\n        %s\n", (msg));            \
+        printf("  FAILED\n        %s:%d: %s\n",            \
+               __FILE__, __LINE__, (msg));                   \
         _tests_fail++;                                      \
-        _tests_pass--;                                      \
         return;                                             \
     } while (0)
 

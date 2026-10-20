@@ -50,14 +50,8 @@ impl<'msa> OOPStorage<'msa> {
 
     /// A handle must not outlive the registry that makes it visible to the GC.
     ///
-    /// ```compile_fail
-    /// use klover::{class_loader::oop_storage::OOPStorage, runtime::ms_api::MsAllocator};
-    /// let arena = MsAllocator::new();
-    /// let storage = OOPStorage::new(&arena);
-    /// let handle = storage.create_strong();
-    /// drop(storage);
-    /// println!("{handle:?}");
-    /// ```
+    /// Ownership is checked against the real private modules by `make test-compile`
+    /// (`rust/compile/ownership.rs`), including a matching valid example.
     pub fn create_strong(&self) -> OOPHandle<'_> {
         self.create_handle(&self.strongs)
     }
@@ -66,3 +60,7 @@ impl<'msa> OOPStorage<'msa> {
         self.create_handle(&self.weaks)
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/oop_storage.rs"]
+mod tests;

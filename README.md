@@ -7,7 +7,7 @@ A small HotSpot-inspired JVM (C core + Rust). MVP target: **JVMS 8**
 
 - C11 compiler, CMake 3.20+ (including CTest), and GNU Make
 - Rust 1.85+ (edition 2024)
-- JDK 9+ with `javac --release 8`, only for `make classes`
+- JDK 9+ with `javac --release 8`, for the full test suite and Java compilation
 
 The C core currently uses POSIX memory mapping and 64-bit addresses. Use a
 64-bit macOS or Linux host; Windows and cross-compilation are not supported by
@@ -21,10 +21,11 @@ remove old libraries before building.
 
 ```sh
 make                           # Build the C core and Rust library in debug mode
-make test                      # Build and run C and Rust tests
+make test                      # Run C, Rust, Java execution, and ownership tests
 make classes                   # Compile java/java.base for Java 8
 make PROFILE=release           # Build optimized C and Rust libraries
 make test PROFILE=release      # Run tests with release libraries
+make test-sanitize             # Run supported C sanitizer checks
 make JOBS=8                    # Allow each build tool up to eight workers
 make clean                     # Remove build/ for both profiles and Java
 make help                      # List commands and settings
@@ -32,7 +33,9 @@ make help                      # List commands and settings
 
 For work on one language, use `make build-core`, `make build-rust`,
 `make test-core`, or `make test-rust`. Rust commands always build the C core
-first. Java compilation is separate from the native build and tests.
+first. Full Rust testing also prepares Java test fixtures. The normal native
+library build does not require Java. See [TESTING.md](TESTING.md) for test
+organization, focused commands, isolation, and the documented runtime regression.
 
 `PROFILE` accepts only `debug` and `release`. `JOBS` defaults to `4` and must be
 a positive integer. These limits apply per tool; `make -j` can run the C and
@@ -65,6 +68,8 @@ selected one is missing.
 | Rust debug libraries and tests | `build/cargo/debug/` |
 | Rust release libraries and tests | `build/cargo/release/` |
 | Java classes, with package directories | `build/classes/` |
+| Java test fixtures and bootstrap classes | `build/test-classes/` |
+| C sanitizer builds | `build/sanitize/` |
 
 Cargo calls its debug compilation profile `dev`; the Makefile maps
 `PROFILE=debug` to that name. Both native profiles can coexist.
@@ -79,8 +84,9 @@ The Makefile is the normal entry point. For a focused Rust command, build C
 first and explicitly select its absolute directory:
 
 ```sh
-make build-core
+make build-core test-classes
 KLOVER_CORE_DIR="$PWD/build/debug/core" \
+KLOVER_TEST_CLASSES="$PWD/build/test-classes" \
   cargo test --manifest-path rust/Cargo.toml --locked --target-dir build/cargo
 ```
 

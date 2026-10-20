@@ -6,6 +6,13 @@ edition = "2024"
 [lib]
 crate-type = ["staticlib", "rlib"]
 
+# Compiles the real private modules in one crate for ownership checks.
+# It is checked by `make test-compile`; it is never executed.
+[[example]]
+name = "ownership"
+path = "compile/ownership.rs"
+test = false
+
 [dependencies]
 "bitflags" = "2.11.1"
 "byteorder" = "1"

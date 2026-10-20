@@ -63,19 +63,16 @@ TEST(alloc_markword_klass_roundtrip)
     ASSERT_EQ(decoded, k, "klass pointer encode/decode roundtrip failed");
 }
 
-TEST(alloc_non_null_klass)
+TEST(alloc_lowest_valid_klass)
 {
-    /*
-     * Even with a low (process-space) pointer value the compressed
-     * klass should be non-zero, because klass != NULL means the object
-     * has a real type.
-     */
-    objptr_t obj = gcheap_alloc((Klass*)0x1000, 16);
+    /* Use the first valid aligned metadata address, immediately after the
+     * null sentinel. Arbitrary process addresses are outside the encoding contract. */
+    objptr_t obj = gcheap_alloc((Klass*)(METASPACE_BASE + sizeof(HeapWord)), 16);
     ASSERT_NOT_NULL(obj, "gcheap_alloc returned NULL");
 
     comp_ptr_t kcomp = mw_read_klass_comp_ptr(obj->markword);
-    ASSERT_TRUE(kcomp != 0,
-                "compressed klass pointer should be non-zero for non-NULL klass");
+    ASSERT_EQ(kcomp, (comp_ptr_t)1,
+              "lowest valid klass address should encode to one");
 }
 
 /* ---- sequential allocations (bump-pointer semantics) --------------- */
@@ -220,7 +217,7 @@ int main(void)
     RUN_TEST(reinitialization_preserves_heap);
     RUN_TEST(alloc_single);
     RUN_TEST(alloc_markword_klass_roundtrip);
-    RUN_TEST(alloc_non_null_klass);
+    RUN_TEST(alloc_lowest_valid_klass);
     RUN_TEST(alloc_increasing_addresses);
     RUN_TEST(alloc_non_overlapping);
     RUN_TEST(alloc_many_sequential);

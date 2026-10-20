@@ -5,3 +5,6 @@ mod engines;
 mod gc_bindings;
 mod oops;
 mod runtime;
+
+#[cfg(test)]
+mod tests;

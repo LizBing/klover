@@ -1,0 +1,44 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    name: ${{ matrix.os }} / ${{ matrix.profile }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            profile: debug
+          - os: ubuntu-24.04
+            profile: release
+          - os: macos-latest
+            profile: debug
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Run C, Rust, Java execution, and ownership tests
+        run: make test PROFILE=${{ matrix.profile }} JOBS=2
+
+  sanitizers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run compatible ASan tests and the full C suite with UBSan
+        env:
+          CC: clang
+        run: make test-sanitize JOBS=2
