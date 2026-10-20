@@ -26,8 +26,7 @@ For a focused Rust test without preparing Java fixtures:
 
 ```sh
 make build-core
-KLOVER_CORE_DIR="$PWD/build/debug/core" \
-  cargo test --manifest-path rust/Cargo.toml --locked --target-dir build/cargo \
+cargo test --manifest-path rust/Cargo.toml --locked --target-dir build/cargo \
   --lib engines::interpreter::tests
 ```
 
@@ -35,7 +34,6 @@ To run a single Java execution test:
 
 ```sh
 make build-core test-classes
-KLOVER_CORE_DIR="$PWD/build/debug/core" \
 KLOVER_TEST_CLASSES="$PWD/build/test-classes" \
   cargo test --manifest-path rust/Cargo.toml --locked --target-dir build/cargo \
   --lib tests::execution::java_arithmetic_and_wide_arguments -- --exact
@@ -163,8 +161,7 @@ Reproduce it independently:
 
 ```sh
 make build-core
-KLOVER_CORE_DIR="$PWD/build/debug/core" \
-  cargo test --manifest-path rust/Cargo.toml --locked --target-dir build/cargo \
+cargo test --manifest-path rust/Cargo.toml --locked --target-dir build/cargo \
   --lib tests::vm_lifecycle::retry_after_failed_gc_initialization -- --ignored --exact
 ```
 

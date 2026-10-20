@@ -56,8 +56,11 @@ dependencies and reuse unchanged outputs. Cargo commands use `--locked`, so
 building does not update `rust/Cargo.lock`.
 
 CMake builds `libklover-core.a`. Make passes its directory to Cargo through
-`KLOVER_CORE_DIR`; `rust/build.rs` links the archive and tells Cargo to relink
-when it changes. Static linking avoids runtime shared-library path setup.
+`KLOVER_CORE_DIR`. For direct Cargo commands and rust-analyzer, this variable
+is optional: `rust/build.rs` defaults to the repository's `build/debug/core`
+or `build/release/core`, matching Cargo's profile. An explicit override must
+be an absolute directory. The build script links the archive and tells Cargo
+to relink when it changes. Static linking avoids runtime shared-library path setup.
 The build script does not compile C or search for another library if the
 selected one is missing.
 
@@ -81,18 +84,22 @@ argument file is saved as `build/classes/sources.list`.
 ## Direct tool use
 
 The Makefile is the normal entry point. For a focused Rust command, build C
-first and explicitly select its absolute directory:
+first; Cargo automatically selects the matching directory:
 
 ```sh
 make build-core test-classes
-KLOVER_CORE_DIR="$PWD/build/debug/core" \
 KLOVER_TEST_CLASSES="$PWD/build/test-classes" \
   cargo test --manifest-path rust/Cargo.toml --locked --target-dir build/cargo
 ```
 
-For release, use `make build-core PROFILE=release`, set the directory to
-`$PWD/build/release/core`, and add `--release` to Cargo. Direct Cargo commands
-require this setting, including `cargo check`.
+For release, use `make build-core PROFILE=release` and add `--release` to
+Cargo. Set `KLOVER_CORE_DIR` only to use a different CMake build directory.
+The default paths are relative to the repository, regardless of the working
+directory or Cargo's target directory.
+
+After `make build-core`, rust-analyzer can run its default debug checks
+without additional environment settings. The C library must already exist;
+the build script reports an error if it is missing.
 
 To select a different C compiler, configure a fresh CMake directory with `CC`:
 
