@@ -31,7 +31,7 @@ fn with_code(code: &[u8], test: impl FnOnce(&mut InterpreterFrame<'_>)) {
     let cld = ClassLoaderData::new(&arena);
     let owner = parse_class(&cld, &class_bytes("()V", code, 16, 16));
     let call = Invocation::try_new(&owner, "test", "()V", &[]).unwrap();
-    test(&mut InterpreterFrame::new(call));
+    test(&mut InterpreterFrame::try_new(call).unwrap());
 }
 
 fn with_frame(test: impl FnOnce(&mut InterpreterFrame<'_>)) {
@@ -63,6 +63,136 @@ fn assert_stack(frame: &InterpreterFrame<'_>, expected: &[Slot]) {
             _ => false,
         };
         assert!(equal, "expected slot {expected:?}, got {actual:?}");
+    }
+}
+
+#[test]
+fn frame_initializes_arguments_with_their_local_slot_widths() {
+    ensure_metaspace();
+    let arena = MsAllocator::new();
+    let cld = ClassLoaderData::new(&arena);
+    let desc = "(ZBSCIJDFLjava/lang/Object;)V";
+    let args = [
+        JValue::Boolean(1),
+        JValue::Byte(-2),
+        JValue::Short(-300),
+        JValue::Char(65535),
+        JValue::Int(42),
+        JValue::Long(i64::MIN + 123),
+        JValue::Double(-0.0),
+        JValue::Float(1.5),
+        JValue::Ref(NObjPtr::null()),
+    ];
+    for max_locals in [11, 12] {
+        let owner = parse_class(&cld, &class_bytes(desc, &[0xb1], 2, max_locals));
+        let call = Invocation::try_new(&owner, "test", desc, &args).unwrap();
+        let mut frame = InterpreterFrame::try_new(call).unwrap();
+        for (idx, expected) in [1, -2, -300, 65535, 42].into_iter().enumerate() {
+            assert!(matches!(frame.get_local(idx).unwrap(), Slot::Int(v) if v == expected));
+        }
+        step(&mut frame, LLoad(LocalIdx(5)));
+        assert_eq!(frame.pop_long().unwrap(), i64::MIN + 123);
+        step(&mut frame, DLoad(LocalIdx(7)));
+        assert_eq!(frame.pop_double().unwrap().to_bits(), (-0.0f64).to_bits());
+        assert!(matches!(frame.get_local(9).unwrap(), Slot::Float(1.5)));
+        assert!(matches!(frame.get_local(10).unwrap(), Slot::Ref(r) if r.is_null()));
+        if max_locals == 12 {
+            assert!(matches!(frame.get_local(11).unwrap(), Slot::Unused));
+        }
+        assert!(matches!(
+            frame.get_local(max_locals as usize).unwrap_err().kind,
+            ExecErrorKind::InvalidLocalIndex(_)
+        ));
+    }
+}
+
+#[test]
+fn frame_rejects_arguments_that_exceed_max_locals() {
+    ensure_metaspace();
+    let arena = MsAllocator::new();
+    let cld = ClassLoaderData::new(&arena);
+    for (desc, args, required, available) in [
+        ("(I)V", vec![JValue::Int(1)], 1, 0),
+        ("(J)V", vec![JValue::Long(1)], 2, 0),
+        ("(J)V", vec![JValue::Long(1)], 2, 1),
+        ("(D)V", vec![JValue::Double(1.0)], 2, 1),
+        ("(JD)V", vec![JValue::Long(1), JValue::Double(2.0)], 4, 3),
+    ] {
+        let owner = parse_class(&cld, &class_bytes(desc, &[0xb1], 0, available));
+        let call = Invocation::try_new(&owner, "test", desc, &args).unwrap();
+        let error = InterpreterFrame::try_new(call).err().unwrap();
+        assert!(matches!(
+            error.kind,
+            ExecErrorKind::InsufficientLocalSlots { required: r, available: a }
+                if r == required && a == available as usize
+        ));
+        let brief = error.brief.unwrap();
+        assert_eq!(brief.klass, "java/lang/Object");
+        assert_eq!(brief.method, "test");
+        assert_eq!(brief.args.len(), args.len());
+
+        let call = Invocation::try_new(&owner, "test", desc, &args).unwrap();
+        let mut thread = JavaThread::new();
+        let error = ExecDispatcher::start(&mut thread, call).unwrap_err();
+        assert!(matches!(
+            error.kind,
+            ExecErrorKind::InsufficientLocalSlots { .. }
+        ));
+        assert!(matches!(thread.state(), JavaThreadState::New));
+        assert!(thread.current_frame().is_none());
+    }
+}
+
+#[test]
+fn frame_accepts_no_arguments_with_zero_locals() {
+    ensure_metaspace();
+    let arena = MsAllocator::new();
+    let cld = ClassLoaderData::new(&arena);
+    let owner = parse_class(&cld, &class_bytes("()V", &[0xb1], 0, 0));
+    let call = Invocation::try_new(&owner, "test", "()V", &[]).unwrap();
+    let frame = InterpreterFrame::try_new(call).unwrap();
+    assert!(matches!(
+        frame.get_local(0).unwrap_err().kind,
+        ExecErrorKind::InvalidLocalIndex(0)
+    ));
+}
+
+#[test]
+fn frame_counts_the_receiver_as_one_local_slot() {
+    use crate::oops::{
+        method::MethodAccessFlags,
+        normal_klass::{NormalKlass, UnlinkedNormalKlass},
+    };
+
+    ensure_metaspace();
+    let arena = MsAllocator::new();
+    let cld = ClassLoaderData::new(&arena);
+    for max_locals in [2, 3] {
+        let bytes = class_bytes("(J)V", &[0xb1], 2, max_locals);
+        let mut options = cafebabe::ParseOptions::default();
+        options.parse_bytecode(true);
+        let mut parsed = cafebabe::parse_class_with_options(&bytes, &options).unwrap();
+        parsed.methods[0]
+            .access_flags
+            .remove(MethodAccessFlags::STATIC);
+        let owner = NormalKlass::link(UnlinkedNormalKlass::build(parsed, Some(&cld)), None).unwrap();
+        let args = [JValue::Ref(NObjPtr::null()), JValue::Long(42)];
+        let call = Invocation::try_new(&owner, "test", "(J)V", &args).unwrap();
+        let result = InterpreterFrame::try_new(call);
+        if max_locals == 2 {
+            assert!(matches!(
+                result.err().unwrap().kind,
+                ExecErrorKind::InsufficientLocalSlots {
+                    required: 3,
+                    available: 2
+                }
+            ));
+        } else {
+            let mut frame = result.unwrap();
+            assert!(matches!(frame.get_local(0).unwrap(), Slot::Ref(r) if r.is_null()));
+            step(&mut frame, LLoad(LocalIdx(1)));
+            assert_eq!(frame.pop_long().unwrap(), 42);
+        }
     }
 }
 

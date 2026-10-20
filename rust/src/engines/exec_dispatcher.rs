@@ -12,7 +12,7 @@ pub struct ExecDispatcher;
 impl ExecDispatcher {
     pub fn start<'metadata>(thread: &mut JavaThread<'metadata>, invocation: Invocation<'metadata>) -> ExecResult<()> {
         // directly create Interpreter frame for now
-        let frame = InterpreterFrame::new(invocation);
+        let frame = InterpreterFrame::try_new(invocation)?;
         thread.start_with_frame(frame);
 
         Ok(())

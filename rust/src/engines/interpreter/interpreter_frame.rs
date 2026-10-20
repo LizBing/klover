@@ -20,11 +20,29 @@ pub struct InterpreterFrame<'thread> {
 }
 
 impl<'thread> InterpreterFrame<'thread> {
-    pub fn new(invocation: Invocation<'thread>) -> Self {
+    /// Initializes argument locals, rejecting calls whose slot requirements exceed max_locals.
+    /// Long and double arguments occupy two slots; all others, including the receiver, occupy one.
+    pub fn try_new(invocation: Invocation<'thread>) -> ExecResult<Self> {
+        let required: usize = invocation
+            .args
+            .iter()
+            .map(|arg| match arg {
+                JValue::Long(_) | JValue::Double(_) => 2,
+                _ => 1,
+            })
+            .sum();
+        let available = invocation.code().max_locals;
+        if required > available {
+            return Err(ExecError::with_invocation(
+                invocation,
+                ExecErrorKind::InsufficientLocalSlots { required, available },
+            ));
+        }
+
         let oprand_stack = Vec::new();
 
         let mut locals: Box<[Slot]> = std::iter::repeat(Slot::Unused)
-            .take(invocation.code().max_locals)
+            .take(available)
             .collect();
 
         let mut idx = 0;
@@ -53,13 +71,13 @@ impl<'thread> InterpreterFrame<'thread> {
             idx += 1;
         }
 
-        Self {
+        Ok(Self {
             invocation,
             oprand_stack,
             locals,
             pc: 0,
             last_pc: 0,
-        }
+        })
     }
 }
 

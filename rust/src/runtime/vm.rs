@@ -37,11 +37,13 @@ pub fn try_init(args: Arguments) -> VmInitResult {
         });
     }
     if let Err(error) = ms_api::initialize() {
-        return Err(VmInitError {
-            _private: (),
-            args,
-            kind: VmInitErrorKind::Metaspace(error),
-        });
+        let MsInitError::AlreadyInitialized = error else {
+            return Err(VmInitError {
+                _private: (),
+                args,
+                kind: VmInitErrorKind::Metaspace(error),
+            });
+        };
     }
     // SAFETY: INIT_LOCK serializes GC initialization; arguments are published
     // only after native initialization succeeds, preventing a second success.

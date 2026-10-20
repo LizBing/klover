@@ -40,6 +40,11 @@ pub enum ExecErrorKind {
 
     InvalidLocalIndex(usize),
 
+    InsufficientLocalSlots {
+        required: usize,
+        available: usize,
+    },
+
     UnsupportedInstruction,
 
     NoFrame,
