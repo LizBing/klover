@@ -3,6 +3,34 @@
 A small HotSpot-inspired JVM (C core + Rust). MVP target: **JVMS 8**
 (classfile major 52). The current interpreter supports a limited JVM subset.
 
+## Current capabilities
+
+Java execution tests compile fixtures with `javac --release 8` and invoke
+selected static methods directly through the internal Rust runtime.
+
+| Area | Implemented subset |
+| --- | --- |
+| Class loading | Bootstrap loading from one directory, superclass loading, and caching of loaded classes |
+| Method entry | Lookup of a method declared in a class, argument count/type checks, and argument local-slot capacity checks |
+| Numeric execution | Integer, long, float, and double constants, arithmetic, comparisons, and conversions |
+| Frame operations | Local loads/stores, stack manipulation, and typed or void returns |
+| Control flow | Conditional branches, loops, `tableswitch`, and `lookupswitch` |
+| References | Null constants, reference locals/returns, null checks, and reference comparisons; execution tests use null references |
+| Execution budget | Pausing and resuming the current interpreter frame when its budget runs out |
+| VM lifecycle | One successful VM initialization per process, with retry after failed native heap initialization |
+
+Method-call bytecodes, fields, object creation, arrays, class initialization,
+Java exception handling, and a complete bytecode verifier are not implemented.
+The dispatcher currently executes one entry frame. Numeric constant loading is
+supported; String and class literals are not. Integer division by zero reports
+a VM execution error rather than throwing a Java exception. The native heap
+allocates memory but does not yet reclaim it.
+
+The Java library is minimal, and there is no standard Java application launcher
+or general JDK compatibility. Parsed classes and passing subset tests do not
+establish full Java 8 conformance. See [TESTING.md](TESTING.md) for the test
+coverage and [ROADMAP.md](ROADMAP.md) for proposed next milestones.
+
 ## Requirements
 
 - C11 compiler, CMake 3.20+ (including CTest), and GNU Make
@@ -35,7 +63,7 @@ For work on one language, use `make build-core`, `make build-rust`,
 `make test-core`, or `make test-rust`. Rust commands always build the C core
 first. Full Rust testing also prepares Java test fixtures. The normal native
 library build does not require Java. See [TESTING.md](TESTING.md) for test
-organization, focused commands, isolation, and the documented runtime regression.
+organization, focused commands, isolation, and the VM initialization contract.
 
 `PROFILE` accepts only `debug` and `release`. `JOBS` defaults to `4` and must be
 a positive integer. These limits apply per tool; `make -j` can run the C and

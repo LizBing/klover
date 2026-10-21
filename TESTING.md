@@ -104,7 +104,8 @@ Examples covered by the suite include:
 - All legal `dup` forms, invalid stack shapes, wide local overlap, typed returns.
 - Taken/untaken branches, loops, dense/sparse switches, and budget resumption.
 - Loader errors, superclass loading, cache identity, and recovery from a missing superclass.
-- VM argument publication, repeated/concurrent initialization, and failed initialization.
+- VM argument publication, rejection of repeated initialization, concurrent
+  initialization, retry after failure, and reuse of independently initialized metaspace.
 - Heap payload zeroing, exact capacity, OOM state preservation, and concurrent non-overlap.
 - Virtual-space rounding/accounting, overflow rejection, and preserving occupied mappings.
 
@@ -121,7 +122,8 @@ while borrowed, and E0502 for mutation during a shared borrow. Unexpected error
 codes or unexpectedly successful compilation fail the target. Production type
 definitions are not copied or made public.
 
-Passing tests establish the supported subset, not complete JVM conformance.
+See [README.md](README.md#current-capabilities) for the supported execution
+subset and its limits. Passing tests do not establish complete JVM conformance.
 Tracing/reclamation, object instructions, method-call bytecodes, class
 initialization, verification, and Java exceptions need tests as they become
 implemented. Reference identity checks currently cover null references; the
@@ -149,25 +151,39 @@ the C sanitizer target on Linux. CI uses the same Make targets as local testing,
 with job-level deadlines. The workflow takes effect when these changes are
 pushed; local verification does not establish that hosted jobs have passed.
 
-## Known runtime regression requiring a separate domain change
+## VM initialization contract
 
-`tests::vm_lifecycle::retry_after_failed_gc_initialization` is explicitly ignored
-in the default suite. It is a reproducer, not an implementation requirement that
-has been silently removed. `vm::try_init` documents that initialized metaspace
-may be reused after native GC initialization fails, but its next call currently
-returns `Metaspace(AlreadyInitialized)`.
+`vm::try_init` publishes the VM arguments only after metaspace and the native
+heap initialize successfully. Every returned error gives the caller ownership
+of the submitted arguments. Metaspace may already be available from independent
+allocator use or a previous attempt whose native heap initialization failed.
+It is reused without discarding existing allocations.
 
-Reproduce it independently:
+Once VM initialization succeeds, another call returns `AlreadyInitialized`,
+whether its arguments are identical or different. Rejected calls preserve the
+published arguments. Concurrent VM initialization permits exactly one success.
+This contract covers initialization; it does not provide VM shutdown, reset,
+or multiple VM instances within a process.
+
+The lifecycle regressions are required in both debug and release suites:
+
+| Scenario | Required result |
+| --- | --- |
+| Successful initialization | Publish the successful arguments; reject identical and different subsequent requests |
+| Failed native heap initialization | Return `GcInitFailed` and the submitted arguments without publishing a VM |
+| Retry after failed native heap initialization | Reuse metaspace, publish the retry's arguments, then reject further initialization |
+| Independently initialized metaspace | Start the VM while preserving existing allocations and permitting further allocation |
+| Concurrent initialization | Exactly one caller succeeds; the others receive `AlreadyInitialized` |
+
+Run the lifecycle tests without Java fixtures:
 
 ```sh
 make build-core
 cargo test --manifest-path rust/Cargo.toml --locked --target-dir build/cargo \
-  --lib tests::vm_lifecycle::retry_after_failed_gc_initialization -- --ignored --exact
+  --lib tests::vm_lifecycle
 ```
 
-This command currently must fail. Fixing it requires deciding how VM-owned
-initialization should distinguish reusable metaspace from a completed VM.
-Changing that runtime logic is outside this test-system implementation. After
-the domain contract and fix are approved, remove the ignore attribute and make
-the regression mandatory. Do not use blanket `--include-ignored` in required CI
-until that issue is resolved.
+To select only the retry regression, replace the filter with
+`tests::vm_lifecycle::retry_after_failed_gc_initialization` and append
+`-- --exact`. No `--ignored` flag is needed. For release, build the C core with
+`PROFILE=release` and add `--release` to the Cargo command.
