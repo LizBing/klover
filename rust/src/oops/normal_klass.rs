@@ -1,9 +1,21 @@
-use crate::{class_loader::oop_storage::OOPStorage, oops::oops_errors::LinkageResult, runtime::ms_api::{MsAllocator, MsBox}};
 use std::ops::Deref;
 
-pub use cafebabe::ClassAccessFlags;
+use crate::{
+    class_loader::oop_storage::OOPStorage,
+    class_parser::ClassImage,
+    oops::oops_errors::LinkageResult,
+    runtime::ms_api::{MsAllocator, MsBox},
+};
 
-use crate::{class_loader::{bs_cld::BootstrapCLD, class_loader_data::ClassLoaderData}, oops::{method::Method, oops_errors::LinkageError, symbol_table::{SymbolHandle, SymbolTable}}};
+pub(crate) use crate::class_parser::ClassAccessFlags;
+
+use crate::{
+    class_loader::{bs_cld::BootstrapCLD, class_loader_data::ClassLoaderData},
+    oops::{
+        method::Method,
+        symbol_table::{SymbolHandle, SymbolTable},
+    },
+};
 
 fn get_msa<'cld>(cld: Option<&'cld ClassLoaderData<'cld>>) -> &'cld MsAllocator {
     match cld {
@@ -31,26 +43,26 @@ pub struct UnlinkedNormalKlass<'cld> {
 }
 
 impl<'cld> UnlinkedNormalKlass<'cld> {
-    pub fn build(cf: cafebabe::ClassFile, cld: Option<&'cld ClassLoaderData<'cld>>) -> Self {
+    pub fn build(cf: ClassImage, cld: Option<&'cld ClassLoaderData<'cld>>) -> Self {
         let msa = get_msa(cld);
         let storage = get_storage(cld);
 
-        let name = SymbolTable::intern(&cf.this_class);
-        let super_name = cf.super_class.map(|n| SymbolTable::intern(&n));
+        let name = SymbolTable::intern(cf.this_class_name());
+        let super_name = cf.super_class_name().map(|name| SymbolTable::intern(name));
 
-        let mut ifaces = Vec::with_capacity(cf.interfaces.len());
-        for iface in cf.interfaces {
-            ifaces.push(SymbolTable::intern(&iface));
+        let mut ifaces = Vec::with_capacity(cf.interfaces().len());
+        for iface in cf.interfaces() {
+            ifaces.push(SymbolTable::intern(iface));
         }
 
-        let mut methods = MsBox::new_uninit_slice(msa, cf.methods.len());
-        for (i, v) in cf.methods.iter().enumerate() {
-            methods[i].write(Method::build(v, msa, storage));
+        let mut methods = MsBox::new_uninit_slice(msa, cf.methods().len());
+        for (i, method) in cf.methods().iter().enumerate() {
+            methods[i].write(Method::build(method, msa, storage));
         }
 
         Self {
             name,
-            acc_flags: cf.access_flags,
+            acc_flags: cf.access_flags(),
             cld,
             super_name,
             interfaces: ifaces.into(),
@@ -71,7 +83,10 @@ pub struct NormalKlass<'cld> {
 }
 
 impl<'cld> NormalKlass<'cld> {
-    pub fn link(unlinked: UnlinkedNormalKlass<'cld>, super_klass: Option<&'cld NormalKlass<'cld>>) -> LinkageResult<Self> {
+    pub fn link(
+        unlinked: UnlinkedNormalKlass<'cld>,
+        super_klass: Option<&'cld NormalKlass<'cld>>,
+    ) -> LinkageResult<Self> {
         let cld = unlinked.cld;
 
         Ok(Self {

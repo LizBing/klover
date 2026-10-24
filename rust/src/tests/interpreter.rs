@@ -1,4 +1,6 @@
-use crate::tests::support::{assert_value, class_bytes, ensure_metaspace, parse_class, run_method};
+use crate::tests::support::{
+    assert_value, class_bytes, class_bytes_with_flags, ensure_metaspace, parse_class, run_method,
+};
 use crate::{
     class_loader::class_loader_data::ClassLoaderData,
     code::instructions::{
@@ -159,23 +161,12 @@ fn frame_accepts_no_arguments_with_zero_locals() {
 
 #[test]
 fn frame_counts_the_receiver_as_one_local_slot() {
-    use crate::oops::{
-        method::MethodAccessFlags,
-        normal_klass::{NormalKlass, UnlinkedNormalKlass},
-    };
-
     ensure_metaspace();
     let arena = MsAllocator::new();
     let cld = ClassLoaderData::new(&arena);
     for max_locals in [2, 3] {
-        let bytes = class_bytes("(J)V", &[0xb1], 2, max_locals);
-        let mut options = cafebabe::ParseOptions::default();
-        options.parse_bytecode(true);
-        let mut parsed = cafebabe::parse_class_with_options(&bytes, &options).unwrap();
-        parsed.methods[0]
-            .access_flags
-            .remove(MethodAccessFlags::STATIC);
-        let owner = NormalKlass::link(UnlinkedNormalKlass::build(parsed, Some(&cld)), None).unwrap();
+        let bytes = class_bytes_with_flags("(J)V", &[0xb1], 2, max_locals, 0x1);
+        let owner = parse_class(&cld, &bytes);
         let args = [JValue::Ref(NObjPtr::null()), JValue::Long(42)];
         let call = Invocation::try_new(&owner, "test", "(J)V", &args).unwrap();
         let result = InterpreterFrame::try_new(call);

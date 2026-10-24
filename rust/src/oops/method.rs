@@ -1,6 +1,15 @@
-pub use cafebabe::MethodAccessFlags;
+pub(crate) use crate::class_parser::MethodAccessFlags;
 
-use crate::{class_loader::oop_storage::OOPStorage, code::code::Code, oops::{desc::MethodDesc, symbol_table::{SymbolHandle, SymbolTable}}, runtime::ms_api::MsAllocator};
+use crate::{
+    class_loader::oop_storage::OOPStorage,
+    class_parser::MethodInfo,
+    code::code::Code,
+    oops::{
+        desc::MethodDesc,
+        symbol_table::{SymbolHandle, SymbolTable},
+    },
+    runtime::ms_api::MsAllocator,
+};
 
 #[derive(Debug)]
 pub struct Method<'klass> {
@@ -14,16 +23,11 @@ pub struct Method<'klass> {
 }
 
 impl<'klass> Method<'klass> {
-    pub(super) fn build(info: &cafebabe::MethodInfo, msa: &'klass MsAllocator, storage: &OOPStorage) -> Self {
+    pub(super) fn build(info: &MethodInfo, msa: &'klass MsAllocator, storage: &OOPStorage) -> Self {
         let name = SymbolTable::intern(&info.name);
         let desc = MethodDesc::build(&info.descriptor, msa);
 
-        let mut code = None;
-        for attr in &info.attributes {
-            if let cafebabe::attributes::AttributeData::Code(cd) = &attr.data {
-                code = Some(Code::build(cd, msa, storage));
-            }
-        }
+        let code = info.code.as_ref().map(|cd| Code::build(cd, msa, storage));
 
         Self {
             _private: (),

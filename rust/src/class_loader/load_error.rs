@@ -1,4 +1,4 @@
-use crate::oops::oops_errors::LinkageError;
+use crate::{class_parser::ParseError, oops::oops_errors::LinkageError};
 
 #[derive(Debug)]
 pub enum LoadErrorKind {
@@ -6,7 +6,7 @@ pub enum LoadErrorKind {
 
     Duplicated,
 
-    Parse(cafebabe::ParseError),
+    Parse(ParseError),
 
     Linkage(LinkageError),
 }
@@ -14,7 +14,7 @@ pub enum LoadErrorKind {
 #[derive(Debug)]
 pub struct LoadError {
     _private: (),
-    
+
     pub cld_name: Option<String>,
     pub klass_name: String,
     pub kind: LoadErrorKind,

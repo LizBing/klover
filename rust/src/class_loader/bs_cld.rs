@@ -1,8 +1,21 @@
-use std::{collections::HashMap, sync::LazyLock};
+use std::sync::LazyLock;
 
-use dashmap::{DashMap, Entry};
+use dashmap::DashMap;
 
-use crate::{class_loader::{class_path::ClassPath, class_slot::ClassSlot, load_error::{LoadError, LoadErrorKind, LoadResult}, oop_storage::OOPStorage}, oops::{klass::Klass, normal_klass::{NormalKlass, UnlinkedNormalKlass}, symbol_table::SymbolHandle}, runtime::ms_api::{MsAllocator, MsBox}};
+use crate::{
+    class_loader::{
+        class_path::ClassPath,
+        load_error::{LoadError, LoadErrorKind, LoadResult},
+        oop_storage::OOPStorage,
+    },
+    class_parser::parse_class,
+    oops::{
+        klass::Klass,
+        normal_klass::{NormalKlass, UnlinkedNormalKlass},
+        symbol_table::SymbolHandle,
+    },
+    runtime::ms_api::{MsAllocator, MsBox},
+};
 
 pub struct BootstrapCLD;
 
@@ -52,17 +65,14 @@ impl BootstrapCLD {
     }
 
     fn define_class(name: &SymbolHandle, bytes: &[u8]) -> LoadResult<&'static Klass<'static>> {
-        let mut parse_option = cafebabe::ParseOptions::default();
-        parse_option.parse_bytecode(true);
-
-        let cf = cafebabe::parse_class_with_options(bytes, &parse_option)
-            .map_err(|e| Self::make_load_error(name, LoadErrorKind::Parse(e)))?;
+        let cf =
+            parse_class(bytes).map_err(|e| Self::make_load_error(name, LoadErrorKind::Parse(e)))?;
 
         let unlinked = UnlinkedNormalKlass::build(cf, None);
 
         let super_name = unlinked.super_name.as_ref();
         let super_klass = match super_name {
-            Some(n) => Some(Self::find_normal_klass(&n)?),
+            Some(n) => Some(Self::find_normal_klass(n)?),
             None => None,
         };
 

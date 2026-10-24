@@ -1,12 +1,11 @@
 use crate::{
+    class_parser::{FieldDescriptor as ParsedFieldDescriptor, FieldType, MethodDescriptor},
     oops::{
         jvalue::JValue,
         symbol_table::{SymbolHandle, SymbolTable},
     },
     runtime::ms_api::{MsAllocator, MsBox},
 };
-use cafebabe::descriptors::FieldType::*;
-use cafebabe::descriptors::ReturnDescriptor::*;
 
 #[derive(Debug)]
 pub enum ElemDesc {
@@ -54,25 +53,25 @@ impl FieldDesc {
     }
 }
 
-impl From<&cafebabe::descriptors::FieldDescriptor<'_>> for FieldDesc {
-    fn from(value: &cafebabe::descriptors::FieldDescriptor) -> Self {
-        let raw = SymbolTable::intern(&value.to_string());
+impl From<&ParsedFieldDescriptor> for FieldDesc {
+    fn from(value: &ParsedFieldDescriptor) -> Self {
+        let raw = SymbolTable::intern(value.raw());
 
-        let elem = match &value.field_type {
-            Boolean => ElemDesc::Boolean,
-            Byte => ElemDesc::Byte,
-            Char => ElemDesc::Char,
-            Double => ElemDesc::Double,
-            Float => ElemDesc::Float,
-            Integer => ElemDesc::Int,
-            Long => ElemDesc::Long,
-            Short => ElemDesc::Short,
-            Object(cn) => ElemDesc::Class(SymbolTable::intern(cn)),
+        let elem = match value.element() {
+            FieldType::Boolean => ElemDesc::Boolean,
+            FieldType::Byte => ElemDesc::Byte,
+            FieldType::Char => ElemDesc::Char,
+            FieldType::Double => ElemDesc::Double,
+            FieldType::Float => ElemDesc::Float,
+            FieldType::Int => ElemDesc::Int,
+            FieldType::Long => ElemDesc::Long,
+            FieldType::Short => ElemDesc::Short,
+            FieldType::Object(name) => ElemDesc::Class(SymbolTable::intern(name)),
         };
 
         Self {
             raw,
-            dimensions: value.dimensions as usize,
+            dimensions: value.dimensions() as usize,
             elem,
         }
     }
@@ -100,15 +99,15 @@ impl<'a> MethodDesc<'a> {
         &self.args
     }
 
-    pub fn build(parsed: &cafebabe::descriptors::MethodDescriptor, msa: &'a MsAllocator) -> Self {
-        let raw = SymbolTable::intern(&parsed.to_string());
-        let ret = match &parsed.return_type {
-            Void => ReturnDesc::Void,
-            Return(fd) => ReturnDesc::Type(FieldDesc::from(fd)),
+    pub fn build(parsed: &MethodDescriptor, msa: &'a MsAllocator) -> Self {
+        let raw = SymbolTable::intern(parsed.raw());
+        let ret = match parsed.return_type() {
+            None => ReturnDesc::Void,
+            Some(fd) => ReturnDesc::Type(FieldDesc::from(fd)),
         };
 
-        let mut args = MsBox::new_uninit_slice(msa, parsed.parameters.len());
-        for (i, v) in parsed.parameters.iter().enumerate() {
+        let mut args = MsBox::new_uninit_slice(msa, parsed.parameters().len());
+        for (i, v) in parsed.parameters().iter().enumerate() {
             args[i].write(FieldDesc::from(v));
         }
 
@@ -117,9 +116,5 @@ impl<'a> MethodDesc<'a> {
             ret,
             args: unsafe { args.assume_init() },
         }
-    }
-
-    pub fn parse(raw: &str, msa: &MsAllocator) -> Option<Self> {
-        unimplemented!()
     }
 }

@@ -1,5 +1,10 @@
 use crate::{
-    class_loader::oop_storage::OOPStorage, oops::{constant_entries::{LdC2Loadable, LdCLoadable}, jvalue::{JByte, JDouble, JFloat, JInt, JLong, JShort}}, runtime::ms_api::{MsAllocator, MsBox},
+    class_loader::oop_storage::OOPStorage,
+    oops::{
+        constant_entries::{LdC2Loadable, LdCLoadable},
+        jvalue::{JByte, JDouble, JFloat, JInt, JLong, JShort},
+    },
+    runtime::ms_api::{MsAllocator, MsBox},
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -182,65 +187,55 @@ pub enum Instruction<'inst> {
     Unsupported,
 }
 
-use cafebabe::bytecode::{ByteCode, Opcode};
+use crate::class_parser::{Bytecode, LoadableConstant, Opcode};
 
 impl<'inst> Instruction<'inst> {
     // Code keeps a one-to-one correspondence with the parser's opcode array.
-    pub(super) fn lower(bytecodes: &ByteCode<'_>, opcode_idx: usize, msa: &'inst MsAllocator, _storage: &OOPStorage) -> Self {
+    pub(super) fn lower(
+        bytecodes: &Bytecode,
+        opcode_idx: usize,
+        msa: &'inst MsAllocator,
+        _storage: &OOPStorage,
+    ) -> Self {
         let (bci, opcode) = &bytecodes.opcodes[opcode_idx];
         let target = |offset: i32| {
             let bci = usize::try_from(*bci as i64 + i64::from(offset))
-                .expect("cafebabe validated the branch address");
+                .expect("class parser validated the branch address");
             InstIdx(
                 bytecodes
-                    .get_opcode_index(bci)
-                    .expect("cafebabe validated the branch instruction boundary"),
+                    .get_opcode_index(bci as u32)
+                    .expect("class parser validated the branch instruction boundary"),
             )
         };
         match opcode {
             Opcode::Nop => Self::NOp,
             Opcode::AconstNull => Self::AConstNull,
-            Opcode::Iconst0 => Self::IConst(0),
-            Opcode::Iconst1 => Self::IConst(1),
-            Opcode::Iconst2 => Self::IConst(2),
-            Opcode::Iconst3 => Self::IConst(3),
-            Opcode::Iconst4 => Self::IConst(4),
-            Opcode::Iconst5 => Self::IConst(5),
-            Opcode::Lconst0 => Self::LConst(0),
-            Opcode::Lconst1 => Self::LConst(1),
-            Opcode::Fconst0 => Self::FConst(0.0),
-            Opcode::Fconst1 => Self::FConst(1.0),
-            Opcode::Fconst2 => Self::FConst(2.0),
-            Opcode::Dconst0 => Self::DConst(0.0),
-            Opcode::Dconst1 => Self::DConst(1.0),
-            Opcode::IconstM1 => Self::IConst(-1),
-            Opcode::Bipush(v) => Self::BIPush(*v),
-            Opcode::Sipush(v) => Self::SIPush(*v),
-            Opcode::Ldc(loadable) => match loadable {
-                cafebabe::constant_pool::Loadable::LiteralConstant(cafebabe::constant_pool::LiteralConstant::Integer(i)) => Self::LdC(LdCLoadable::Integer(*i)),
-                cafebabe::constant_pool::Loadable::LiteralConstant(cafebabe::constant_pool::LiteralConstant::Float(f)) => Self::LdC(LdCLoadable::Float(*f)),
+            Opcode::Iconst(value) => Self::IConst(*value),
+            Opcode::Lconst(value) => Self::LConst(*value),
+            Opcode::Fconst(value) => Self::FConst(*value),
+            Opcode::Dconst(value) => Self::DConst(*value),
+            Opcode::Bipush(value) => Self::BIPush(*value),
+            Opcode::Sipush(value) => Self::SIPush(*value),
+            Opcode::Ldc(loadable) | Opcode::LdcW(loadable) => match loadable.as_ref() {
+                LoadableConstant::Integer(value) => Self::LdC(LdCLoadable::Integer(*value)),
+                LoadableConstant::Float(value) => Self::LdC(LdCLoadable::Float(*value)),
                 _ => Self::Unsupported,
             },
-            Opcode::LdcW(loadable) => match loadable {
-                cafebabe::constant_pool::Loadable::LiteralConstant(cafebabe::constant_pool::LiteralConstant::Integer(i)) => Self::LdC(LdCLoadable::Integer(*i)),
-                cafebabe::constant_pool::Loadable::LiteralConstant(cafebabe::constant_pool::LiteralConstant::Float(f)) => Self::LdC(LdCLoadable::Float(*f)),
+            Opcode::Ldc2W(loadable) => match loadable.as_ref() {
+                LoadableConstant::Long(value) => Self::LdC2(LdC2Loadable::Long(*value)),
+                LoadableConstant::Double(value) => Self::LdC2(LdC2Loadable::Double(*value)),
                 _ => Self::Unsupported,
             },
-            Opcode::Ldc2W(loadable) => match loadable {
-                cafebabe::constant_pool::Loadable::LiteralConstant(cafebabe::constant_pool::LiteralConstant::Long(l)) => Self::LdC2(LdC2Loadable::Long(*l)),
-                cafebabe::constant_pool::Loadable::LiteralConstant(cafebabe::constant_pool::LiteralConstant::Double(d)) => Self::LdC2(LdC2Loadable::Double(*d)),
-                _ => unreachable!("Impossible LdC2 variant"),
-            },
-            Opcode::Iload(idx) => Self::ILoad(LocalIdx(*idx as usize)),
-            Opcode::Istore(idx) => Self::IStore(LocalIdx(*idx as usize)),
-            Opcode::Lload(idx) => Self::LLoad(LocalIdx(*idx as usize)),
-            Opcode::Lstore(idx) => Self::LStore(LocalIdx(*idx as usize)),
-            Opcode::Fload(idx) => Self::FLoad(LocalIdx(*idx as usize)),
-            Opcode::Fstore(idx) => Self::FStore(LocalIdx(*idx as usize)),
-            Opcode::Dload(idx) => Self::DLoad(LocalIdx(*idx as usize)),
-            Opcode::Dstore(idx) => Self::DStore(LocalIdx(*idx as usize)),
-            Opcode::Aload(idx) => Self::ALoad(LocalIdx(*idx as usize)),
-            Opcode::Astore(idx) => Self::AStore(LocalIdx(*idx as usize)),
+            Opcode::Iload(index) => Self::ILoad(LocalIdx(*index as usize)),
+            Opcode::Istore(index) => Self::IStore(LocalIdx(*index as usize)),
+            Opcode::Lload(index) => Self::LLoad(LocalIdx(*index as usize)),
+            Opcode::Lstore(index) => Self::LStore(LocalIdx(*index as usize)),
+            Opcode::Fload(index) => Self::FLoad(LocalIdx(*index as usize)),
+            Opcode::Fstore(index) => Self::FStore(LocalIdx(*index as usize)),
+            Opcode::Dload(index) => Self::DLoad(LocalIdx(*index as usize)),
+            Opcode::Dstore(index) => Self::DStore(LocalIdx(*index as usize)),
+            Opcode::Aload(index) => Self::ALoad(LocalIdx(*index as usize)),
+            Opcode::Astore(index) => Self::AStore(LocalIdx(*index as usize)),
             Opcode::Pop => Self::Pop,
             Opcode::Pop2 => Self::Pop2,
             Opcode::Dup => Self::Dup,
@@ -250,111 +245,124 @@ impl<'inst> Instruction<'inst> {
             Opcode::Dup2X1 => Self::Dup2X1,
             Opcode::Dup2X2 => Self::Dup2X2,
             Opcode::Swap => Self::Swap,
-            Opcode::Iadd => Self::IAdd,
-            Opcode::Ladd => Self::LAdd,
-            Opcode::Fadd => Self::FAdd,
-            Opcode::Dadd => Self::DAdd,
-            Opcode::Isub => Self::ISub,
-            Opcode::Lsub => Self::LSub,
-            Opcode::Fsub => Self::FSub,
-            Opcode::Dsub => Self::DSub,
-            Opcode::Imul => Self::IMul,
-            Opcode::Lmul => Self::LMul,
-            Opcode::Fmul => Self::FMul,
-            Opcode::Dmul => Self::DMul,
-            Opcode::Idiv => Self::IDiv,
-            Opcode::Ldiv => Self::LDiv,
-            Opcode::Fdiv => Self::FDiv,
-            Opcode::Ddiv => Self::DDiv,
-            Opcode::Irem => Self::IRem,
-            Opcode::Lrem => Self::LRem,
-            Opcode::Frem => Self::FRem,
-            Opcode::Drem => Self::DRem,
-            Opcode::Ineg => Self::INeg,
-            Opcode::Lneg => Self::LNeg,
-            Opcode::Fneg => Self::FNeg,
-            Opcode::Dneg => Self::DNeg,
-            Opcode::Ishl => Self::IShL,
-            Opcode::Lshl => Self::LShL,
-            Opcode::Ishr => Self::IShR,
-            Opcode::Lshr => Self::LShR,
-            Opcode::Iushr => Self::IUShR,
-            Opcode::Lushr => Self::LUShR,
-            Opcode::Iand => Self::IAnd,
-            Opcode::Land => Self::LAnd,
-            Opcode::Ior => Self::IOr,
-            Opcode::Lor => Self::LOr,
-            Opcode::Ixor => Self::IXor,
-            Opcode::Lxor => Self::LXor,
-            Opcode::Iinc(idx, amount) => Self::IInc(LocalIdx(*idx as usize), *amount),
-            Opcode::I2l => Self::I2L,
-            Opcode::I2f => Self::I2F,
-            Opcode::I2d => Self::I2D,
-            Opcode::L2i => Self::L2I,
-            Opcode::L2f => Self::L2F,
-            Opcode::L2d => Self::L2D,
-            Opcode::F2i => Self::F2I,
-            Opcode::F2l => Self::F2L,
-            Opcode::F2d => Self::F2D,
-            Opcode::D2i => Self::D2I,
-            Opcode::D2l => Self::D2L,
-            Opcode::D2f => Self::D2F,
-            Opcode::I2b => Self::I2B,
-            Opcode::I2c => Self::I2C,
-            Opcode::I2s => Self::I2S,
-            Opcode::Lcmp => Self::LCmp,
-            Opcode::Fcmpl => Self::FCmpL,
-            Opcode::Fcmpg => Self::FCmpG,
-            Opcode::Dcmpl => Self::DCmpL,
-            Opcode::Dcmpg => Self::DCmpG,
-            Opcode::Ifeq(offset) => Self::IfEq(target(*offset)),
-            Opcode::IfIcmpeq(offset) => Self::IfICmpEq(target(*offset)),
-            Opcode::Ifne(offset) => Self::IfNe(target(*offset)),
-            Opcode::IfIcmpne(offset) => Self::IfICmpNe(target(*offset)),
-            Opcode::Iflt(offset) => Self::IfLt(target(*offset)),
-            Opcode::IfIcmplt(offset) => Self::IfICmpLt(target(*offset)),
-            Opcode::Ifge(offset) => Self::IfGe(target(*offset)),
-            Opcode::IfIcmpge(offset) => Self::IfICmpGe(target(*offset)),
-            Opcode::Ifgt(offset) => Self::IfGt(target(*offset)),
-            Opcode::IfIcmpgt(offset) => Self::IfICmpGt(target(*offset)),
-            Opcode::Ifle(offset) => Self::IfLe(target(*offset)),
-            Opcode::IfIcmple(offset) => Self::IfICmpLe(target(*offset)),
-            Opcode::IfAcmpeq(offset) => Self::IfACmpEq(target(*offset)),
-            Opcode::IfAcmpne(offset) => Self::IfACmpNe(target(*offset)),
-            Opcode::Ifnull(offset) => Self::IfNull(target(*offset)),
-            Opcode::Ifnonnull(offset) => Self::IfNonNull(target(*offset)),
+            Opcode::IAdd => Self::IAdd,
+            Opcode::LAdd => Self::LAdd,
+            Opcode::FAdd => Self::FAdd,
+            Opcode::DAdd => Self::DAdd,
+            Opcode::ISub => Self::ISub,
+            Opcode::LSub => Self::LSub,
+            Opcode::FSub => Self::FSub,
+            Opcode::DSub => Self::DSub,
+            Opcode::IMul => Self::IMul,
+            Opcode::LMul => Self::LMul,
+            Opcode::FMul => Self::FMul,
+            Opcode::DMul => Self::DMul,
+            Opcode::IDiv => Self::IDiv,
+            Opcode::LDiv => Self::LDiv,
+            Opcode::FDiv => Self::FDiv,
+            Opcode::DDiv => Self::DDiv,
+            Opcode::IRem => Self::IRem,
+            Opcode::LRem => Self::LRem,
+            Opcode::FRem => Self::FRem,
+            Opcode::DRem => Self::DRem,
+            Opcode::INeg => Self::INeg,
+            Opcode::LNeg => Self::LNeg,
+            Opcode::FNeg => Self::FNeg,
+            Opcode::DNeg => Self::DNeg,
+            Opcode::IShL => Self::IShL,
+            Opcode::LShL => Self::LShL,
+            Opcode::IShR => Self::IShR,
+            Opcode::LShR => Self::LShR,
+            Opcode::IUShR => Self::IUShR,
+            Opcode::LUShR => Self::LUShR,
+            Opcode::IAnd => Self::IAnd,
+            Opcode::LAnd => Self::LAnd,
+            Opcode::IOr => Self::IOr,
+            Opcode::LOr => Self::LOr,
+            Opcode::IXor => Self::IXor,
+            Opcode::LXor => Self::LXor,
+            Opcode::IInc(index, amount) => Self::IInc(LocalIdx(*index as usize), *amount),
+            Opcode::I2L => Self::I2L,
+            Opcode::I2F => Self::I2F,
+            Opcode::I2D => Self::I2D,
+            Opcode::L2I => Self::L2I,
+            Opcode::L2F => Self::L2F,
+            Opcode::L2D => Self::L2D,
+            Opcode::F2I => Self::F2I,
+            Opcode::F2L => Self::F2L,
+            Opcode::F2D => Self::F2D,
+            Opcode::D2I => Self::D2I,
+            Opcode::D2L => Self::D2L,
+            Opcode::D2F => Self::D2F,
+            Opcode::I2B => Self::I2B,
+            Opcode::I2C => Self::I2C,
+            Opcode::I2S => Self::I2S,
+            Opcode::LCmp => Self::LCmp,
+            Opcode::FCmpL => Self::FCmpL,
+            Opcode::FCmpG => Self::FCmpG,
+            Opcode::DCmpL => Self::DCmpL,
+            Opcode::DCmpG => Self::DCmpG,
+            Opcode::IfEq(offset) => Self::IfEq(target(*offset)),
+            Opcode::IfICmpEq(offset) => Self::IfICmpEq(target(*offset)),
+            Opcode::IfNe(offset) => Self::IfNe(target(*offset)),
+            Opcode::IfICmpNe(offset) => Self::IfICmpNe(target(*offset)),
+            Opcode::IfLt(offset) => Self::IfLt(target(*offset)),
+            Opcode::IfICmpLt(offset) => Self::IfICmpLt(target(*offset)),
+            Opcode::IfGe(offset) => Self::IfGe(target(*offset)),
+            Opcode::IfICmpGe(offset) => Self::IfICmpGe(target(*offset)),
+            Opcode::IfGt(offset) => Self::IfGt(target(*offset)),
+            Opcode::IfICmpGt(offset) => Self::IfICmpGt(target(*offset)),
+            Opcode::IfLe(offset) => Self::IfLe(target(*offset)),
+            Opcode::IfICmpLe(offset) => Self::IfICmpLe(target(*offset)),
+            Opcode::IfACmpEq(offset) => Self::IfACmpEq(target(*offset)),
+            Opcode::IfACmpNe(offset) => Self::IfACmpNe(target(*offset)),
+            Opcode::IfNull(offset) => Self::IfNull(target(*offset)),
+            Opcode::IfNonNull(offset) => Self::IfNonNull(target(*offset)),
             Opcode::Goto(offset) => Self::Goto(target(*offset)),
-            Opcode::Tableswitch(rt) => {
-                let mut jumps = MsBox::new_uninit_slice(msa, rt.jumps.len());
-                for (slot, offset) in jumps.iter_mut().zip(&rt.jumps) {
+            Opcode::TableSwitch(table) => {
+                let mut jumps = MsBox::new_uninit_slice(msa, table.jumps.len());
+                for (slot, offset) in jumps.iter_mut().zip(&table.jumps) {
                     slot.write(target(*offset));
                 }
                 Self::TableSwitch(RangeTable {
-                    default: target(rt.default),
-                    low: rt.low,
-                    high: rt.high,
-                    // Every slot was initialized above; targets contain no
-                    // resources requiring destruction when the arena is freed.
+                    default: target(table.default),
+                    low: table.low,
+                    high: table.high,
+                    // Every slot is initialized; targets contain no resources.
                     jumps: unsafe { jumps.assume_init() }.leak(),
                 })
             }
-            Opcode::Lookupswitch(lt) => {
-                let mut pairs = MsBox::new_uninit_slice(msa, lt.match_offsets.len());
-                for (slot, (key, offset)) in pairs.iter_mut().zip(&lt.match_offsets) {
+            Opcode::LookupSwitch(table) => {
+                let mut pairs = MsBox::new_uninit_slice(msa, table.match_offsets.len());
+                for (slot, (key, offset)) in pairs.iter_mut().zip(&table.match_offsets) {
                     slot.write((*key, target(*offset)));
                 }
                 Self::LookUpSwitch(LookupTable {
-                    default: target(lt.default),
+                    default: target(table.default),
                     pairs: unsafe { pairs.assume_init() }.leak(),
                 })
             }
-            Opcode::Ireturn => Self::IReturn,
-            Opcode::Lreturn => Self::LReturn,
-            Opcode::Freturn => Self::FReturn,
-            Opcode::Dreturn => Self::DReturn,
-            Opcode::Areturn => Self::AReturn,
+            Opcode::IReturn => Self::IReturn,
+            Opcode::LReturn => Self::LReturn,
+            Opcode::FReturn => Self::FReturn,
+            Opcode::DReturn => Self::DReturn,
+            Opcode::AReturn => Self::AReturn,
             Opcode::Return => Self::Return,
-            _ => Self::Unsupported,
+            Opcode::GetStatic(_)
+            | Opcode::PutStatic(_)
+            | Opcode::GetField(_)
+            | Opcode::PutField(_)
+            | Opcode::InvokeVirtual(_)
+            | Opcode::InvokeSpecial(_)
+            | Opcode::InvokeStatic(_)
+            | Opcode::InvokeInterface { .. }
+            | Opcode::InvokeDynamic(_)
+            | Opcode::New(_)
+            | Opcode::Anewarray(_)
+            | Opcode::Checkcast(_)
+            | Opcode::Instanceof(_)
+            | Opcode::Multianewarray { .. }
+            | Opcode::Unsupported(_) => Self::Unsupported,
         }
     }
 }
@@ -370,15 +378,15 @@ mod tests {
         let msa = BootstrapCLD::ms_allocator();
         let storage = OOPStorage::new(msa);
 
-        let code = ByteCode {
+        let code = Bytecode {
             opcodes: vec![
                 (0, Opcode::Bipush(10)),
                 (2, Opcode::Istore(0)),
                 (3, Opcode::Goto(5)),
                 (6, Opcode::Bipush(20)),
                 (8, Opcode::Iload(0)),
-                (9, Opcode::Ifne(-9)),
-                (12, Opcode::Ireturn),
+                (9, Opcode::IfNe(-9)),
+                (12, Opcode::IReturn),
             ],
         };
         assert!(matches!(
@@ -389,8 +397,8 @@ mod tests {
             Instruction::lower(&code, 5, msa, &storage),
             Instruction::IfNe(InstIdx(0))
         ));
-        // goto_w is normalized by cafebabe to the same Opcode::Goto variant.
-        let wide = ByteCode {
+        // goto_w is normalized by the parser to the same Opcode::Goto variant.
+        let wide = Bytecode {
             opcodes: vec![(0, Opcode::Goto(40_000)), (40_000, Opcode::Return)],
         };
         assert!(matches!(
@@ -404,9 +412,9 @@ mod tests {
         let msa = BootstrapCLD::ms_allocator();
         let storage = OOPStorage::new(msa);
 
-        let code = ByteCode {
+        let code = Bytecode {
             opcodes: vec![
-                (0, Opcode::Iinc(300, -1000)),
+                (0, Opcode::IInc(300, -1000)),
                 (6, Opcode::Iload(300)),
                 (10, Opcode::Lstore(400)),
             ],
@@ -454,8 +462,12 @@ mod tests {
             Instruction::Dup2X2,
             Instruction::Swap,
         ];
-        let code = ByteCode {
-            opcodes: opcodes.into_iter().enumerate().collect(),
+        let code = Bytecode {
+            opcodes: opcodes
+                .into_iter()
+                .enumerate()
+                .map(|(i, op)| (i as u32, op))
+                .collect(),
         };
         for (idx, expected) in expected.iter().enumerate() {
             assert_eq!(

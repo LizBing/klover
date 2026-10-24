@@ -11,7 +11,7 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct Invocation<'metadata> {
     _private: (),
-    
+
     pub owner: &'metadata NormalKlass<'metadata>,
     pub method: &'metadata Method<'metadata>,
 
@@ -139,26 +139,29 @@ mod tests {
             // Class header; one method.
             u2(&mut bytes, value);
         }
-        for value in [if is_static { 0x0009 } else { 0x0001 }, 3, 4, 1] {
+        for value in [
+            if is_static { 0x0009 } else { 0x0001 },
+            3,
+            4,
+            if has_code { 1 } else { 0 },
+        ] {
             u2(&mut bytes, value);
         }
-        u2(&mut bytes, 5); // Code attribute.
-        bytes.extend_from_slice(&13u32.to_be_bytes());
-        u2(&mut bytes, 0); // max_stack.
-        u2(&mut bytes, 32); // max_locals, including wide parameters.
-        bytes.extend_from_slice(&1u32.to_be_bytes());
-        bytes.push(0xb1); // return.
-        for _ in 0..3 {
-            // Exception table, Code attributes, class attributes.
-            u2(&mut bytes, 0);
+        if has_code {
+            u2(&mut bytes, 5); // Code attribute.
+            bytes.extend_from_slice(&13u32.to_be_bytes());
+            u2(&mut bytes, 0); // max_stack.
+            u2(&mut bytes, 32); // max_locals, including wide parameters.
+            bytes.extend_from_slice(&1u32.to_be_bytes());
+            bytes.push(0xb1); // return.
+            for _ in 0..2 {
+                // Exception table and nested Code attributes.
+                u2(&mut bytes, 0);
+            }
         }
+        u2(&mut bytes, 0); // class attributes.
 
-        let mut options = cafebabe::ParseOptions::default();
-        options.parse_bytecode(true);
-        let mut cf = cafebabe::parse_class_with_options(&bytes, &options).unwrap();
-        if !has_code {
-            cf.methods[0].attributes.clear();
-        }
+        let cf = crate::class_parser::parse_class(&bytes).unwrap();
         NormalKlass::link(UnlinkedNormalKlass::build(cf, Some(cld)), None).unwrap()
     }
 

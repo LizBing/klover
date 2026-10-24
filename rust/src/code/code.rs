@@ -1,19 +1,22 @@
-use crate::{class_loader::oop_storage::OOPStorage, code::instructions::Instruction, runtime::ms_api::{MsAllocator, MsBox}};
+use crate::{
+    class_loader::oop_storage::OOPStorage,
+    class_parser::CodeData,
+    code::instructions::Instruction,
+    runtime::ms_api::{MsAllocator, MsBox},
+};
 
 #[derive(Debug)]
 pub struct Code<'method> {
     _private: (),
-    
+
     pub max_stack: usize,
     pub max_locals: usize,
     pub insts: &'method [Instruction<'method>],
 }
 
 impl<'method> Code<'method> {
-    pub fn build(cd: &cafebabe::attributes::CodeData, msa: &'method MsAllocator, storage: &OOPStorage) -> Self {
-        let bytecode = cd.bytecode
-            .as_ref()
-            .expect("Klover requires bytecode decoding to be enabled.");
+    pub fn build(cd: &CodeData, msa: &'method MsAllocator, storage: &OOPStorage) -> Self {
+        let bytecode = &cd.bytecode;
 
         let inst_count = bytecode.opcodes.len();
         let mut insts = MsBox::new_uninit_slice(msa, inst_count);

@@ -133,15 +133,23 @@ pub fn init_vm(path: PathBuf) {
 }
 
 pub fn parse_class<'a>(cld: &'a ClassLoaderData<'a>, bytes: &[u8]) -> NormalKlass<'a> {
-    let mut options = cafebabe::ParseOptions::default();
-    options.parse_bytecode(true);
-    let parsed = cafebabe::parse_class_with_options(bytes, &options).expect("parse test class");
+    let parsed = crate::class_parser::parse_class(bytes).expect("parse test class");
     NormalKlass::link(UnlinkedNormalKlass::build(parsed, Some(cld)), None).unwrap()
 }
 
 /// Minimal, single-method root class. Bytecode remains explicit at call sites.
 /// This deliberately does not implement a general class-file assembler.
 pub fn class_bytes(desc: &str, code: &[u8], max_stack: u16, max_locals: u16) -> Vec<u8> {
+    class_bytes_with_flags(desc, code, max_stack, max_locals, 0x9)
+}
+
+pub fn class_bytes_with_flags(
+    desc: &str,
+    code: &[u8],
+    max_stack: u16,
+    max_locals: u16,
+    method_flags: u16,
+) -> Vec<u8> {
     fn u2(out: &mut Vec<u8>, n: u16) {
         out.extend_from_slice(&n.to_be_bytes());
     }
@@ -158,7 +166,7 @@ pub fn class_bytes(desc: &str, code: &[u8], max_stack: u16, max_locals: u16) -> 
         u2(&mut out, text.len() as u16);
         out.extend_from_slice(text.as_bytes());
     }
-    for n in [0x21, 2, 0, 0, 0, 1, 0x9, 3, 4, 1, 5] {
+    for n in [0x21, 2, 0, 0, 0, 1, method_flags, 3, 4, 1, 5] {
         u2(&mut out, n);
     }
     out.extend_from_slice(&(12u32 + code.len() as u32).to_be_bytes());
