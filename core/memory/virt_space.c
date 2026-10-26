@@ -63,6 +63,16 @@ VirtSpace* create_virt_space(uintptr_t base, size_t size, bool exec) {
 #else
     flags |= MAP_ANON;
 #endif
+#ifdef MAP_NORESERVE
+    /*
+     * Reserve address space without charging the whole range against the
+     * system's commit limit.  Pages are committed lazily by vs_expand_by and
+     * first touch.  Without this, Linux's heuristic overcommit rejects the
+     * 32 GiB compressed-oops heap on hosts with less RAM, even when xmx is
+     * only a few megabytes.
+     */
+    flags |= MAP_NORESERVE;
+#endif
     
     /* Request base as a hint, so an occupied range can never be replaced.
      * Compressed pointers require this exact address: reject and release any
