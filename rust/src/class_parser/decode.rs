@@ -13,6 +13,7 @@ pub(super) struct RawClassImage<'a> {
     pub(super) interfaces: Vec<u16>,
     pub(super) fields: Vec<RawMember<'a>>,
     pub(super) methods: Vec<RawMember<'a>>,
+    pub(super) attributes: Vec<RawAttribute<'a>>,
 }
 
 pub(super) enum RawConstant<'a> {
@@ -71,7 +72,7 @@ pub(super) fn decode(bytes: &[u8]) -> ParseResult<RawClassImage<'_>> {
     let interfaces = read_u16_vec(&mut reader)?;
     let fields = read_members(&mut reader)?;
     let methods = read_members(&mut reader)?;
-    skip_attributes(&mut reader, &constant_pool)?;
+    let attributes = read_attributes(&mut reader)?;
 
     if !reader.is_empty() {
         return Err(ParseError::new(reader.pos(), ParseErrorKind::TrailingBytes));
@@ -87,6 +88,7 @@ pub(super) fn decode(bytes: &[u8]) -> ParseResult<RawClassImage<'_>> {
         interfaces,
         fields,
         methods,
+        attributes,
     })
 }
 
@@ -197,7 +199,9 @@ fn read_members<'a>(reader: &mut ByteReader<'a>) -> ParseResult<Vec<RawMember<'a
     Ok(members)
 }
 
-fn read_attributes<'a>(reader: &mut ByteReader<'a>) -> ParseResult<Vec<RawAttribute<'a>>> {
+pub(super) fn read_attributes<'a>(
+    reader: &mut ByteReader<'a>,
+) -> ParseResult<Vec<RawAttribute<'a>>> {
     let count = reader.read_u16()? as usize;
     let mut attributes = Vec::with_capacity(count);
     for _ in 0..count {
@@ -209,29 +213,4 @@ fn read_attributes<'a>(reader: &mut ByteReader<'a>) -> ParseResult<Vec<RawAttrib
         });
     }
     Ok(attributes)
-}
-
-fn skip_attributes<'a>(reader: &mut ByteReader<'a>, pool: &[RawConstant<'a>]) -> ParseResult<()> {
-    let count = reader.read_u16()? as usize;
-    for _ in 0..count {
-        let name_index = reader.read_u16()?;
-        match pool.get(name_index as usize) {
-            Some(RawConstant::Utf8 { .. }) => {}
-            Some(_) => {
-                return Err(ParseError::new(
-                    reader.pos(),
-                    ParseErrorKind::BadConstantPoolEntry("attribute name is not Utf8"),
-                ));
-            }
-            None => {
-                return Err(ParseError::new(
-                    reader.pos(),
-                    ParseErrorKind::BadConstantPoolIndex(name_index),
-                ));
-            }
-        }
-        let len = reader.read_u32()? as usize;
-        reader.skip(len)?;
-    }
-    Ok(())
 }

@@ -1,13 +1,12 @@
 //! JVM bytecode decoding and structural validation.
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use super::byte_reader::ByteReader;
 use super::constant_pool::{
-    ClassMemberRef, Constant, ConstantPool, InvokeDynamicConstant, LoadableConstant, MemberKind,
-    MethodHandleConstant,
+    ClassMemberRef, ClassRef, ConstantPool, InvokeDynamicConstant, LoadableConstant, MemberKind,
 };
+use super::entries::{ResolvedPool, class_ref, invoke_dynamic, loadable, member, method_member};
 use super::error::{ParseError, ParseErrorKind, ParseResult};
 
 #[derive(Debug, Clone)]
@@ -160,12 +159,12 @@ pub(crate) enum Opcode {
     },
     InvokeDynamic(Arc<InvokeDynamicConstant>),
 
-    New(String),
-    Anewarray(String),
-    Checkcast(String),
-    Instanceof(String),
+    New(Arc<ClassRef>),
+    Anewarray(Arc<ClassRef>),
+    Checkcast(Arc<ClassRef>),
+    Instanceof(Arc<ClassRef>),
     Multianewarray {
-        class: String,
+        class: Arc<ClassRef>,
         dimensions: u8,
     },
 
@@ -183,17 +182,6 @@ impl Bytecode {
             .binary_search_by_key(&bci, |(address, _)| *address)
             .ok()
     }
-}
-
-/// Per-class resolved-entry cache used while decoding one `ClassImage`.
-/// Entries are shared through `Arc`; the cache itself is dropped after
-/// validation, so `ClassImage` opcodes carry their own entries without
-/// exposing the class-file constant pool.
-#[derive(Default)]
-pub(crate) struct ResolvedPool {
-    members: HashMap<u16, Arc<ClassMemberRef>>,
-    loadables: HashMap<u16, Arc<LoadableConstant>>,
-    dynamics: HashMap<u16, Arc<InvokeDynamicConstant>>,
 }
 
 pub(crate) fn decode(
@@ -419,7 +407,7 @@ fn decode_one(
         }
         0xbb => {
             let index = reader.read_u16()?;
-            Opcode::New(class_name(pool, index, pc)?)
+            Opcode::New(class_ref(pool, index, pc, resolved)?)
         }
         0xbc => {
             let atype = reader.read_u8()?;
@@ -430,16 +418,16 @@ fn decode_one(
         }
         0xbd => {
             let index = reader.read_u16()?;
-            Opcode::Anewarray(class_name(pool, index, pc)?)
+            Opcode::Anewarray(class_ref(pool, index, pc, resolved)?)
         }
         0xbe | 0xbf | 0xc2 | 0xc3 => Opcode::Unsupported(byte),
         0xc0 => {
             let index = reader.read_u16()?;
-            Opcode::Checkcast(class_name(pool, index, pc)?)
+            Opcode::Checkcast(class_ref(pool, index, pc, resolved)?)
         }
         0xc1 => {
             let index = reader.read_u16()?;
-            Opcode::Instanceof(class_name(pool, index, pc)?)
+            Opcode::Instanceof(class_ref(pool, index, pc, resolved)?)
         }
         0xc4 => decode_wide(reader, pc, max_locals)?,
         0xc5 => {
@@ -449,7 +437,7 @@ fn decode_one(
                 return Err(invalid(pc, ParseErrorKind::InvalidInstruction(0xc5)));
             }
             Opcode::Multianewarray {
-                class: class_name(pool, index, pc)?,
+                class: class_ref(pool, index, pc, resolved)?,
                 dimensions,
             }
         }
@@ -637,275 +625,13 @@ fn validate_target(bytecode: &Bytecode, pc: u32, offset: i32) -> ParseResult<()>
     Ok(())
 }
 
-fn text_string(text: &super::text::JavaText, pc: u32) -> ParseResult<String> {
-    text.to_rust_string().ok_or_else(|| ParseError {
-        offset: pc as usize,
-        kind: ParseErrorKind::InvalidText {
-            bytes: text.to_modified_utf8().into_boxed_slice(),
-        },
-    })
-}
-
-fn class_name(pool: &ConstantPool, index: u16, pc: u32) -> ParseResult<String> {
-    let text = pool.class_name(index).ok_or_else(|| {
-        if pool.entry(index).is_none() {
-            invalid(pc, ParseErrorKind::BadConstantPoolIndex(index))
-        } else {
-            invalid(
-                pc,
-                ParseErrorKind::BadConstantPoolEntry("expected class entry"),
-            )
-        }
-    })?;
-    text_string(text, pc)
-}
-
-fn member(
-    pool: &ConstantPool,
-    index: u16,
-    expected: MemberKind,
-    pc: u32,
-    resolved: &mut ResolvedPool,
-) -> ParseResult<Arc<ClassMemberRef>> {
-    if let Some(cached) = resolved.members.get(&index) {
-        if cached.kind == expected {
-            return Ok(cached.clone());
-        }
-        return Err(invalid(
-            pc,
-            ParseErrorKind::BadConstantPoolEntry("wrong member reference kind"),
-        ));
-    }
-    let (owner, name_and_type, kind) = match (expected, pool.entry(index)) {
-        (
-            MemberKind::Field,
-            Some(Constant::FieldRef {
-                owner,
-                name_and_type,
-            }),
-        ) => (*owner, *name_and_type, MemberKind::Field),
-        (
-            MemberKind::Method,
-            Some(Constant::MethodRef {
-                owner,
-                name_and_type,
-            }),
-        ) => (*owner, *name_and_type, MemberKind::Method),
-        (
-            MemberKind::InterfaceMethod,
-            Some(Constant::InterfaceMethodRef {
-                owner,
-                name_and_type,
-            }),
-        ) => (*owner, *name_and_type, MemberKind::InterfaceMethod),
-        (_, None) => return Err(invalid(pc, ParseErrorKind::BadConstantPoolIndex(index))),
-        _ => {
-            return Err(invalid(
-                pc,
-                ParseErrorKind::BadConstantPoolEntry("wrong member reference kind"),
-            ));
-        }
-    };
-    let value = Arc::new(resolve_member(pool, owner, name_and_type, kind, pc)?);
-    resolved.members.insert(index, value.clone());
-    Ok(value)
-}
-
-fn method_member(
-    pool: &ConstantPool,
-    index: u16,
-    pc: u32,
-    resolved: &mut ResolvedPool,
-) -> ParseResult<Arc<ClassMemberRef>> {
-    if let Some(cached) = resolved.members.get(&index) {
-        if matches!(
-            cached.kind,
-            MemberKind::Method | MemberKind::InterfaceMethod
-        ) {
-            return Ok(cached.clone());
-        }
-        return Err(invalid(
-            pc,
-            ParseErrorKind::BadConstantPoolEntry("expected method reference"),
-        ));
-    }
-    let value = match pool.entry(index) {
-        Some(Constant::MethodRef {
-            owner,
-            name_and_type,
-        }) => resolve_member(pool, *owner, *name_and_type, MemberKind::Method, pc),
-        Some(Constant::InterfaceMethodRef {
-            owner,
-            name_and_type,
-        }) => resolve_member(
-            pool,
-            *owner,
-            *name_and_type,
-            MemberKind::InterfaceMethod,
-            pc,
-        ),
-        Some(_) => Err(invalid(
-            pc,
-            ParseErrorKind::BadConstantPoolEntry("expected method reference"),
-        )),
-        None => Err(invalid(pc, ParseErrorKind::BadConstantPoolIndex(index))),
-    }?;
-    let value = Arc::new(value);
-    resolved.members.insert(index, value.clone());
-    Ok(value)
-}
-
-fn resolve_member(
-    pool: &ConstantPool,
-    owner: u16,
-    name_and_type: u16,
-    kind: MemberKind,
-    pc: u32,
-) -> ParseResult<ClassMemberRef> {
-    let owner = class_name(pool, owner, pc)?;
-    let (name, descriptor) = pool
-        .name_and_type(name_and_type)
-        .ok_or_else(|| invalid(pc, ParseErrorKind::BadConstantPoolIndex(name_and_type)))?;
-    Ok(ClassMemberRef {
-        kind,
-        owner,
-        name: text_string(name, pc)?,
-        descriptor: text_string(descriptor, pc)?,
-    })
-}
-
-fn loadable(
-    pool: &ConstantPool,
-    index: u16,
-    two_slots: bool,
-    pc: u32,
-    resolved: &mut ResolvedPool,
-) -> ParseResult<Arc<LoadableConstant>> {
-    if let Some(cached) = resolved.loadables.get(&index) {
-        let valid = matches!(
-            (&**cached, two_slots),
-            (
-                LoadableConstant::Long(_) | LoadableConstant::Double(_),
-                true
-            ) | (
-                LoadableConstant::Integer(_)
-                    | LoadableConstant::Float(_)
-                    | LoadableConstant::String(_)
-                    | LoadableConstant::Class(_)
-                    | LoadableConstant::MethodType(_)
-                    | LoadableConstant::MethodHandle(_),
-                false
-            )
-        );
-        if valid {
-            return Ok(cached.clone());
-        }
-        return Err(invalid(
-            pc,
-            ParseErrorKind::BadConstantPoolEntry("invalid ldc entry kind"),
-        ));
-    }
-    let entry = pool
-        .entry(index)
-        .ok_or_else(|| invalid(pc, ParseErrorKind::BadConstantPoolIndex(index)))?;
-    let value = match entry {
-        Constant::Integer(value) if !two_slots => LoadableConstant::Integer(*value),
-        Constant::Float(bits) if !two_slots => LoadableConstant::Float(f32::from_bits(*bits)),
-        Constant::Long(value) if two_slots => LoadableConstant::Long(*value),
-        Constant::Double(bits) if two_slots => LoadableConstant::Double(f64::from_bits(*bits)),
-        Constant::String(text) if !two_slots => LoadableConstant::String(
-            pool.utf8(*text)
-                .ok_or_else(|| invalid(pc, ParseErrorKind::BadConstantPoolIndex(*text)))?
-                .clone(),
-        ),
-        Constant::Class(name) if !two_slots => {
-            LoadableConstant::Class(class_name(pool, *name, pc)?)
-        }
-        Constant::MethodType(descriptor) if !two_slots => {
-            LoadableConstant::MethodType(text_string(
-                pool.utf8(*descriptor).ok_or_else(|| {
-                    invalid(pc, ParseErrorKind::BadConstantPoolIndex(*descriptor))
-                })?,
-                pc,
-            )?)
-        }
-        Constant::MethodHandle { kind, reference } if !two_slots => {
-            LoadableConstant::MethodHandle(method_handle(pool, *kind, *reference, pc, resolved)?)
-        }
-        _ => {
-            return Err(invalid(
-                pc,
-                ParseErrorKind::BadConstantPoolEntry("invalid ldc entry kind"),
-            ));
-        }
-    };
-    let value = Arc::new(value);
-    resolved.loadables.insert(index, value.clone());
-    Ok(value)
-}
-
-fn method_handle(
-    pool: &ConstantPool,
-    kind: u8,
-    reference: u16,
-    pc: u32,
-    resolved: &mut ResolvedPool,
-) -> ParseResult<MethodHandleConstant> {
-    let target = match kind {
-        1..=4 => member(pool, reference, MemberKind::Field, pc, resolved)?,
-        5 | 8 => member(pool, reference, MemberKind::Method, pc, resolved)?,
-        6 | 7 => method_member(pool, reference, pc, resolved)?,
-        9 => member(pool, reference, MemberKind::InterfaceMethod, pc, resolved)?,
-        _ => {
-            return Err(invalid(
-                pc,
-                ParseErrorKind::BadConstantPoolEntry("invalid method-handle kind"),
-            ));
-        }
-    };
-    Ok(MethodHandleConstant { kind, target })
-}
-
-fn invoke_dynamic(
-    pool: &ConstantPool,
-    index: u16,
-    pc: u32,
-    resolved: &mut ResolvedPool,
-) -> ParseResult<Arc<InvokeDynamicConstant>> {
-    if let Some(cached) = resolved.dynamics.get(&index) {
-        return Ok(cached.clone());
-    }
-    let (bootstrap, name_and_type) = match pool.entry(index) {
-        Some(Constant::InvokeDynamic {
-            bootstrap,
-            name_and_type,
-        }) => (*bootstrap, *name_and_type),
-        Some(_) => {
-            return Err(invalid(
-                pc,
-                ParseErrorKind::BadConstantPoolEntry("expected invokedynamic entry"),
-            ));
-        }
-        None => return Err(invalid(pc, ParseErrorKind::BadConstantPoolIndex(index))),
-    };
-    let (name, descriptor) = pool
-        .name_and_type(name_and_type)
-        .ok_or_else(|| invalid(pc, ParseErrorKind::BadConstantPoolIndex(name_and_type)))?;
-    let value = Arc::new(InvokeDynamicConstant {
-        bootstrap,
-        name: text_string(name, pc)?,
-        descriptor: text_string(descriptor, pc)?,
-    });
-    resolved.dynamics.insert(index, value.clone());
-    Ok(value)
-}
-
 fn invalid(pc: u32, kind: ParseErrorKind) -> ParseError {
     ParseError::new(pc as usize, kind)
 }
 
 #[cfg(test)]
 mod tests {
+    use super::super::constant_pool::Constant;
     use super::*;
 
     #[test]
@@ -998,7 +724,7 @@ mod tests {
             panic!("expected invokestatic");
         };
         assert!(Arc::ptr_eq(first, second));
-        assert_eq!(first.owner.as_str(), "java/lang/Object");
+        assert_eq!(first.owner.name.as_str(), "java/lang/Object");
         assert_eq!(first.name.as_str(), "m");
         assert_eq!(first.descriptor.as_str(), "()V");
     }

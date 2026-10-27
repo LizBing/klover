@@ -31,6 +31,9 @@ or general JDK compatibility. Parsed classes and passing subset tests do not
 establish full Java 8 conformance. See [TESTING.md](TESTING.md) for the test
 coverage and [ROADMAP.md](ROADMAP.md) for proposed next milestones.
 
+The [class parser API](rust/src/class_parser/README.md) exposes typed Java 8
+attributes and shared symbolic constants for runtime construction.
+
 ## Requirements
 
 - C11 compiler, CMake 3.20+ (including CTest), and GNU Make

@@ -102,7 +102,7 @@ fn parses_minimal_class_and_code() {
     assert_eq!(method.name, "run");
     assert_eq!(method.descriptor.raw(), "()V");
     assert!(method.access_flags.contains(MethodAccessFlags::STATIC));
-    let code = method.code.as_ref().unwrap();
+    let code = method.attributes.code.as_ref().unwrap();
     assert_eq!(code.bytecode.opcodes.len(), 1);
     assert!(matches!(code.bytecode.opcodes[0].1, Opcode::Return));
 }
@@ -164,12 +164,12 @@ fn preserves_methodref_and_interfacemethodref_tags() {
     w.u2(0);
 
     let image = parse_class(&w.finish()).unwrap();
-    let code = image.methods()[0].code.as_ref().unwrap();
+    let code = image.methods()[0].attributes.code.as_ref().unwrap();
     let Opcode::InvokeStatic(class_ref) = &code.bytecode.opcodes[0].1 else {
         panic!("expected invokestatic");
     };
     assert_eq!(class_ref.kind, MemberKind::Method);
-    assert_eq!(class_ref.owner, "java/lang/Object");
+    assert_eq!(class_ref.owner.name, "java/lang/Object");
     assert_eq!(class_ref.name, "m");
     assert_eq!(class_ref.descriptor, "()V");
 
@@ -177,7 +177,7 @@ fn preserves_methodref_and_interfacemethodref_tags() {
         panic!("expected invokestatic");
     };
     assert_eq!(interface_ref.kind, MemberKind::InterfaceMethod);
-    assert_eq!(interface_ref.owner, "java/lang/Object");
+    assert_eq!(interface_ref.owner.name, "java/lang/Object");
     assert_eq!(interface_ref.name, "m");
     assert_eq!(interface_ref.descriptor, "()V");
 

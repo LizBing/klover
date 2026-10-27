@@ -2,11 +2,12 @@
 
 use std::collections::HashSet;
 
+use super::attribute_parser::{self, CodeContext};
 use super::byte_reader::ByteReader;
-use super::bytecode::ResolvedPool;
 use super::constant_pool::{Constant, ConstantPool};
-use super::decode::{RawAttribute, RawClassImage, RawConstant, RawMember};
+use super::decode::{RawClassImage, RawConstant, RawMember};
 use super::descriptor::{FieldDescriptor, MethodDescriptor};
+use super::entries::{self, ResolvedPool};
 use super::error::{ParseError, ParseErrorKind, ParseResult};
 use super::flags::{ClassAccessFlags, FieldAccessFlags, MethodAccessFlags};
 use super::model::{
@@ -25,24 +26,53 @@ pub(super) fn validate(raw: RawClassImage<'_>) -> ParseResult<ValidatedClassImag
         interfaces,
         fields,
         methods,
+        attributes,
     } = raw;
 
     let pool = build_pool(constant_pool)?;
     validate_pool(&pool)?;
 
-    let this_class = class_name(&pool, this_class)?;
-    validate_class_name(&this_class)?;
+    let mut resolved = ResolvedPool::default();
+    let attributes = attribute_parser::class_attributes(&attributes, &pool, &mut resolved)?;
+    let this_class = entries::class_ref(&pool, this_class, 0, &mut resolved)?;
+    validate_class_name(&this_class.name)?;
     let super_class = match super_class {
-        Some(index) => Some(class_name(&pool, index)?),
+        Some(index) => Some(entries::class_ref(&pool, index, 0, &mut resolved)?),
         None => None,
     };
     let interfaces = interfaces
         .into_iter()
-        .map(|index| class_name(&pool, index))
+        .map(|index| entries::class_ref(&pool, index, 0, &mut resolved))
         .collect::<ParseResult<Vec<_>>>()?;
 
-    let fields = validate_fields(fields, &pool)?;
-    let mut resolved = ResolvedPool::default();
+    if let Some(class) = &super_class {
+        validate_class_name(&class.name)?;
+    }
+    for class in &interfaces {
+        validate_class_name(&class.name)?;
+    }
+
+    for annotations in [
+        &attributes.annotations.visible_types,
+        &attributes.annotations.invisible_types,
+    ]
+    .into_iter()
+    .flatten()
+    {
+        for annotation in annotations {
+            if let super::attributes::TypeAnnotationTarget::Supertype(index) = annotation.target {
+                if (index == u16::MAX && super_class.is_none())
+                    || (index != u16::MAX && index as usize >= interfaces.len())
+                {
+                    return Err(pool_error(ParseErrorKind::InvalidAttribute(
+                        "invalid annotated supertype index",
+                    )));
+                }
+            }
+        }
+    }
+
+    let fields = validate_fields(fields, &pool, &mut resolved)?;
     let methods = validate_methods(methods, &pool, &mut resolved)?;
 
     Ok(ValidatedClassImage::new(ClassData {
@@ -55,6 +85,7 @@ pub(super) fn validate(raw: RawClassImage<'_>) -> ParseResult<ValidatedClassImag
         fields,
         methods,
         constant_pool: pool,
+        attributes,
     }))
 }
 
@@ -212,7 +243,11 @@ fn validate_method_handle(pool: &ConstantPool, kind: u8, reference: u16) -> Pars
     Ok(())
 }
 
-fn validate_fields(raw: Vec<RawMember<'_>>, pool: &ConstantPool) -> ParseResult<Vec<FieldInfo>> {
+fn validate_fields(
+    raw: Vec<RawMember<'_>>,
+    pool: &ConstantPool,
+    resolved: &mut ResolvedPool,
+) -> ParseResult<Vec<FieldInfo>> {
     let mut seen = HashSet::new();
     let mut fields = Vec::with_capacity(raw.len());
 
@@ -220,7 +255,8 @@ fn validate_fields(raw: Vec<RawMember<'_>>, pool: &ConstantPool) -> ParseResult<
         let name = utf8_string(pool, member.name_index)?;
         validate_member_name(&name, false)?;
         let descriptor = FieldDescriptor::parse(&utf8_string(pool, member.descriptor_index)?)?;
-        validate_attribute_names(&member.attributes, pool)?;
+        let attributes =
+            attribute_parser::field_attributes(&member.attributes, &descriptor, pool, resolved)?;
 
         if !seen.insert((name.clone(), descriptor.raw().to_owned())) {
             return Err(pool_error(ParseErrorKind::DuplicateMember));
@@ -230,6 +266,7 @@ fn validate_fields(raw: Vec<RawMember<'_>>, pool: &ConstantPool) -> ParseResult<
             access_flags: FieldAccessFlags::from_bits_retain(member.access_flags),
             name,
             descriptor,
+            attributes,
         });
     }
 
@@ -249,22 +286,57 @@ fn validate_methods(
         validate_member_name(&name, true)?;
         let descriptor = MethodDescriptor::parse(&utf8_string(pool, member.descriptor_index)?)?;
 
-        let mut code = None;
-        for attribute in &member.attributes {
-            let attribute_name = pool.utf8(attribute.name_index).ok_or_else(|| {
-                ParseError::new(
-                    0,
-                    ParseErrorKind::BadConstantPoolIndex(attribute.name_index),
-                )
-            })?;
-            if attribute_name.eq_str("Code") {
-                if code.is_some() {
-                    return Err(pool_error(ParseErrorKind::MultipleCodeAttributes));
-                }
-                code = Some(parse_code(attribute.body, pool, resolved)?);
+        let flags = MethodAccessFlags::from_bits_retain(member.access_flags);
+        let attributes = attribute_parser::method_attributes(
+            &member.attributes,
+            pool,
+            resolved,
+            &descriptor,
+            flags,
+        )?;
+        let no_code = flags.intersects(MethodAccessFlags::NATIVE | MethodAccessFlags::ABSTRACT);
+        if no_code == attributes.code.is_some() {
+            return Err(pool_error(ParseErrorKind::InvalidCode(
+                "Code presence does not match native/abstract flags",
+            )));
+        }
+        if let Some(parameters) = &attributes.parameters {
+            if parameters.len() != descriptor.parameters().len() {
+                return Err(pool_error(ParseErrorKind::InvalidAttribute(
+                    "MethodParameters count does not match descriptor",
+                )));
             }
         }
 
+        for annotations in [
+            &attributes.annotations.visible_types,
+            &attributes.annotations.invisible_types,
+        ]
+        .into_iter()
+        .flatten()
+        {
+            for annotation in annotations {
+                use super::attributes::TypeAnnotationTarget;
+                let valid = match annotation.target {
+                    TypeAnnotationTarget::MethodParameter(index) => {
+                        (index as usize) < descriptor.parameters().len()
+                    }
+                    TypeAnnotationTarget::Throws(index) => attributes
+                        .exceptions
+                        .as_ref()
+                        .is_some_and(|exceptions| (index as usize) < exceptions.len()),
+                    TypeAnnotationTarget::MethodReceiver => {
+                        !flags.contains(MethodAccessFlags::STATIC)
+                    }
+                    _ => true,
+                };
+                if !valid {
+                    return Err(pool_error(ParseErrorKind::InvalidAttribute(
+                        "invalid method type annotation target",
+                    )));
+                }
+            }
+        }
         if !seen.insert((name.clone(), descriptor.raw().to_owned())) {
             return Err(pool_error(ParseErrorKind::DuplicateMember));
         }
@@ -273,21 +345,32 @@ fn validate_methods(
             access_flags: MethodAccessFlags::from_bits_retain(member.access_flags),
             name,
             descriptor,
-            code,
+            attributes,
         });
     }
 
     Ok(methods)
 }
 
-fn parse_code(
+pub(super) fn parse_code(
     body: &[u8],
     pool: &ConstantPool,
     resolved: &mut ResolvedPool,
+    initial_locals: &[u8],
 ) -> ParseResult<CodeData> {
     let mut reader = ByteReader::new(body);
     let max_stack = reader.read_u16()?;
     let max_locals = reader.read_u16()?;
+    if initial_locals
+        .iter()
+        .map(|width| *width as usize)
+        .sum::<usize>()
+        > max_locals as usize
+    {
+        return Err(pool_error(ParseErrorKind::InvalidCode(
+            "method parameters exceed max_locals",
+        )));
+    }
     let code_len = reader.read_u32()? as usize;
     if code_len == 0 || code_len > 65535 {
         return Err(pool_error(ParseErrorKind::InvalidCode(
@@ -306,9 +389,11 @@ fn parse_code(
         if start_pc >= end_pc || end_pc as usize > code_len || handler_pc as usize >= code_len {
             return Err(pool_error(ParseErrorKind::InvalidExceptionTable));
         }
-        if catch_type != 0 {
-            require_class(pool, catch_type)?;
-        }
+        let catch_type = if catch_type == 0 {
+            None
+        } else {
+            Some(entries::class_ref(pool, catch_type, 0, resolved)?)
+        };
         exception_table.push(ExceptionHandler {
             start_pc,
             end_pc,
@@ -317,7 +402,7 @@ fn parse_code(
         });
     }
 
-    skip_attributes(&mut reader, pool)?;
+    let raw_attributes = super::decode::read_attributes(&mut reader)?;
     if !reader.is_empty() {
         return Err(pool_error(ParseErrorKind::InvalidCode(
             "trailing bytes in Code attribute",
@@ -338,39 +423,27 @@ fn parse_code(
         }
     }
 
+    let attributes = attribute_parser::code_attributes(
+        &raw_attributes,
+        pool,
+        resolved,
+        &CodeContext {
+            bytecode: &bytecode,
+            code_len,
+            max_locals,
+            max_stack,
+            exception_count,
+            initial_locals,
+        },
+    )?;
+
     Ok(CodeData {
         max_stack,
         max_locals,
         bytecode,
         exception_table,
+        attributes,
     })
-}
-
-fn skip_attributes(reader: &mut ByteReader<'_>, pool: &ConstantPool) -> ParseResult<()> {
-    let count = reader.read_u16()? as usize;
-    for _ in 0..count {
-        let name_index = reader.read_u16()?;
-        if pool.utf8(name_index).is_none() {
-            return Err(pool_error(ParseErrorKind::BadConstantPoolIndex(name_index)));
-        }
-        let len = reader.read_u32()? as usize;
-        reader.skip(len)?;
-    }
-    Ok(())
-}
-
-fn validate_attribute_names(
-    attributes: &[RawAttribute<'_>],
-    pool: &ConstantPool,
-) -> ParseResult<()> {
-    for attribute in attributes {
-        if pool.utf8(attribute.name_index).is_none() {
-            return Err(pool_error(ParseErrorKind::BadConstantPoolIndex(
-                attribute.name_index,
-            )));
-        }
-    }
-    Ok(())
 }
 
 fn require_utf8(pool: &ConstantPool, index: u16) -> ParseResult<&JavaText> {
@@ -407,15 +480,6 @@ fn text_string(text: &JavaText) -> ParseResult<String> {
             bytes: text.to_modified_utf8().into_boxed_slice(),
         },
     })
-}
-
-fn class_name(pool: &ConstantPool, index: u16) -> ParseResult<String> {
-    let text = pool
-        .class_name(index)
-        .ok_or_else(|| pool_error(ParseErrorKind::BadConstantPoolIndex(index)))?;
-    let name = text_string(text)?;
-    validate_class_name(&name)?;
-    Ok(name)
 }
 
 fn validate_class_name(name: &str) -> ParseResult<()> {

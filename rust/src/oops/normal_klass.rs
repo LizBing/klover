@@ -52,7 +52,7 @@ impl<'cld> UnlinkedNormalKlass<'cld> {
 
         let mut ifaces = Vec::with_capacity(cf.interfaces().len());
         for iface in cf.interfaces() {
-            ifaces.push(SymbolTable::intern(iface));
+            ifaces.push(SymbolTable::intern(&iface.name));
         }
 
         let mut methods = MsBox::new_uninit_slice(msa, cf.methods().len());

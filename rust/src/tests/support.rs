@@ -137,6 +137,17 @@ pub fn parse_class<'a>(cld: &'a ClassLoaderData<'a>, bytes: &[u8]) -> NormalKlas
     NormalKlass::link(UnlinkedNormalKlass::build(parsed, Some(cld)), None).unwrap()
 }
 
+/// Build deliberately inconsistent runtime metadata after parsing a valid class.
+pub fn parse_class_with_runtime_max_locals<'a>(
+    cld: &'a ClassLoaderData<'a>,
+    bytes: &[u8],
+    max_locals: u16,
+) -> NormalKlass<'a> {
+    let mut parsed = crate::class_parser::parse_class(bytes).expect("parse valid test class");
+    parsed.set_max_locals_for_test(0, max_locals);
+    NormalKlass::link(UnlinkedNormalKlass::build(parsed, Some(cld)), None).unwrap()
+}
+
 /// Minimal, single-method root class. Bytecode remains explicit at call sites.
 /// This deliberately does not implement a general class-file assembler.
 pub fn class_bytes(desc: &str, code: &[u8], max_stack: u16, max_locals: u16) -> Vec<u8> {

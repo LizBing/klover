@@ -87,7 +87,9 @@ preserve that behavior rather than redefining scheduling policy.
 
 Fixtures are regenerated under `build/test-classes/` on each Make test request,
 including the project's minimal `java/lang/Object`. Deleted sources cannot leave
-stale classes. Compilation uses `--release 8 -g:none`; no class binaries are
+stale classes. Compilation uses `--release 8 -g:none`; a parser integration test
+also compiles its attribute fixture with `-g -parameters` to exercise debug tables
+and method-parameter metadata. No class binaries are
 committed, and Cargo's build script never invokes Java. A missing JDK or missing
 fixture fails clearly. Constructors in Java fixtures are parsed but not executed;
 the current tests invoke supported static methods directly.

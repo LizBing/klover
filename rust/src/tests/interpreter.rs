@@ -120,7 +120,11 @@ fn frame_rejects_arguments_that_exceed_max_locals() {
         ("(D)V", vec![JValue::Double(1.0)], 2, 1),
         ("(JD)V", vec![JValue::Long(1), JValue::Double(2.0)], 4, 3),
     ] {
-        let owner = parse_class(&cld, &class_bytes(desc, &[0xb1], 0, available));
+        let owner = crate::tests::support::parse_class_with_runtime_max_locals(
+            &cld,
+            &class_bytes(desc, &[0xb1], 0, required as u16),
+            available,
+        );
         let call = Invocation::try_new(&owner, "test", desc, &args).unwrap();
         let error = InterpreterFrame::try_new(call).err().unwrap();
         assert!(matches!(
@@ -165,8 +169,9 @@ fn frame_counts_the_receiver_as_one_local_slot() {
     let arena = MsAllocator::new();
     let cld = ClassLoaderData::new(&arena);
     for max_locals in [2, 3] {
-        let bytes = class_bytes_with_flags("(J)V", &[0xb1], 2, max_locals, 0x1);
-        let owner = parse_class(&cld, &bytes);
+        let bytes = class_bytes_with_flags("(J)V", &[0xb1], 2, 3, 0x1);
+        let owner =
+            crate::tests::support::parse_class_with_runtime_max_locals(&cld, &bytes, max_locals);
         let args = [JValue::Ref(NObjPtr::null()), JValue::Long(42)];
         let call = Invocation::try_new(&owner, "test", "(J)V", &args).unwrap();
         let result = InterpreterFrame::try_new(call);

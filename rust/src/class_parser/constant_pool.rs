@@ -1,8 +1,8 @@
 //! Class-file constant pool and the self-contained entries carried by
 //! `Opcode`.
 //!
-//! The pool itself stays private to the parser. `ClassImage` opcodes carry the
-//! resolved entry they need, so the runtime never receives `ConstantPool`.
+//! ClassImage provides checked lookup in the original pool for opaque data.
+//! Instructions and typed attributes carry canonical symbolic entries.
 //! `MethodRef` and `InterfaceMethodRef` remain distinct in both the pool and
 //! the resolved member reference.
 
@@ -37,11 +37,16 @@ pub(crate) enum MemberKind {
     InterfaceMethod,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ClassRef {
+    pub(crate) name: String,
+}
+
 /// A resolved symbolic member reference carried by a field or invoke opcode.
 #[derive(Debug, Clone)]
 pub(crate) struct ClassMemberRef {
     pub(crate) kind: MemberKind,
-    pub(crate) owner: String,
+    pub(crate) owner: Arc<ClassRef>,
     pub(crate) name: String,
     pub(crate) descriptor: String,
 }
@@ -54,7 +59,7 @@ pub(crate) struct MethodHandleConstant {
 
 #[derive(Debug, Clone)]
 pub(crate) struct InvokeDynamicConstant {
-    pub(crate) bootstrap: u16,
+    pub(crate) bootstrap: Arc<super::attributes::BootstrapMethod>,
     pub(crate) name: String,
     pub(crate) descriptor: String,
 }
@@ -67,9 +72,9 @@ pub(crate) enum LoadableConstant {
     Long(i64),
     Double(f64),
     String(JavaText),
-    Class(String),
+    Class(Arc<ClassRef>),
     MethodType(String),
-    MethodHandle(MethodHandleConstant),
+    MethodHandle(Arc<MethodHandleConstant>),
 }
 
 #[derive(Debug)]

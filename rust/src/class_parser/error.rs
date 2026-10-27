@@ -28,6 +28,7 @@ pub(crate) enum ParseErrorKind {
     DuplicateMember,
     MultipleCodeAttributes,
     InvalidCode(&'static str),
+    InvalidAttribute(&'static str),
     InvalidInstruction(u8),
     InvalidBranchTarget {
         bci: u32,

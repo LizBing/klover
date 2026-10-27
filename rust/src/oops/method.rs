@@ -27,7 +27,7 @@ impl<'klass> Method<'klass> {
         let name = SymbolTable::intern(&info.name);
         let desc = MethodDesc::build(&info.descriptor, msa);
 
-        let code = info.code.as_ref().map(|cd| Code::build(cd, msa, storage));
+        let code = info.attributes.code.as_ref().map(|cd| Code::build(cd, msa, storage));
 
         Self {
             _private: (),

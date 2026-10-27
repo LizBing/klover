@@ -140,7 +140,7 @@ mod tests {
             u2(&mut bytes, value);
         }
         for value in [
-            if is_static { 0x0009 } else { 0x0001 },
+            (if is_static { 0x0009 } else { 0x0001 }) | (if has_code { 0 } else { 0x0100 }),
             3,
             4,
             if has_code { 1 } else { 0 },
