@@ -1,4 +1,4 @@
-//! Published class image and its private validation-time data.
+//! Validated class image and its private data.
 
 use super::attributes::{ClassAttributes, CodeAttributes, FieldAttributes, MethodAttributes};
 use super::bytecode::Bytecode;
@@ -10,10 +10,6 @@ use std::sync::Arc;
 
 #[derive(Debug)]
 pub(crate) struct ClassImage {
-    data: ClassData,
-}
-
-pub(super) struct ValidatedClassImage {
     data: ClassData,
 }
 
@@ -66,6 +62,10 @@ pub(crate) struct ExceptionHandler {
 }
 
 impl ClassImage {
+    pub(super) fn new(data: ClassData) -> Self {
+        Self { data }
+    }
+
     pub(crate) fn minor_version(&self) -> u16 {
         self.data.minor
     }
@@ -127,7 +127,7 @@ impl ClassImage {
 
     /// Checked lookup in the original CP, including for opaque attribute bodies.
     /// Zero, out-of-range indices, and unusable Long/Double slots return None.
-    pub(crate) fn constant(&self, index: u16) -> Option<&Constant> {
+    pub(super) fn constant(&self, index: u16) -> Option<&Constant> {
         self.data
             .constant_pool
             .entry(index)
@@ -141,17 +141,5 @@ impl ClassImage {
     /// already carried by opcodes.
     pub(crate) fn constant_pool(&self) -> impl Iterator<Item = (u16, &Constant)> + '_ {
         self.data.constant_pool.iter()
-    }
-}
-
-impl ValidatedClassImage {
-    pub(super) fn new(data: ClassData) -> Self {
-        Self { data }
-    }
-}
-
-pub(super) fn publish(validated: ValidatedClassImage) -> ClassImage {
-    ClassImage {
-        data: validated.data,
     }
 }

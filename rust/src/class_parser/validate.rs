@@ -10,12 +10,10 @@ use super::descriptor::{FieldDescriptor, MethodDescriptor};
 use super::entries::{self, ResolvedPool};
 use super::error::{ParseError, ParseErrorKind, ParseResult};
 use super::flags::{ClassAccessFlags, FieldAccessFlags, MethodAccessFlags};
-use super::model::{
-    ClassData, CodeData, ExceptionHandler, FieldInfo, MethodInfo, ValidatedClassImage,
-};
+use super::model::{ClassData, ClassImage, CodeData, ExceptionHandler, FieldInfo, MethodInfo};
 use super::text::JavaText;
 
-pub(super) fn validate(raw: RawClassImage<'_>) -> ParseResult<ValidatedClassImage> {
+pub(super) fn validate(raw: RawClassImage<'_>) -> ParseResult<ClassImage> {
     let RawClassImage {
         minor,
         major,
@@ -75,7 +73,7 @@ pub(super) fn validate(raw: RawClassImage<'_>) -> ParseResult<ValidatedClassImag
     let fields = validate_fields(fields, &pool, &mut resolved)?;
     let methods = validate_methods(methods, &pool, &mut resolved)?;
 
-    Ok(ValidatedClassImage::new(ClassData {
+    Ok(ClassImage::new(ClassData {
         minor,
         major,
         access_flags: ClassAccessFlags::from_bits_retain(access_flags),

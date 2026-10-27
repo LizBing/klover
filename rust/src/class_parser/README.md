@@ -1,7 +1,7 @@
 # Class parser API
 
 The parser accepts Java 8 class files (major version 52). Its pipeline is
-`decode -> validate -> publish`. The published `ClassImage` owns its data and
+`decode -> validate -> ClassImage`. The validated `ClassImage` owns its data and
 has no borrow of the input bytes.
 
 ## Attributes

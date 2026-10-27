@@ -1,12 +1,11 @@
 //! Java 8 class-file parser.
 //!
 //! The pipeline is:
-//! `bytes -> decode -> RawClassImage -> validate -> ValidatedClassImage
-//!  -> publish -> ClassImage`.
+//! `bytes -> decode -> RawClassImage -> validate -> ClassImage`.
 //!
 //! `RawClassImage` only checks framing. `validate` checks relationships,
-//! descriptors, bytecode, and `Code`. `publish` is a move into the read-only
-//! image used by the rest of the crate.
+//! descriptors, bytecode, and `Code`, then returns the read-only image used by
+//! the rest of the crate.
 //!
 //! Instructions and typed attributes share canonical symbolic entries through
 //! `Arc`, keyed internally by original CP index. No runtime resolution occurs.
@@ -43,8 +42,7 @@ pub(crate) use text::JavaText;
 
 pub(crate) fn parse_class(bytes: &[u8]) -> Result<ClassImage, ParseError> {
     let raw = decode::decode(bytes)?;
-    let validated = validate::validate(raw)?;
-    Ok(model::publish(validated))
+    validate::validate(raw)
 }
 
 #[cfg(test)]
