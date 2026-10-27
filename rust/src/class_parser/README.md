@@ -22,12 +22,10 @@ order. Unknown attributes retain their lossless `JavaText` name and owned body
 bytes, including repeated occurrences. Names outside their predefined owner
 location are also preserved as opaque attributes.
 
-The original pool remains available through `image.constant(index)` and
-`image.constant_pool()`. Lookup returns `None` for index zero, indices outside
-the pool, and the unusable second slots of long/double constants. Opaque
-attribute bodies may contain indices into this original pool; interpret them
-while the image remains available. Attribute order across different known
-kinds and byte-for-byte round trips are not part of this API.
+The original constant pool stays internal to the parser. Opaque attribute
+bodies may contain indices into that pool; the published API currently exposes
+only their bytes. Attribute order across different known kinds and byte-for-byte
+round trips are not part of this API.
 
 ## Constant identity and runtime construction
 

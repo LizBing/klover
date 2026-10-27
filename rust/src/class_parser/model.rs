@@ -3,7 +3,7 @@
 use super::attributes::{ClassAttributes, CodeAttributes, FieldAttributes, MethodAttributes};
 use super::bytecode::Bytecode;
 use super::constant_pool::ClassRef;
-use super::constant_pool::{Constant, ConstantPool};
+use super::constant_pool::ConstantPool;
 use super::descriptor::{FieldDescriptor, MethodDescriptor};
 use super::flags::{ClassAccessFlags, FieldAccessFlags, MethodAccessFlags};
 use std::sync::Arc;
@@ -123,23 +123,5 @@ impl ClassImage {
 
     pub(crate) fn attributes(&self) -> &ClassAttributes {
         &self.data.attributes
-    }
-
-    /// Checked lookup in the original CP, including for opaque attribute bodies.
-    /// Zero, out-of-range indices, and unusable Long/Double slots return None.
-    pub(super) fn constant(&self, index: u16) -> Option<&Constant> {
-        self.data
-            .constant_pool
-            .entry(index)
-            .filter(|entry| !matches!(entry, Constant::Unusable))
-    }
-
-    /// Iterates the class-file constant-pool entries as `(index, entry)` pairs.
-    ///
-    /// Index 0 and the unusable second slot of `Long`/`Double` entries are
-    /// skipped. This is a read-only view; runtime lowering uses the entries
-    /// already carried by opcodes.
-    pub(crate) fn constant_pool(&self) -> impl Iterator<Item = (u16, &Constant)> + '_ {
-        self.data.constant_pool.iter()
     }
 }

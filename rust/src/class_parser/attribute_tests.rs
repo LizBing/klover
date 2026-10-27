@@ -1,7 +1,7 @@
 //! Small class-file fixtures exercise attribute contents and cross-consumer identity.
 use super::attributes::*;
 use super::constant_pool::{ClassRef, LoadableConstant};
-use super::{ClassImage, Constant, JavaText, Opcode, parse_class};
+use super::{ClassImage, JavaText, Opcode, parse_class};
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -411,12 +411,6 @@ fn exposes_class_field_and_method_metadata_and_preserves_unknown_bodies() {
     assert_eq!(attrs.unknown[0].name.as_utf16(), [0xd800]);
     assert_eq!(&*attrs.unknown[0].body, words(&[source]));
     assert_eq!(&*attrs.unknown[1].body, [8, 9, 10]);
-    let index = u16::from_be_bytes(attrs.unknown[0].body[..2].try_into().unwrap());
-    assert!(
-        matches!(image.constant(index), Some(Constant::Utf8(text)) if text.eq_str("Test.java"))
-    );
-    assert!(image.constant(0).is_none());
-    assert!(image.constant(u16::MAX).is_none());
     let field = &image.fields()[0].attributes;
     assert!(
         matches!(field.constant_value.as_deref(), Some(LoadableConstant::String(value)) if value.eq_str("hello"))
@@ -471,8 +465,13 @@ fn preserves_all_numeric_constant_kinds_and_unusable_slots() {
     assert!(
         matches!(image.fields()[3].attributes.constant_value.as_deref(), Some(LoadableConstant::Double(value)) if value.to_bits() == 0x7ff8000000000001)
     );
-    assert!(image.constant(entries[2].2 + 1).is_none());
-    assert!(image.constant(entries[3].2 + 1).is_none());
+    // Unusable second slots must also be rejected when referenced by attributes.
+    for field in [2, 3] {
+        let index = entries[field].2;
+        f.fields[field].attrs[0].body = words(&[index + 1]);
+        assert_invalid(&f);
+        f.fields[field].attrs[0].body = words(&[index]);
+    }
 }
 
 fn annotation_bytes(f: &mut Fixture, elements: Vec<(&str, Vec<u8>)>) -> Vec<u8> {

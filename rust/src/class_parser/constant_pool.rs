@@ -1,7 +1,7 @@
 //! Class-file constant pool and the self-contained entries carried by
 //! `Opcode`.
 //!
-//! ClassImage provides checked lookup in the original pool for opaque data.
+//! The original pool stays internal to the parser.
 //! Instructions and typed attributes carry canonical symbolic entries.
 //! `MethodRef` and `InterfaceMethodRef` remain distinct in both the pool and
 //! the resolved member reference.
@@ -11,7 +11,7 @@ use std::sync::Arc;
 use super::text::JavaText;
 
 #[derive(Debug)]
-pub(crate) enum Constant {
+pub(super) enum Constant {
     Unusable,
     Utf8(JavaText),
     Integer(i32),

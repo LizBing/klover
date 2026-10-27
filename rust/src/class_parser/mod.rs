@@ -9,8 +9,8 @@
 //!
 //! Instructions and typed attributes share canonical symbolic entries through
 //! `Arc`, keyed internally by original CP index. No runtime resolution occurs.
-//! The original pool remains available through checked read-only lookup for
-//! consumers of opaque attributes. See README.md for the API and its limits.
+//! The original pool stays internal to the parser. See README.md for the API
+//! and its limits.
 
 mod attribute_parser;
 pub(crate) mod attributes;
@@ -29,7 +29,7 @@ mod validate;
 pub(crate) use bytecode::{Bytecode, Opcode};
 #[allow(unused_imports)]
 pub(crate) use constant_pool::{
-    ClassMemberRef, ClassRef, Constant, InvokeDynamicConstant, LoadableConstant, MemberKind,
+    ClassMemberRef, ClassRef, InvokeDynamicConstant, LoadableConstant, MemberKind,
     MethodHandleConstant,
 };
 pub(crate) use descriptor::{FieldDescriptor, FieldType, MethodDescriptor};

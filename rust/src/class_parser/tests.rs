@@ -180,21 +180,6 @@ fn preserves_methodref_and_interfacemethodref_tags() {
     assert_eq!(interface_ref.owner.name, "java/lang/Object");
     assert_eq!(interface_ref.name, "m");
     assert_eq!(interface_ref.descriptor, "()V");
-
-    let entries: Vec<_> = image.constant_pool().collect();
-    assert_eq!(entries.len(), 12);
-    assert_eq!(entries[0].0, 1);
-    assert!(matches!(entries[0].1, Constant::Utf8(_)));
-    assert!(
-        entries
-            .iter()
-            .any(|(_, entry)| matches!(entry, Constant::MethodRef { .. }))
-    );
-    assert!(
-        entries
-            .iter()
-            .any(|(_, entry)| matches!(entry, Constant::InterfaceMethodRef { .. }))
-    );
 }
 
 #[test]
