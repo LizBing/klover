@@ -21,16 +21,13 @@ use crate::{
     },
     gc_bindings::oop_hierarchy::NObjPtr,
     oops::jvalue::JValue,
-    runtime::{
-        java_thread::{JavaThread, JavaThreadState},
-        ms_api::MsAllocator,
-    },
+    runtime::java_thread::{JavaThread, JavaThreadState},
 };
 
 fn with_code(code: &[u8], test: impl FnOnce(&mut InterpreterFrame<'_>)) {
     ensure_metaspace();
-    let arena = MsAllocator::new();
-    let cld = ClassLoaderData::new(&arena);
+    let cld = ClassLoaderData::new();
+    cld.initialize();
     let owner = parse_class(&cld, &class_bytes("()V", code, 16, 16));
     let call = Invocation::try_new(&owner, "test", "()V", &[]).unwrap();
     test(&mut InterpreterFrame::try_new(call).unwrap());
@@ -71,8 +68,8 @@ fn assert_stack(frame: &InterpreterFrame<'_>, expected: &[Slot]) {
 #[test]
 fn frame_initializes_arguments_with_their_local_slot_widths() {
     ensure_metaspace();
-    let arena = MsAllocator::new();
-    let cld = ClassLoaderData::new(&arena);
+    let cld = ClassLoaderData::new();
+    cld.initialize();
     let desc = "(ZBSCIJDFLjava/lang/Object;)V";
     let args = [
         JValue::Boolean(1),
@@ -111,8 +108,8 @@ fn frame_initializes_arguments_with_their_local_slot_widths() {
 #[test]
 fn frame_rejects_arguments_that_exceed_max_locals() {
     ensure_metaspace();
-    let arena = MsAllocator::new();
-    let cld = ClassLoaderData::new(&arena);
+    let cld = ClassLoaderData::new();
+    cld.initialize();
     for (desc, args, required, available) in [
         ("(I)V", vec![JValue::Int(1)], 1, 0),
         ("(J)V", vec![JValue::Long(1)], 2, 0),
@@ -152,8 +149,8 @@ fn frame_rejects_arguments_that_exceed_max_locals() {
 #[test]
 fn frame_accepts_no_arguments_with_zero_locals() {
     ensure_metaspace();
-    let arena = MsAllocator::new();
-    let cld = ClassLoaderData::new(&arena);
+    let cld = ClassLoaderData::new();
+    cld.initialize();
     let owner = parse_class(&cld, &class_bytes("()V", &[0xb1], 0, 0));
     let call = Invocation::try_new(&owner, "test", "()V", &[]).unwrap();
     let frame = InterpreterFrame::try_new(call).unwrap();
@@ -166,8 +163,8 @@ fn frame_accepts_no_arguments_with_zero_locals() {
 #[test]
 fn frame_counts_the_receiver_as_one_local_slot() {
     ensure_metaspace();
-    let arena = MsAllocator::new();
-    let cld = ClassLoaderData::new(&arena);
+    let cld = ClassLoaderData::new();
+    cld.initialize();
     for max_locals in [2, 3] {
         let bytes = class_bytes_with_flags("(J)V", &[0xb1], 2, 3, 0x1);
         let owner =
@@ -743,8 +740,8 @@ fn dispatcher_without_frame_reports_no_frame() {
 #[test]
 fn wide_bytecode_survives_parsing_lowering_and_execution() {
     ensure_metaspace();
-    let arena = MsAllocator::new();
-    let cld = ClassLoaderData::new(&arena);
+    let cld = ClassLoaderData::new();
+    cld.initialize();
     // iload_0; wide istore 300; wide iinc 300,-1000; wide iload 300; ireturn.
     let owner = parse_class(
         &cld,

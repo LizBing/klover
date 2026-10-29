@@ -107,7 +107,7 @@ mod tests {
         class_loader::class_loader_data::ClassLoaderData,
         gc_bindings::oop_hierarchy::NObjPtr,
         oops::normal_klass::UnlinkedNormalKlass,
-        runtime::ms_api::{self, MsAllocator, MsBox},
+        runtime::ms_api::{self, MsBox},
     };
 
     // A minimal classfile exercises the normal descriptor and method builders.
@@ -181,8 +181,8 @@ mod tests {
     }
 
     fn validates_each_parameter_kind_including_arrays() {
-        let msa = MsAllocator::new();
-        let cld = ClassLoaderData::new(&msa);
+        let cld = ClassLoaderData::new();
+        cld.initialize();
         let values = [
             JValue::Boolean(1),
             JValue::Byte(-1),
@@ -233,8 +233,8 @@ mod tests {
     }
 
     fn checks_argument_count_and_counts_wide_values_once() {
-        let msa = MsAllocator::new();
-        let cld = ClassLoaderData::new(&msa);
+        let cld = ClassLoaderData::new();
+        cld.initialize();
         let klass = owner(&cld, "(JD)V", true, true);
         let values = [JValue::Long(1), JValue::Double(2.0), JValue::Int(3)];
         for actual in [0, 1, 3] {
@@ -264,8 +264,8 @@ mod tests {
     }
 
     fn instance_arguments_include_a_reference_receiver() {
-        let msa = MsAllocator::new();
-        let cld = ClassLoaderData::new(&msa);
+        let cld = ClassLoaderData::new();
+        cld.initialize();
         let klass = owner(&cld, "(I)V", false, true);
         assert!(matches!(
             Invocation::try_new(&klass, "test", "(I)V", &[JValue::Int(1)])
@@ -304,8 +304,8 @@ mod tests {
     }
 
     fn preserves_method_lookup_and_code_errors() {
-        let msa = MsAllocator::new();
-        let cld = ClassLoaderData::new(&msa);
+        let cld = ClassLoaderData::new();
+        cld.initialize();
         let klass = owner(&cld, "()V", true, false);
         assert!(matches!(
             Invocation::try_new(&klass, "missing", "()V", &[])

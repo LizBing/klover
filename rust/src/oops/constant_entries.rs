@@ -118,16 +118,8 @@ impl<'metadata> MethodRef<'metadata> {
 impl<'cld> MethodRef<'cld> {
     pub fn resolve(
         &self,
-        cld: Option<&ClassLoaderData<'cld>>,
-    ) -> ResolveResult<&'cld Method<'cld>> {
-        let owner = match cld {
-            Some(cld) => cld.load_klass(&self.owner),
-            None => BootstrapCLD::find_klass(&self.owner),
-        }
-        .map_err(|e| ResolveError::Load(e))?
-        .as_normal()
-        .unwrap();
-
-        Ok(owner.find_declared_method(self.name.utf8(), self.desc.utf8()).unwrap())
-    }
+        cld: Option<&ClassLoaderData>
+    ) -> ResolveResult<&Method<'cld>>
+    {}
 }
+

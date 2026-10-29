@@ -158,7 +158,6 @@ impl Interpreter {
             DReturn => dreturn(f),
             AReturn => areturn(f),
             Return => return_void(f),
-            InvokeStatic(mref) => invoke_static(f, mref),
             Unsupported => Err(f.make_exec_error(ExecErrorKind::UnsupportedInstruction)),
         }
     }
