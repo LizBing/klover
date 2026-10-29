@@ -4,4 +4,5 @@ pub mod control;
 pub mod conversions;
 pub mod loads;
 pub mod math;
+pub mod references;
 pub mod stack;

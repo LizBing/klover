@@ -1,6 +1,6 @@
 //! Small class-file fixtures exercise attribute contents and cross-consumer identity.
 use super::attributes::*;
-use super::constant_pool::{ClassRef, LoadableConstant};
+use super::constant_pool::{ClassRef, LoadableConstant, MethodHandleTarget};
 use super::{ClassImage, JavaText, Opcode, parse_class};
 use std::sync::Arc;
 
@@ -305,7 +305,10 @@ fn attributes_and_instructions_share_canonical_constants_across_methods() {
     let Opcode::InvokeStatic(method) = &opcodes[4].1 else {
         panic!()
     };
-    assert!(Arc::ptr_eq(method, &bootstrap.method.target));
+    let MethodHandleTarget::Method(bootstrap_target) = &bootstrap.method.target else {
+        panic!("expected method handle target")
+    };
+    assert!(Arc::ptr_eq(method, bootstrap_target));
     assert!(Arc::ptr_eq(class, &method.owner));
     let Opcode::Ldc(loaded_handle) = &opcodes[5].1 else {
         panic!()

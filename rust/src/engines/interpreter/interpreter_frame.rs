@@ -10,7 +10,7 @@ use crate::{
 };
 
 pub struct InterpreterFrame<'thread> {
-    invocation: Invocation<'thread>,
+    pub invocation: Invocation<'thread>,
 
     oprand_stack: Vec<Slot>,
     locals: Box<[Slot]>,

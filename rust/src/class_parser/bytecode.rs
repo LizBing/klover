@@ -4,9 +4,13 @@ use std::sync::Arc;
 
 use super::byte_reader::ByteReader;
 use super::constant_pool::{
-    ClassMemberRef, ClassRef, ConstantPool, InvokeDynamicConstant, LoadableConstant, MemberKind,
+    ClassRef, ConstantPool, FieldMemRef, InvokeDynamicConstant, LoadableConstant, MethodMemRef,
+    MethodMemRefKind,
 };
-use super::entries::{ResolvedPool, class_ref, invoke_dynamic, loadable, member, method_member};
+use super::entries::{
+    ResolvedPool, class_ref, field_member, invoke_dynamic, loadable, method_member,
+    method_member_of_kind,
+};
 use super::error::{ParseError, ParseErrorKind, ParseResult};
 
 #[derive(Debug, Clone)]
@@ -146,15 +150,15 @@ pub(crate) enum Opcode {
     IfNull(i32),
     IfNonNull(i32),
 
-    GetStatic(Arc<ClassMemberRef>),
-    PutStatic(Arc<ClassMemberRef>),
-    GetField(Arc<ClassMemberRef>),
-    PutField(Arc<ClassMemberRef>),
-    InvokeVirtual(Arc<ClassMemberRef>),
-    InvokeSpecial(Arc<ClassMemberRef>),
-    InvokeStatic(Arc<ClassMemberRef>),
+    GetStatic(Arc<FieldMemRef>),
+    PutStatic(Arc<FieldMemRef>),
+    GetField(Arc<FieldMemRef>),
+    PutField(Arc<FieldMemRef>),
+    InvokeVirtual(Arc<MethodMemRef>),
+    InvokeSpecial(Arc<MethodMemRef>),
+    InvokeStatic(Arc<MethodMemRef>),
     InvokeInterface {
-        method: Arc<ClassMemberRef>,
+        method: Arc<MethodMemRef>,
         count: u8,
     },
     InvokeDynamic(Arc<InvokeDynamicConstant>),
@@ -359,23 +363,29 @@ fn decode_one(
         0xb1 => Opcode::Return,
         0xb2 => {
             let index = reader.read_u16()?;
-            Opcode::GetStatic(member(pool, index, MemberKind::Field, pc, resolved)?)
+            Opcode::GetStatic(field_member(pool, index, pc, resolved)?)
         }
         0xb3 => {
             let index = reader.read_u16()?;
-            Opcode::PutStatic(member(pool, index, MemberKind::Field, pc, resolved)?)
+            Opcode::PutStatic(field_member(pool, index, pc, resolved)?)
         }
         0xb4 => {
             let index = reader.read_u16()?;
-            Opcode::GetField(member(pool, index, MemberKind::Field, pc, resolved)?)
+            Opcode::GetField(field_member(pool, index, pc, resolved)?)
         }
         0xb5 => {
             let index = reader.read_u16()?;
-            Opcode::PutField(member(pool, index, MemberKind::Field, pc, resolved)?)
+            Opcode::PutField(field_member(pool, index, pc, resolved)?)
         }
         0xb6 => {
             let index = reader.read_u16()?;
-            Opcode::InvokeVirtual(member(pool, index, MemberKind::Method, pc, resolved)?)
+            Opcode::InvokeVirtual(method_member_of_kind(
+                pool,
+                index,
+                MethodMemRefKind::Class,
+                pc,
+                resolved,
+            )?)
         }
         0xb7 => {
             let index = reader.read_u16()?;
@@ -393,7 +403,13 @@ fn decode_one(
                 return Err(invalid(pc, ParseErrorKind::InvalidInstruction(0xb9)));
             }
             Opcode::InvokeInterface {
-                method: member(pool, index, MemberKind::InterfaceMethod, pc, resolved)?,
+                method: method_member_of_kind(
+                    pool,
+                    index,
+                    MethodMemRefKind::Interface,
+                    pc,
+                    resolved,
+                )?,
                 count,
             }
         }
@@ -726,6 +742,189 @@ mod tests {
         assert!(Arc::ptr_eq(first, second));
         assert_eq!(first.owner.name.as_str(), "java/lang/Object");
         assert_eq!(first.name.as_str(), "m");
-        assert_eq!(first.descriptor.as_str(), "()V");
+        assert_eq!(first.descriptor.raw(), "()V");
+    }
+    fn member_reference_entries() -> Vec<Constant> {
+        use crate::class_parser::JavaText;
+        let mut entries = vec![
+            Constant::Unusable,
+            Constant::Utf8(JavaText::from_str("Owner")), // #1
+            Constant::Class(1),                          // #2
+            Constant::Utf8(JavaText::from_str("value")), // #3
+            Constant::Utf8(JavaText::from_str("I")),     // #4
+            Constant::NameAndType {
+                name: 3,
+                descriptor: 4,
+            }, // #5
+            Constant::FieldRef {
+                owner: 2,
+                name_and_type: 5,
+            }, // #6
+            Constant::Utf8(JavaText::from_str("m")),     // #7
+            Constant::Utf8(JavaText::from_str("()V")),   // #8
+            Constant::NameAndType {
+                name: 7,
+                descriptor: 8,
+            }, // #9
+            Constant::MethodRef {
+                owner: 2,
+                name_and_type: 9,
+            }, // #10
+            Constant::InterfaceMethodRef {
+                owner: 2,
+                name_and_type: 9,
+            }, // #11
+            Constant::Utf8(JavaText::from_str("<init>")), // #12
+            Constant::NameAndType {
+                name: 12,
+                descriptor: 8,
+            }, // #13
+            Constant::MethodRef {
+                owner: 2,
+                name_and_type: 13,
+            }, // #14
+        ];
+        // #15..#23 cover all nine method-handle reference kinds.
+        for kind in 1..=9 {
+            let reference = match kind {
+                1..=4 => 6,
+                5 => 10,
+                6 | 7 | 9 => 11,
+                8 => 14,
+                _ => unreachable!(),
+            };
+            entries.push(Constant::MethodHandle { kind, reference });
+        }
+        entries
+    }
+
+    #[test]
+    fn shares_typed_field_and_method_entries_with_every_handle_kind() {
+        use crate::class_parser::MethodHandleTarget;
+        let pool = ConstantPool::new(member_reference_entries());
+        let mut resolved = ResolvedPool::default();
+        let mut bytes = vec![
+            0xb2, 0, 6, // getstatic
+            0xb3, 0, 6, // putstatic
+            0xb4, 0, 6, // getfield
+            0xb5, 0, 6, // putfield
+            0xb6, 0, 10, // invokevirtual, class method
+            0xb7, 0, 10, // invokespecial, class method
+            0xb8, 0, 10, // invokestatic, class method
+            0xb7, 0, 11, // invokespecial, interface method
+            0xb8, 0, 11, // invokestatic, interface method
+            0xb9, 0, 11, 1, 0, // invokeinterface
+            0xb7, 0, 14, // constructor
+        ];
+        for index in 15..=23 {
+            bytes.extend([0x12, index]);
+        }
+        bytes.push(0xb1);
+        let decoded = decode(&bytes, 0, &pool, &mut resolved).unwrap();
+        let ops = &decoded.opcodes;
+        let Opcode::GetStatic(field) = &ops[0].1 else {
+            panic!()
+        };
+        let Opcode::PutStatic(put_static) = &ops[1].1 else {
+            panic!()
+        };
+        let Opcode::GetField(get_field) = &ops[2].1 else {
+            panic!()
+        };
+        let Opcode::PutField(put_field) = &ops[3].1 else {
+            panic!()
+        };
+        assert!(Arc::ptr_eq(field, put_static));
+        assert!(Arc::ptr_eq(field, get_field));
+        assert!(Arc::ptr_eq(field, put_field));
+        assert_eq!(field.descriptor.raw(), "I");
+        assert_eq!(field.descriptor.slots(), 1);
+        let Opcode::InvokeVirtual(method) = &ops[4].1 else {
+            panic!()
+        };
+        let Opcode::InvokeSpecial(special) = &ops[5].1 else {
+            panic!()
+        };
+        let Opcode::InvokeStatic(static_method) = &ops[6].1 else {
+            panic!()
+        };
+        assert!(Arc::ptr_eq(method, special));
+        assert!(Arc::ptr_eq(method, static_method));
+        assert_eq!(method.kind, MethodMemRefKind::Class);
+        assert_eq!(method.descriptor.parameter_slots(), 0);
+        assert!(Arc::ptr_eq(&field.owner, &method.owner));
+        let Opcode::InvokeSpecial(interface) = &ops[7].1 else {
+            panic!()
+        };
+        let Opcode::InvokeStatic(static_interface) = &ops[8].1 else {
+            panic!()
+        };
+        let Opcode::InvokeInterface {
+            method: invoke_interface,
+            ..
+        } = &ops[9].1
+        else {
+            panic!()
+        };
+        assert!(Arc::ptr_eq(interface, static_interface));
+        assert!(Arc::ptr_eq(interface, invoke_interface));
+        assert_eq!(interface.kind, MethodMemRefKind::Interface);
+        assert!(!Arc::ptr_eq(method, interface));
+        let Opcode::InvokeSpecial(constructor) = &ops[10].1 else {
+            panic!()
+        };
+        assert_eq!(constructor.name, "<init>");
+        for kind in 1..=9 {
+            let Opcode::Ldc(value) = &ops[10 + kind].1 else {
+                panic!()
+            };
+            let LoadableConstant::MethodHandle(handle) = value.as_ref() else {
+                panic!()
+            };
+            assert_eq!(handle.kind as usize, kind);
+            match (&handle.target, kind) {
+                (MethodHandleTarget::Field(target), 1..=4) => assert!(Arc::ptr_eq(target, field)),
+                (MethodHandleTarget::Method(target), 5) => assert!(Arc::ptr_eq(target, method)),
+                (MethodHandleTarget::Method(target), 6 | 7 | 9) => {
+                    assert!(Arc::ptr_eq(target, interface))
+                }
+                (MethodHandleTarget::Method(target), 8) => {
+                    assert!(Arc::ptr_eq(target, constructor))
+                }
+                _ => panic!("incorrect typed target for handle kind {kind}"),
+            }
+        }
+    }
+
+    #[test]
+    fn rejects_field_method_and_interface_kind_mismatches_after_caching() {
+        let pool = ConstantPool::new(member_reference_entries());
+        for (warmup, invalid) in [
+            (vec![0xb2, 0, 6], vec![0xb8, 0, 6]), // field used by invocation
+            (vec![0xb8, 0, 10], vec![0xb2, 0, 10]), // method used by field instruction
+            (vec![0xb8, 0, 11], vec![0xb4, 0, 11]), // interface used by field instruction
+            (vec![0xb8, 0, 11], vec![0xb6, 0, 11]), // invokevirtual requires class kind
+            (vec![0xb8, 0, 10], vec![0xb9, 0, 10, 1, 0]), // invokeinterface requires interface kind
+        ] {
+            let mut resolved = ResolvedPool::default();
+            decode(&warmup, 0, &pool, &mut resolved).unwrap();
+            assert!(decode(&invalid, 0, &pool, &mut resolved).is_err());
+            assert!(decode(&invalid, 0, &pool, &mut ResolvedPool::default()).is_err());
+        }
+        // A handle cannot bypass the same field/method and interface checks.
+        for (kind, reference) in [(1, 10), (5, 11), (6, 6), (7, 6), (8, 11), (9, 10)] {
+            let mut entries = member_reference_entries();
+            let handle_index = entries.len() as u8;
+            entries.push(Constant::MethodHandle { kind, reference });
+            let bad_pool = ConstantPool::new(entries);
+            let warmup = if reference == 6 {
+                vec![0xb2, 0, 6]
+            } else {
+                vec![0xb8, 0, reference as u8]
+            };
+            let mut resolved = ResolvedPool::default();
+            decode(&warmup, 0, &bad_pool, &mut resolved).unwrap();
+            assert!(decode(&[0x12, handle_index], 0, &bad_pool, &mut resolved).is_err());
+        }
     }
 }

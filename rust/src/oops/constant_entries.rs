@@ -1,6 +1,15 @@
 use std::sync::OnceLock;
 
-use crate::{class_loader::oop_storage::{OOPHandle, OOPStorage}, gc_bindings::oop_hierarchy::NObjPtr, oops::{jvalue::{JDouble, JFloat, JInt, JLong}, klass::Klass, oops_errors::ResolveResult, symbol_table::{SymbolHandle, SymbolTable}}};
+use crate::{
+    class_loader::{bs_cld::BootstrapCLD, class_loader_data::ClassLoaderData},
+    class_parser::{MethodMemRef, MethodMemRefKind},
+    oops::{
+        jvalue::{JDouble, JFloat, JInt, JLong},
+        method::Method,
+        oops_errors::{ResolveError, ResolveResult},
+        symbol_table::{SymbolHandle, SymbolTable},
+    },
+};
 
 // #[derive(Debug)]
 // pub struct StringConstant<'klass> {
@@ -34,7 +43,7 @@ use crate::{class_loader::oop_storage::{OOPHandle, OOPStorage}, gc_bindings::oop
 //             resolved: OnceLock::new(),
 //         }
 //     }
-    
+
 //     pub fn resolve(&self) -> ResolveResult<&Klass<'klass>> {
 //         unimplemented!()
 //     }
@@ -69,8 +78,56 @@ pub enum LdCLoadable /* <'klass> */ {
     // MethodHandle(&'klass MethodHandleConstant),
 }
 
+#[cfg(test)]
+#[path = "../tests/method_resolution.rs"]
+mod tests;
+
 #[derive(Debug, Clone)]
 pub enum LdC2Loadable {
     Long(JLong),
     Double(JDouble),
+}
+
+#[derive(Debug)]
+pub struct MethodRef<'metadata> {
+    is_interface: bool,
+    owner: SymbolHandle,
+    name: SymbolHandle,
+    desc: SymbolHandle,
+    resolved: OnceLock<&'metadata Method<'metadata>>,
+}
+
+impl<'metadata> MethodRef<'metadata> {
+    pub fn build(mref: &MethodMemRef) -> Self {
+        let is_interface = matches!(mref.kind, MethodMemRefKind::Interface);
+
+        let owner = SymbolTable::intern(&mref.owner.name);
+        let name = SymbolTable::intern(&mref.name);
+        let desc = SymbolTable::intern(mref.descriptor.raw());
+
+        Self {
+            is_interface,
+            owner,
+            name,
+            desc,
+            resolved: OnceLock::new(),
+        }
+    }
+}
+
+impl<'cld> MethodRef<'cld> {
+    pub fn resolve(
+        &self,
+        cld: Option<&ClassLoaderData<'cld>>,
+    ) -> ResolveResult<&'cld Method<'cld>> {
+        let owner = match cld {
+            Some(cld) => cld.load_klass(&self.owner),
+            None => BootstrapCLD::find_klass(&self.owner),
+        }
+        .map_err(|e| ResolveError::Load(e))?
+        .as_normal()
+        .unwrap();
+
+        Ok(owner.find_declared_method(self.name.utf8(), self.desc.utf8()).unwrap())
+    }
 }

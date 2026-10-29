@@ -1,8 +1,10 @@
+use std::sync::Arc;
+
 use crate::{
     class_loader::oop_storage::OOPStorage,
     oops::{
-        constant_entries::{LdC2Loadable, LdCLoadable},
-        jvalue::{JByte, JDouble, JFloat, JInt, JLong, JShort},
+        constant_entries::{LdC2Loadable, LdCLoadable, MethodRef},
+        jvalue::{JByte, JDouble, JFloat, JInt, JLong, JShort}, tmp_constant_pool::{TmpConstantPool, TmpConstantPoolEntry},
     },
     runtime::ms_api::{MsAllocator, MsBox},
 };
@@ -180,6 +182,9 @@ pub enum Instruction<'inst> {
     AReturn,
     Return,
 
+    // --- References ---
+    // InvokeStatic(&'inst MethodRef<'inst>),
+
     // --- Extended ---
     IfNull(InstIdx),
     IfNonNull(InstIdx),
@@ -189,12 +194,13 @@ pub enum Instruction<'inst> {
 
 use crate::class_parser::{Bytecode, LoadableConstant, Opcode};
 
-impl<'inst> Instruction<'inst> {
+impl<'metadata> Instruction<'metadata> {
     // Code keeps a one-to-one correspondence with the parser's opcode array.
     pub(super) fn lower(
         bytecodes: &Bytecode,
         opcode_idx: usize,
-        msa: &'inst MsAllocator,
+        msa: &'metadata MsAllocator,
+        tmp_cp: &mut TmpConstantPool<'metadata>,
         _storage: &OOPStorage,
     ) -> Self {
         let (bci, opcode) = &bytecodes.opcodes[opcode_idx];
@@ -347,7 +353,7 @@ impl<'inst> Instruction<'inst> {
             Opcode::FReturn => Self::FReturn,
             Opcode::DReturn => Self::DReturn,
             Opcode::AReturn => Self::AReturn,
-            Opcode::Return => Self::Return,
+            Opcode::Return => Self::Return,            
             Opcode::GetStatic(_)
             | Opcode::PutStatic(_)
             | Opcode::GetField(_)
@@ -376,6 +382,7 @@ mod tests {
     #[test]
     fn lower_branches_use_byte_addresses_not_instruction_indices() {
         let msa = BootstrapCLD::ms_allocator();
+        let mut tmp_cp = TmpConstantPool::new();
         let storage = OOPStorage::new(msa);
 
         let code = Bytecode {
@@ -390,11 +397,11 @@ mod tests {
             ],
         };
         assert!(matches!(
-            Instruction::lower(&code, 2, msa, &storage),
+            Instruction::lower(&code, 2, msa, &mut tmp_cp, &storage),
             Instruction::Goto(InstIdx(4))
         ));
         assert!(matches!(
-            Instruction::lower(&code, 5, msa, &storage),
+            Instruction::lower(&code, 5, msa, &mut tmp_cp, &storage),
             Instruction::IfNe(InstIdx(0))
         ));
         // goto_w is normalized by the parser to the same Opcode::Goto variant.
@@ -402,7 +409,7 @@ mod tests {
             opcodes: vec![(0, Opcode::Goto(40_000)), (40_000, Opcode::Return)],
         };
         assert!(matches!(
-            Instruction::lower(&wide, 0, msa, &storage),
+            Instruction::lower(&wide, 0, msa, &mut tmp_cp, &storage),
             Instruction::Goto(InstIdx(1))
         ));
     }
@@ -410,6 +417,7 @@ mod tests {
     #[test]
     fn lower_retains_wide_local_indices_and_signed_increments() {
         let msa = BootstrapCLD::ms_allocator();
+        let mut tmp_cp = TmpConstantPool::new();
         let storage = OOPStorage::new(msa);
 
         let code = Bytecode {
@@ -420,15 +428,15 @@ mod tests {
             ],
         };
         assert!(matches!(
-            Instruction::lower(&code, 0, msa, &storage),
+            Instruction::lower(&code, 0, msa, &mut tmp_cp, &storage),
             Instruction::IInc(LocalIdx(300), -1000)
         ));
         assert!(matches!(
-            Instruction::lower(&code, 1, msa, &storage),
+            Instruction::lower(&code, 1, msa, &mut tmp_cp, &storage),
             Instruction::ILoad(LocalIdx(300))
         ));
         assert!(matches!(
-            Instruction::lower(&code, 2, msa, &storage),
+            Instruction::lower(&code, 2, msa, &mut tmp_cp, &storage),
             Instruction::LStore(LocalIdx(400))
         ));
     }
@@ -436,6 +444,7 @@ mod tests {
     #[test]
     fn lower_stack_variants_without_losing_their_forms() {
         let msa = BootstrapCLD::ms_allocator();
+        let mut tmp_cp = TmpConstantPool::new();
         let storage = OOPStorage::new(msa);
 
         let opcodes = [
@@ -471,7 +480,7 @@ mod tests {
         };
         for (idx, expected) in expected.iter().enumerate() {
             assert_eq!(
-                std::mem::discriminant(&Instruction::lower(&code, idx, msa, &storage)),
+                std::mem::discriminant(&Instruction::lower(&code, idx, msa, &mut tmp_cp, &storage)),
                 std::mem::discriminant(expected)
             );
         }

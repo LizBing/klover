@@ -3,11 +3,12 @@
 //!
 //! The original pool stays internal to the parser.
 //! Instructions and typed attributes carry canonical symbolic entries.
-//! `MethodRef` and `InterfaceMethodRef` remain distinct in both the pool and
-//! the resolved member reference.
+//! Method and field references have separate types. `MethodMemRef.kind`
+//! preserves the class/interface method distinction from the original CP tag.
 
 use std::sync::Arc;
 
+use super::descriptor::{FieldDescriptor, MethodDescriptor};
 use super::text::JavaText;
 
 #[derive(Debug)]
@@ -29,12 +30,11 @@ pub(super) enum Constant {
     InvokeDynamic { bootstrap: u16, name_and_type: u16 },
 }
 
-/// The class-file reference kind, preserved from the constant-pool tag.
+/// The original method reference tag, preserved independently of invocation kind.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum MemberKind {
-    Field,
-    Method,
-    InterfaceMethod,
+pub(crate) enum MethodMemRefKind {
+    Class,
+    Interface,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -42,19 +42,33 @@ pub(crate) struct ClassRef {
     pub(crate) name: String,
 }
 
-/// A resolved symbolic member reference carried by a field or invoke opcode.
+/// A symbolic CONSTANT_Fieldref entry.
 #[derive(Debug, Clone)]
-pub(crate) struct ClassMemberRef {
-    pub(crate) kind: MemberKind,
+pub(crate) struct FieldMemRef {
     pub(crate) owner: Arc<ClassRef>,
     pub(crate) name: String,
-    pub(crate) descriptor: String,
+    pub(crate) descriptor: FieldDescriptor,
+}
+
+/// A symbolic CONSTANT_Methodref or CONSTANT_InterfaceMethodref entry.
+#[derive(Debug, Clone)]
+pub(crate) struct MethodMemRef {
+    pub(crate) kind: MethodMemRefKind,
+    pub(crate) owner: Arc<ClassRef>,
+    pub(crate) name: String,
+    pub(crate) descriptor: MethodDescriptor,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) enum MethodHandleTarget {
+    Field(Arc<FieldMemRef>),
+    Method(Arc<MethodMemRef>),
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct MethodHandleConstant {
     pub(crate) kind: u8,
-    pub(crate) target: Arc<ClassMemberRef>,
+    pub(crate) target: MethodHandleTarget,
 }
 
 #[derive(Debug, Clone)]

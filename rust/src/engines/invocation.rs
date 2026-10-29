@@ -10,8 +10,6 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub struct Invocation<'metadata> {
-    _private: (),
-
     pub owner: &'metadata NormalKlass<'metadata>,
     pub method: &'metadata Method<'metadata>,
 
@@ -45,7 +43,6 @@ impl<'metadata> Invocation<'metadata> {
         }
 
         let invocation = Self {
-            _private: (),
             owner,
             method,
             args: args.into(),
@@ -110,7 +107,7 @@ mod tests {
         class_loader::class_loader_data::ClassLoaderData,
         gc_bindings::oop_hierarchy::NObjPtr,
         oops::normal_klass::UnlinkedNormalKlass,
-        runtime::ms_api::{self, MsAllocator},
+        runtime::ms_api::{self, MsAllocator, MsBox},
     };
 
     // A minimal classfile exercises the normal descriptor and method builders.
@@ -162,7 +159,8 @@ mod tests {
         u2(&mut bytes, 0); // class attributes.
 
         let cf = crate::class_parser::parse_class(&bytes).unwrap();
-        NormalKlass::link(UnlinkedNormalKlass::build(cf, Some(cld)), None).unwrap()
+        let interfaces = unsafe { MsBox::new_uninit_slice(cld.ms_allocator(), 0).assume_init() };
+        NormalKlass::link(UnlinkedNormalKlass::build(cf, Some(cld)), None, interfaces).unwrap()
     }
 
     #[test]

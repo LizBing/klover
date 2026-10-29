@@ -6,7 +6,7 @@ pub enum Klass<'cld> {
 }
 
 impl<'cld> Klass<'cld> {
-    pub fn as_normal_klass(&self) -> Option<&NormalKlass<'cld>> {
+    pub fn as_normal(&self) -> Option<&NormalKlass<'cld>> {
         match self {
             Self::Normal(klass) => Some(klass),
         }

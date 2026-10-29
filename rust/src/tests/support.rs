@@ -134,7 +134,14 @@ pub fn init_vm(path: PathBuf) {
 
 pub fn parse_class<'a>(cld: &'a ClassLoaderData<'a>, bytes: &[u8]) -> NormalKlass<'a> {
     let parsed = crate::class_parser::parse_class(bytes).expect("parse test class");
-    NormalKlass::link(UnlinkedNormalKlass::build(parsed, Some(cld)), None).unwrap()
+    let interfaces =
+        unsafe { ms_api::MsBox::new_uninit_slice(cld.ms_allocator(), 0).assume_init() };
+    NormalKlass::link(
+        UnlinkedNormalKlass::build(parsed, Some(cld)),
+        None,
+        interfaces,
+    )
+    .unwrap()
 }
 
 /// Build deliberately inconsistent runtime metadata after parsing a valid class.
@@ -145,7 +152,14 @@ pub fn parse_class_with_runtime_max_locals<'a>(
 ) -> NormalKlass<'a> {
     let mut parsed = crate::class_parser::parse_class(bytes).expect("parse valid test class");
     parsed.set_max_locals_for_test(0, max_locals);
-    NormalKlass::link(UnlinkedNormalKlass::build(parsed, Some(cld)), None).unwrap()
+    let interfaces =
+        unsafe { ms_api::MsBox::new_uninit_slice(cld.ms_allocator(), 0).assume_init() };
+    NormalKlass::link(
+        UnlinkedNormalKlass::build(parsed, Some(cld)),
+        None,
+        interfaces,
+    )
+    .unwrap()
 }
 
 /// Minimal, single-method root class. Bytecode remains explicit at call sites.

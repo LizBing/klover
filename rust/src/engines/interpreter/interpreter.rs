@@ -6,8 +6,7 @@ use crate::{
     engines::{
         exec_error::{ExecErrorKind, ExecResult},
         interpreter::{
-            interpreter_frame::InterpreterFrame,
-            step_outcome::{StepControl, StepOutcome},
+            instructions::references::invoke_static, interpreter_frame::InterpreterFrame, step_outcome::{StepControl, StepOutcome}
         }, protocol::{EngineExit, ExecBudget},
     },
 };
@@ -159,6 +158,7 @@ impl Interpreter {
             DReturn => dreturn(f),
             AReturn => areturn(f),
             Return => return_void(f),
+            InvokeStatic(mref) => invoke_static(f, mref),
             Unsupported => Err(f.make_exec_error(ExecErrorKind::UnsupportedInstruction)),
         }
     }

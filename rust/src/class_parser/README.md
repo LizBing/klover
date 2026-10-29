@@ -38,12 +38,16 @@ and bootstrap arguments. Distinct CP indices are not merged by equal contents.
 exception references, stack-map object types, and class metadata. A class
 literal uses `LoadableConstant::Class(Arc<ClassRef>)`. A method-handle literal
 uses `LoadableConstant::MethodHandle(Arc<MethodHandleConstant>)`; bootstrap
-records hold the same inner handle. Member references retain their field,
-method, or interface-method kind. Bootstrap-table rows have their own shared
+records hold the same inner handle. Field instructions carry `Arc<FieldMemRef>`
+with a `FieldDescriptor`; invoke instructions carry `Arc<MethodMemRef>` with a
+`MethodDescriptor`. `MethodMemRef.kind` is `MethodMemRefKind::Class` or
+`MethodMemRefKind::Interface`, preserving the original CP tag. Method handles
+use `MethodHandleTarget::Field` or `MethodHandleTarget::Method` and share the
+same canonical Arcs as instructions. Bootstrap-table rows have their own shared
 records; `InvokeDynamicConstant.bootstrap` points directly to its record.
 
 A runtime builder can use a temporary map such as
-`HashMap<*const ClassMemberRef, &'cld RuntimeMethodRef>`, keyed by
+`HashMap<*const MethodMemRef, &'cld RuntimeMethodRef>`, keyed by
 `Arc::as_ptr()`. Use the inner `ClassRef` or `MethodHandleConstant` Arc as the
 key when that runtime object is shared across different parsed wrappers. Keep
 the image alive until all instructions and attributes have been converted,

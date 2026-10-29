@@ -8,3 +8,4 @@ pub mod method;
 pub mod normal_klass;
 pub mod oops_errors;
 pub mod symbol_table;
+pub mod tmp_constant_pool;

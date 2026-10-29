@@ -42,7 +42,7 @@ impl BootstrapCLD {
 }
 
 impl BootstrapCLD {
-    pub fn find_class(name: &SymbolHandle) -> LoadResult<&'static Klass<'static>> {
+    pub fn find_klass(name: &SymbolHandle) -> LoadResult<&'static Klass<'static>> {
         if let Some(klass) = Self::find_loaded_class(name) {
             return Ok(klass);
         }
@@ -57,7 +57,7 @@ impl BootstrapCLD {
 
     pub fn find_normal_klass(name: &SymbolHandle) -> LoadResult<&'static NormalKlass<'static>> {
         // Normal is currently the only supported Klass variant.
-        Ok(Self::find_class(name)?.as_normal_klass().unwrap())
+        Ok(Self::find_klass(name)?.as_normal().unwrap())
     }
 
     fn find_loaded_class(name: &SymbolHandle) -> Option<&'static Klass<'static>> {
@@ -76,7 +76,14 @@ impl BootstrapCLD {
             None => None,
         };
 
-        let normal = NormalKlass::link(unlinked, super_klass)
+        let mut interfaces = MsBox::new_uninit_slice(&MSA, unlinked.interfaces.len());
+        for (slot, interface_name) in interfaces.iter_mut().zip(unlinked.interfaces.iter()) {
+            slot.write(Self::find_normal_klass(interface_name)?);
+        }
+        // Every slot was initialized successfully; failed loads return before linking.
+        let interfaces = unsafe { interfaces.assume_init() };
+
+        let normal = NormalKlass::link(unlinked, super_klass, interfaces)
             .map_err(|e| Self::make_load_error(name, LoadErrorKind::Linkage(e)))?;
 
         let res = MsBox::new(&MSA, Klass::Normal(normal)).leak();

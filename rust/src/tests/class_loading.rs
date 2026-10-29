@@ -5,6 +5,43 @@ use crate::{
 };
 
 #[test]
+fn missing_interface_does_not_cache_a_partial_class() {
+    isolated(
+        concat!(
+            module_path!(),
+            "::missing_interface_does_not_cache_a_partial_class"
+        ),
+        || {
+            let dir = TempDir::new();
+            let fixtures = fixture_dir();
+            std::fs::create_dir_all(dir.0.join("java/lang")).unwrap();
+            for file in [
+                "java/lang/Object.class",
+                "InterfaceLoading$Base.class",
+                "InterfaceLoading$First.class",
+                "InterfaceLoading$Root.class",
+            ] {
+                std::fs::copy(fixtures.join(file), dir.0.join(file)).unwrap();
+            }
+            init_vm(dir.0.clone());
+            let name = SymbolTable::intern("InterfaceLoading$Base");
+            let error = BootstrapCLD::find_klass(&name).unwrap_err();
+            assert!(matches!(error.kind, LoadErrorKind::NotFound));
+            assert_eq!(error.klass_name, "InterfaceLoading$Second");
+            std::fs::copy(
+                fixtures.join("InterfaceLoading$Second.class"),
+                dir.0.join("InterfaceLoading$Second.class"),
+            )
+            .unwrap();
+            assert!(
+                BootstrapCLD::find_klass(&name).is_ok(),
+                "failed interface load poisoned the cache"
+            );
+        },
+    );
+}
+
+#[test]
 fn loads_superclass_and_reuses_class_identity() {
     isolated(
         concat!(
@@ -14,13 +51,13 @@ fn loads_superclass_and_reuses_class_identity() {
         || {
             init_vm(fixture_dir());
             let name = SymbolTable::intern("Cases");
-            let first = BootstrapCLD::find_class(&name).unwrap();
-            let second = BootstrapCLD::find_class(&name).unwrap();
+            let first = BootstrapCLD::find_klass(&name).unwrap();
+            let second = BootstrapCLD::find_klass(&name).unwrap();
             assert!(
                 std::ptr::eq(first, second),
                 "repeated lookup created a new class"
             );
-            let klass = first.as_normal_klass().unwrap();
+            let klass = first.as_normal().unwrap();
             assert_eq!(klass.name().utf8(), "Cases");
             assert!(klass.find_declared_method("sum", "(I)I").is_some());
             assert!(
@@ -41,11 +78,11 @@ fn missing_and_malformed_classes_report_context() {
             let dir = TempDir::new();
             std::fs::write(dir.0.join("Broken.class"), b"not a class file").unwrap();
             init_vm(dir.0.clone());
-            let error = BootstrapCLD::find_class(&SymbolTable::intern("Missing")).unwrap_err();
+            let error = BootstrapCLD::find_klass(&SymbolTable::intern("Missing")).unwrap_err();
             assert!(matches!(error.kind, LoadErrorKind::NotFound));
             assert_eq!(error.klass_name, "Missing");
             assert!(error.cld_name.is_some());
-            let error = BootstrapCLD::find_class(&SymbolTable::intern("Broken")).unwrap_err();
+            let error = BootstrapCLD::find_klass(&SymbolTable::intern("Broken")).unwrap_err();
             assert!(matches!(error.kind, LoadErrorKind::Parse(_)));
             assert_eq!(error.klass_name, "Broken");
         },
@@ -65,7 +102,7 @@ fn missing_superclass_does_not_cache_a_partial_class() {
             std::fs::copy(fixtures.join("Cases.class"), dir.0.join("Cases.class")).unwrap();
             init_vm(dir.0.clone());
             let name = SymbolTable::intern("Cases");
-            let error = BootstrapCLD::find_class(&name).unwrap_err();
+            let error = BootstrapCLD::find_klass(&name).unwrap_err();
             assert!(matches!(error.kind, LoadErrorKind::NotFound));
             assert_eq!(error.klass_name, "java/lang/Object");
             std::fs::create_dir_all(dir.0.join("java/lang")).unwrap();
@@ -75,7 +112,7 @@ fn missing_superclass_does_not_cache_a_partial_class() {
             )
             .unwrap();
             assert!(
-                BootstrapCLD::find_class(&name).is_ok(),
+                BootstrapCLD::find_klass(&name).is_ok(),
                 "failed load poisoned the cache"
             );
         },
@@ -99,7 +136,12 @@ fn parses_javac_attributes_and_bootstrap_dependencies() {
     assert!(attrs.annotations.invisible.is_some());
     assert!(attrs.annotations.visible_types.is_some());
     let bootstrap = &attrs.bootstrap_methods.as_ref().unwrap()[0];
-    assert_eq!(bootstrap.method.target.name, "metafactory");
+    let crate::class_parser::MethodHandleTarget::Method(bootstrap_target) =
+        &bootstrap.method.target
+    else {
+        panic!("expected bootstrap method target")
+    };
+    assert_eq!(bootstrap_target.name, "metafactory");
     assert_eq!(bootstrap.arguments.len(), 3);
     assert!(
         image

@@ -29,8 +29,8 @@ mod validate;
 pub(crate) use bytecode::{Bytecode, Opcode};
 #[allow(unused_imports)]
 pub(crate) use constant_pool::{
-    ClassMemberRef, ClassRef, InvokeDynamicConstant, LoadableConstant, MemberKind,
-    MethodHandleConstant,
+    ClassRef, FieldMemRef, InvokeDynamicConstant, LoadableConstant, MethodHandleConstant,
+    MethodHandleTarget, MethodMemRef, MethodMemRefKind,
 };
 pub(crate) use descriptor::{FieldDescriptor, FieldType, MethodDescriptor};
 pub(crate) use error::ParseError;

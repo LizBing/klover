@@ -2,9 +2,10 @@
 //! Identity is per original CP index, never deduplicated by contents.
 use super::attributes::BootstrapMethod;
 use super::constant_pool::{
-    ClassMemberRef, ClassRef, Constant, ConstantPool, InvokeDynamicConstant, LoadableConstant,
-    MemberKind, MethodHandleConstant,
+    ClassRef, Constant, ConstantPool, FieldMemRef, InvokeDynamicConstant, LoadableConstant,
+    MethodHandleConstant, MethodHandleTarget, MethodMemRef, MethodMemRefKind,
 };
+use super::descriptor::{FieldDescriptor, MethodDescriptor};
 use super::error::{ParseError, ParseErrorKind, ParseResult};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -16,7 +17,8 @@ pub(super) struct ResolvedPool {
     classes: HashMap<u16, Arc<ClassRef>>,
     handles: HashMap<u16, Arc<MethodHandleConstant>>,
     pub(super) bootstraps: Vec<Arc<BootstrapMethod>>,
-    members: HashMap<u16, Arc<ClassMemberRef>>,
+    fields: HashMap<u16, Arc<FieldMemRef>>,
+    methods: HashMap<u16, Arc<MethodMemRef>>,
     loadables: HashMap<u16, Arc<LoadableConstant>>,
     dynamics: HashMap<u16, Arc<InvokeDynamicConstant>>,
 }
@@ -44,134 +46,106 @@ fn class_name(pool: &ConstantPool, index: u16, pc: u32) -> ParseResult<String> {
     text_string(text, pc)
 }
 
-pub(super) fn member(
+pub(super) fn field_member(
     pool: &ConstantPool,
     index: u16,
-    expected: MemberKind,
     pc: u32,
     resolved: &mut ResolvedPool,
-) -> ParseResult<Arc<ClassMemberRef>> {
-    if let Some(cached) = resolved.members.get(&index) {
-        if cached.kind == expected {
-            return Ok(cached.clone());
-        }
-        return Err(invalid(
-            pc,
-            ParseErrorKind::BadConstantPoolEntry("wrong member reference kind"),
-        ));
+) -> ParseResult<Arc<FieldMemRef>> {
+    if let Some(cached) = resolved.fields.get(&index) {
+        return Ok(cached.clone());
     }
-    let (owner, name_and_type, kind) = match (expected, pool.entry(index)) {
-        (
-            MemberKind::Field,
-            Some(Constant::FieldRef {
-                owner,
-                name_and_type,
-            }),
-        ) => (*owner, *name_and_type, MemberKind::Field),
-        (
-            MemberKind::Method,
-            Some(Constant::MethodRef {
-                owner,
-                name_and_type,
-            }),
-        ) => (*owner, *name_and_type, MemberKind::Method),
-        (
-            MemberKind::InterfaceMethod,
-            Some(Constant::InterfaceMethodRef {
-                owner,
-                name_and_type,
-            }),
-        ) => (*owner, *name_and_type, MemberKind::InterfaceMethod),
-        (_, None) => return Err(invalid(pc, ParseErrorKind::BadConstantPoolIndex(index))),
+    let (owner, name_and_type) = match pool.entry(index) {
+        Some(Constant::FieldRef {
+            owner,
+            name_and_type,
+        }) => (*owner, *name_and_type),
+        None => return Err(invalid(pc, ParseErrorKind::BadConstantPoolIndex(index))),
         _ => {
             return Err(invalid(
                 pc,
-                ParseErrorKind::BadConstantPoolEntry("wrong member reference kind"),
+                ParseErrorKind::BadConstantPoolEntry("expected field reference"),
             ));
         }
     };
-    let value = Arc::new(resolve_member(
-        pool,
+    let (owner, name, descriptor) = member_parts(pool, owner, name_and_type, pc, resolved)?;
+    let value = Arc::new(FieldMemRef {
         owner,
-        name_and_type,
-        kind,
-        pc,
-        resolved,
-    )?);
-    resolved.members.insert(index, value.clone());
+        name,
+        descriptor: FieldDescriptor::parse(&descriptor)?,
+    });
+    resolved.fields.insert(index, value.clone());
     Ok(value)
 }
 
+/// Static/special invocations can use either method-reference tag in Java 8.
 pub(super) fn method_member(
     pool: &ConstantPool,
     index: u16,
     pc: u32,
     resolved: &mut ResolvedPool,
-) -> ParseResult<Arc<ClassMemberRef>> {
-    if let Some(cached) = resolved.members.get(&index) {
-        if matches!(
-            cached.kind,
-            MemberKind::Method | MemberKind::InterfaceMethod
-        ) {
-            return Ok(cached.clone());
-        }
-        return Err(invalid(
-            pc,
-            ParseErrorKind::BadConstantPoolEntry("expected method reference"),
-        ));
+) -> ParseResult<Arc<MethodMemRef>> {
+    if let Some(cached) = resolved.methods.get(&index) {
+        return Ok(cached.clone());
     }
-    let value = match pool.entry(index) {
+    let (owner, name_and_type, kind) = match pool.entry(index) {
         Some(Constant::MethodRef {
             owner,
             name_and_type,
-        }) => resolve_member(
-            pool,
-            *owner,
-            *name_and_type,
-            MemberKind::Method,
-            pc,
-            resolved,
-        ),
+        }) => (*owner, *name_and_type, MethodMemRefKind::Class),
         Some(Constant::InterfaceMethodRef {
             owner,
             name_and_type,
-        }) => resolve_member(
-            pool,
-            *owner,
-            *name_and_type,
-            MemberKind::InterfaceMethod,
-            pc,
-            resolved,
-        ),
-        Some(_) => Err(invalid(
-            pc,
-            ParseErrorKind::BadConstantPoolEntry("expected method reference"),
-        )),
-        None => Err(invalid(pc, ParseErrorKind::BadConstantPoolIndex(index))),
-    }?;
-    let value = Arc::new(value);
-    resolved.members.insert(index, value.clone());
+        }) => (*owner, *name_and_type, MethodMemRefKind::Interface),
+        None => return Err(invalid(pc, ParseErrorKind::BadConstantPoolIndex(index))),
+        _ => {
+            return Err(invalid(
+                pc,
+                ParseErrorKind::BadConstantPoolEntry("expected method reference"),
+            ));
+        }
+    };
+    let (owner, name, descriptor) = member_parts(pool, owner, name_and_type, pc, resolved)?;
+    let value = Arc::new(MethodMemRef {
+        kind,
+        owner,
+        name,
+        descriptor: MethodDescriptor::parse(&descriptor)?,
+    });
+    resolved.methods.insert(index, value.clone());
     Ok(value)
 }
 
-fn resolve_member(
+/// Check the original CP kind even when another consumer populated the cache.
+pub(super) fn method_member_of_kind(
+    pool: &ConstantPool,
+    index: u16,
+    expected: MethodMemRefKind,
+    pc: u32,
+    resolved: &mut ResolvedPool,
+) -> ParseResult<Arc<MethodMemRef>> {
+    let value = method_member(pool, index, pc, resolved)?;
+    if value.kind != expected {
+        return Err(invalid(
+            pc,
+            ParseErrorKind::BadConstantPoolEntry("wrong method reference kind"),
+        ));
+    }
+    Ok(value)
+}
+
+fn member_parts(
     pool: &ConstantPool,
     owner: u16,
     name_and_type: u16,
-    kind: MemberKind,
     pc: u32,
     resolved: &mut ResolvedPool,
-) -> ParseResult<ClassMemberRef> {
+) -> ParseResult<(Arc<ClassRef>, String, String)> {
     let owner = class_ref(pool, owner, pc, resolved)?;
     let (name, descriptor) = pool
         .name_and_type(name_and_type)
         .ok_or_else(|| invalid(pc, ParseErrorKind::BadConstantPoolIndex(name_and_type)))?;
-    Ok(ClassMemberRef {
-        kind,
-        owner,
-        name: text_string(name, pc)?,
-        descriptor: text_string(descriptor, pc)?,
-    })
+    Ok((owner, text_string(name, pc)?, text_string(descriptor, pc)?))
 }
 
 pub(super) fn loadable(
@@ -252,10 +226,22 @@ fn method_handle(
     resolved: &mut ResolvedPool,
 ) -> ParseResult<MethodHandleConstant> {
     let target = match kind {
-        1..=4 => member(pool, reference, MemberKind::Field, pc, resolved)?,
-        5 | 8 => member(pool, reference, MemberKind::Method, pc, resolved)?,
-        6 | 7 => method_member(pool, reference, pc, resolved)?,
-        9 => member(pool, reference, MemberKind::InterfaceMethod, pc, resolved)?,
+        1..=4 => MethodHandleTarget::Field(field_member(pool, reference, pc, resolved)?),
+        5 | 8 => MethodHandleTarget::Method(method_member_of_kind(
+            pool,
+            reference,
+            MethodMemRefKind::Class,
+            pc,
+            resolved,
+        )?),
+        6 | 7 => MethodHandleTarget::Method(method_member(pool, reference, pc, resolved)?),
+        9 => MethodHandleTarget::Method(method_member_of_kind(
+            pool,
+            reference,
+            MethodMemRefKind::Interface,
+            pc,
+            resolved,
+        )?),
         _ => {
             return Err(invalid(
                 pc,

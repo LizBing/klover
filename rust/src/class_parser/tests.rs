@@ -168,18 +168,18 @@ fn preserves_methodref_and_interfacemethodref_tags() {
     let Opcode::InvokeStatic(class_ref) = &code.bytecode.opcodes[0].1 else {
         panic!("expected invokestatic");
     };
-    assert_eq!(class_ref.kind, MemberKind::Method);
+    assert_eq!(class_ref.kind, MethodMemRefKind::Class);
     assert_eq!(class_ref.owner.name, "java/lang/Object");
     assert_eq!(class_ref.name, "m");
-    assert_eq!(class_ref.descriptor, "()V");
+    assert_eq!(class_ref.descriptor.raw(), "()V");
 
     let Opcode::InvokeStatic(interface_ref) = &code.bytecode.opcodes[1].1 else {
         panic!("expected invokestatic");
     };
-    assert_eq!(interface_ref.kind, MemberKind::InterfaceMethod);
+    assert_eq!(interface_ref.kind, MethodMemRefKind::Interface);
     assert_eq!(interface_ref.owner.name, "java/lang/Object");
     assert_eq!(interface_ref.name, "m");
-    assert_eq!(interface_ref.descriptor, "()V");
+    assert_eq!(interface_ref.descriptor.raw(), "()V");
 }
 
 #[test]
