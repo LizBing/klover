@@ -1,7 +1,5 @@
-use std::sync::Arc;
-
 use crate::{
-    class_loader::oop_storage::OOPStorage,
+    class_loader::oop_storage::OopStorage,
     oops::{
         constant_entries::{LdC2Loadable, LdCLoadable, MethodRef},
         jvalue::{JByte, JDouble, JFloat, JInt, JLong, JShort}, tmp_constant_pool::{TmpConstantPool, TmpConstantPoolEntry},
@@ -183,7 +181,7 @@ pub enum Instruction<'inst> {
     Return,
 
     // --- References ---
-    // InvokeStatic(&'inst MethodRef<'inst>),
+    InvokeStatic(&'inst MethodRef<'inst>),
 
     // --- Extended ---
     IfNull(InstIdx),
@@ -201,7 +199,7 @@ impl<'metadata> Instruction<'metadata> {
         opcode_idx: usize,
         msa: &'metadata MsAllocator,
         tmp_cp: &mut TmpConstantPool<'metadata>,
-        _storage: &OOPStorage,
+        _storage: &OopStorage,
     ) -> Self {
         let (bci, opcode) = &bytecodes.opcodes[opcode_idx];
         let target = |offset: i32| {
@@ -353,7 +351,7 @@ impl<'metadata> Instruction<'metadata> {
             Opcode::FReturn => Self::FReturn,
             Opcode::DReturn => Self::DReturn,
             Opcode::AReturn => Self::AReturn,
-            Opcode::Return => Self::Return,            
+            Opcode::Return => Self::Return,        
             Opcode::GetStatic(_)
             | Opcode::PutStatic(_)
             | Opcode::GetField(_)
@@ -375,15 +373,19 @@ impl<'metadata> Instruction<'metadata> {
 
 #[cfg(test)]
 mod tests {
-    use crate::class_loader::bs_cld::BootstrapCLD;
+    use crate::{
+        class_loader::class_loader_data::ClassLoaderData, tests::support::ensure_metaspace,
+    };
 
     use super::*;
 
     #[test]
     fn lower_branches_use_byte_addresses_not_instruction_indices() {
-        let msa = BootstrapCLD::ms_allocator();
+        ensure_metaspace();
+        let cld = ClassLoaderData::new();
+        let msa = cld.ms_allocator();
         let mut tmp_cp = TmpConstantPool::new();
-        let storage = OOPStorage::new(msa);
+        let storage = cld.oop_storage();
 
         let code = Bytecode {
             opcodes: vec![
@@ -397,11 +399,11 @@ mod tests {
             ],
         };
         assert!(matches!(
-            Instruction::lower(&code, 2, msa, &mut tmp_cp, &storage),
+            Instruction::lower(&code, 2, msa, &mut tmp_cp, storage),
             Instruction::Goto(InstIdx(4))
         ));
         assert!(matches!(
-            Instruction::lower(&code, 5, msa, &mut tmp_cp, &storage),
+            Instruction::lower(&code, 5, msa, &mut tmp_cp, storage),
             Instruction::IfNe(InstIdx(0))
         ));
         // goto_w is normalized by the parser to the same Opcode::Goto variant.
@@ -409,16 +411,18 @@ mod tests {
             opcodes: vec![(0, Opcode::Goto(40_000)), (40_000, Opcode::Return)],
         };
         assert!(matches!(
-            Instruction::lower(&wide, 0, msa, &mut tmp_cp, &storage),
+            Instruction::lower(&wide, 0, msa, &mut tmp_cp, storage),
             Instruction::Goto(InstIdx(1))
         ));
     }
 
     #[test]
     fn lower_retains_wide_local_indices_and_signed_increments() {
-        let msa = BootstrapCLD::ms_allocator();
+        ensure_metaspace();
+        let cld = ClassLoaderData::new();
+        let msa = cld.ms_allocator();
         let mut tmp_cp = TmpConstantPool::new();
-        let storage = OOPStorage::new(msa);
+        let storage = cld.oop_storage();
 
         let code = Bytecode {
             opcodes: vec![
@@ -428,24 +432,26 @@ mod tests {
             ],
         };
         assert!(matches!(
-            Instruction::lower(&code, 0, msa, &mut tmp_cp, &storage),
+            Instruction::lower(&code, 0, msa, &mut tmp_cp, storage),
             Instruction::IInc(LocalIdx(300), -1000)
         ));
         assert!(matches!(
-            Instruction::lower(&code, 1, msa, &mut tmp_cp, &storage),
+            Instruction::lower(&code, 1, msa, &mut tmp_cp, storage),
             Instruction::ILoad(LocalIdx(300))
         ));
         assert!(matches!(
-            Instruction::lower(&code, 2, msa, &mut tmp_cp, &storage),
+            Instruction::lower(&code, 2, msa, &mut tmp_cp, storage),
             Instruction::LStore(LocalIdx(400))
         ));
     }
 
     #[test]
     fn lower_stack_variants_without_losing_their_forms() {
-        let msa = BootstrapCLD::ms_allocator();
+        ensure_metaspace();
+        let cld = ClassLoaderData::new();
+        let msa = cld.ms_allocator();
         let mut tmp_cp = TmpConstantPool::new();
-        let storage = OOPStorage::new(msa);
+        let storage = cld.oop_storage();
 
         let opcodes = [
             Opcode::Nop,
@@ -480,7 +486,7 @@ mod tests {
         };
         for (idx, expected) in expected.iter().enumerate() {
             assert_eq!(
-                std::mem::discriminant(&Instruction::lower(&code, idx, msa, &mut tmp_cp, &storage)),
+                std::mem::discriminant(&Instruction::lower(&code, idx, msa, &mut tmp_cp, storage)),
                 std::mem::discriminant(expected)
             );
         }

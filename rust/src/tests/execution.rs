@@ -1,6 +1,6 @@
-use super::support::{assert_value, fixture_dir, init_vm, isolated, run_method};
+use super::support::{assert_value, fixture_dir, init_vm, isolated, load_normal_klass, run_method};
 use crate::{
-    class_loader::bs_cld::BootstrapCLD,
+    class_loader::class_loader_data::ClassLoaderData,
     engines::{
         exec_dispatcher::ExecDispatcher,
         exec_error::ExecErrorKind,
@@ -21,7 +21,8 @@ fn java_arithmetic_and_wide_arguments() {
         concat!(module_path!(), "::java_arithmetic_and_wide_arguments"),
         || {
             init_vm(fixture_dir());
-            let owner = BootstrapCLD::find_normal_klass(&SymbolTable::intern("Cases")).unwrap();
+            let cld = ClassLoaderData::new();
+            let owner = load_normal_klass(&cld, &SymbolTable::intern("Cases")).unwrap();
             let cases: &[(&str, &str, &[JValue], JValue)] = &[
                 ("subtract", "(II)I", &[Int(7), Int(12)], Int(-5)),
                 ("add", "(II)I", &[Int(i32::MAX), Int(1)], Int(i32::MIN)),
@@ -61,7 +62,8 @@ fn java_branches_loops_and_switches_survive_yielding() {
         ),
         || {
             init_vm(fixture_dir());
-            let owner = BootstrapCLD::find_normal_klass(&SymbolTable::intern("Cases")).unwrap();
+            let cld = ClassLoaderData::new();
+            let owner = load_normal_klass(&cld, &SymbolTable::intern("Cases")).unwrap();
             for slice in [1, 3, 10_000] {
                 for (n, expected) in [(0, 0), (1, 1), (100, 5050)] {
                     assert_value(
@@ -105,7 +107,8 @@ fn java_conversions_floats_and_returns() {
         concat!(module_path!(), "::java_conversions_floats_and_returns"),
         || {
             init_vm(fixture_dir());
-            let owner = BootstrapCLD::find_normal_klass(&SymbolTable::intern("Cases")).unwrap();
+            let cld = ClassLoaderData::new();
+            let owner = load_normal_klass(&cld, &SymbolTable::intern("Cases")).unwrap();
             for (input, expected) in [
                 (f64::NAN, 0),
                 (f64::INFINITY, i32::MAX),
@@ -174,8 +177,10 @@ fn java_division_error_preserves_invocation_context() {
         ),
         || {
             init_vm(fixture_dir());
-            let owner = BootstrapCLD::find_normal_klass(&SymbolTable::intern("Cases")).unwrap();
-            let call = Invocation::try_new(owner, "divide", "(II)I", &[Int(7), Int(0)]).unwrap();
+            let cld = ClassLoaderData::new();
+            let owner = load_normal_klass(&cld, &SymbolTable::intern("Cases")).unwrap();
+            let call =
+                Invocation::lookup_declared(owner, "divide", "(II)I", &[Int(7), Int(0)]).unwrap();
             let mut thread = JavaThread::new();
             ExecDispatcher::start(&mut thread, call).unwrap();
             let error = match ExecDispatcher::poll(&mut thread, &mut ExecBudget::new(100)) {
@@ -186,7 +191,8 @@ fn java_division_error_preserves_invocation_context() {
             let brief = error.brief.unwrap();
             assert_eq!(brief.klass, "Cases");
             assert_eq!(brief.method, "divide");
-            assert!(matches!(&*brief.args, [Int(7), Int(0)]));
+            assert_eq!(brief.desc, "(II)I");
+            assert!(brief.instruction_index.is_some());
         },
     );
 }

@@ -1,5 +1,5 @@
 use crate::{
-    class_loader::oop_storage::OOPStorage, class_parser::CodeData, code::instructions::Instruction, oops::tmp_constant_pool::TmpConstantPool, runtime::ms_api::{MsAllocator, MsBox}
+    class_loader::oop_storage::OopStorage, class_parser::CodeData, code::instructions::Instruction, oops::tmp_constant_pool::TmpConstantPool, runtime::ms_api::{MsAllocator, MsBox}
 };
 
 #[derive(Debug)]
@@ -12,7 +12,7 @@ pub struct Code<'method> {
 }
 
 impl<'method> Code<'method> {
-    pub fn build(cd: &CodeData, msa: &'method MsAllocator, storage: &OOPStorage) -> Self {
+    pub fn build(cd: &CodeData, msa: &'method MsAllocator, storage: &OopStorage) -> Self {
         let bytecode = &cd.bytecode;
         let mut tmp_cp = TmpConstantPool::new();
 

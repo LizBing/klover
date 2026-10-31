@@ -2,7 +2,8 @@ use crate::{
     engines::{
         exec_error::{ExecError, ExecErrorKind, ExecResult},
         interpreter::interpreter_frame::InterpreterFrame,
-        invocation::Invocation, protocol::{DispatchOutcome, EngineExit, ExecBudget},
+        invocation::Invocation,
+        protocol::{DispatchOutcome, EngineExit, ExecBudget},
     },
     runtime::java_thread::JavaThread,
 };
@@ -10,7 +11,10 @@ use crate::{
 pub struct ExecDispatcher;
 
 impl ExecDispatcher {
-    pub fn start<'metadata>(thread: &mut JavaThread<'metadata>, invocation: Invocation<'metadata>) -> ExecResult<()> {
+    pub fn start<'exec, 'meta: 'exec>(
+        thread: &mut JavaThread<'exec>,
+        invocation: Invocation<'exec, 'meta>,
+    ) -> ExecResult<()> {
         // directly create Interpreter frame for now
         let frame = InterpreterFrame::try_new(invocation)?;
         thread.start_with_frame(frame);

@@ -19,8 +19,8 @@ pub struct OOPHandle<'storage> {
 }
 
 #[derive(Debug)]
-pub struct OOPStorage<'msa> {
-    msa: &'msa MsAllocator,
+pub struct OopStorage {
+    msa: NonNull<MsAllocator>,
 
     // Keep the arena lifetime outside the mutable registry. Putting &'msa
     // references inside a Mutex would make OOPStorage invariant in 'msa.
@@ -28,19 +28,19 @@ pub struct OOPStorage<'msa> {
     weaks: parking_lot::Mutex<Vec<SlotAddress>>,
 }
 
-impl<'msa> OOPStorage<'msa> {
-    pub const fn new(msa: &'msa MsAllocator) -> Self {
+impl OopStorage {
+    pub(super) fn new(msa: &'static MsAllocator) -> Self {
         Self {
-            msa,
+            msa: NonNull::from(msa),
             strongs: parking_lot::Mutex::new(Vec::new()),
             weaks: parking_lot::Mutex::new(Vec::new()),
         }
     }
 }
 
-impl<'msa> OOPStorage<'msa> {
+impl OopStorage {
     fn create_handle(&self, storage: &parking_lot::Mutex<Vec<SlotAddress>>) -> OOPHandle<'_> {
-        let slot = MsBox::new(self.msa, AtomicNObjPtr::new()).leak();
+        let slot = unsafe { MsBox::new(self.msa.as_ref(), AtomicNObjPtr::new()).leak() };
 
         let mut guard = storage.lock();
         guard.push(SlotAddress(NonNull::from(slot)));

@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
-use crate::tests::support::{TempDir, fixture_dir, init_vm, isolated};
+use crate::tests::support::{TempDir, fixture_dir, init_vm, isolated, load_normal_klass};
 use crate::{
-    class_loader::{bs_cld::BootstrapCLD, load_error::LoadErrorKind},
+    class_loader::{class_loader_data::ClassLoaderData, load_error::LoadErrorKind},
     class_parser::{ClassRef, MethodDescriptor, MethodMemRef, MethodMemRefKind},
     oops::{constant_entries::MethodRef, oops_errors::ResolveError, symbol_table::SymbolTable},
 };
 
-fn method_ref(kind: MethodMemRefKind, owner: &str, name: &str, desc: &str) -> MethodRef<'static> {
+fn method_ref<'a>(kind: MethodMemRefKind, owner: &str, name: &str, desc: &str) -> MethodRef<'a> {
     MethodRef::build(&MethodMemRef {
         kind,
         owner: Arc::new(ClassRef { name: owner.into() }),
@@ -25,6 +25,10 @@ fn resolves_declared_inherited_overloaded_and_hidden_methods() {
         ),
         || {
             init_vm(fixture_dir());
+            let cld = ClassLoaderData::new();
+            let caller = cld
+                .load_klass(&SymbolTable::intern("java/lang/Object"))
+                .unwrap();
             for (owner, name, desc, declaring_class) in [
                 (
                     "MethodResolution$Base",
@@ -59,15 +63,14 @@ fn resolves_declared_inherited_overloaded_and_hidden_methods() {
             ] {
                 let reference = method_ref(MethodMemRefKind::Class, owner, name, desc);
                 assert!(reference.resolved.get().is_none());
-                let actual = reference.resolve(None).unwrap();
-                let expected =
-                    BootstrapCLD::find_normal_klass(&SymbolTable::intern(declaring_class))
-                        .unwrap()
-                        .find_declared_method(name, desc)
-                        .unwrap();
+                let actual = reference.resolve(caller).unwrap();
+                let expected = load_normal_klass(&cld, &SymbolTable::intern(declaring_class))
+                    .unwrap()
+                    .find_declared_method(name, desc)
+                    .unwrap();
                 assert!(std::ptr::eq(actual, expected), "{owner}.{name}{desc}");
                 assert!(std::ptr::eq(actual, *reference.resolved.get().unwrap()));
-                assert!(std::ptr::eq(actual, reference.resolve(None).unwrap()));
+                assert!(std::ptr::eq(actual, reference.resolve(caller).unwrap()));
             }
 
             let reference = method_ref(
@@ -78,9 +81,9 @@ fn resolves_declared_inherited_overloaded_and_hidden_methods() {
             );
             std::thread::scope(|scope| {
                 let handles: Vec<_> = (0..4)
-                    .map(|_| scope.spawn(|| reference.resolve(None).unwrap()))
+                    .map(|_| scope.spawn(|| reference.resolve(caller).unwrap()))
                     .collect();
-                let expected = reference.resolve(None).unwrap();
+                let expected = reference.resolve(caller).unwrap();
                 for handle in handles {
                     assert!(std::ptr::eq(handle.join().unwrap(), expected));
                 }
@@ -98,13 +101,17 @@ fn reports_load_missing_method_and_reference_kind_errors() {
         ),
         || {
             init_vm(fixture_dir());
+            let cld = ClassLoaderData::new();
+            let caller = cld
+                .load_klass(&SymbolTable::intern("java/lang/Object"))
+                .unwrap();
             let reference = method_ref(
                 MethodMemRefKind::Class,
                 "MissingResolutionOwner",
                 "test",
                 "()V",
             );
-            let Err(ResolveError::Load(error)) = reference.resolve(None) else {
+            let Err(ResolveError::Load(error)) = reference.resolve(caller) else {
                 panic!("expected owner load failure");
             };
             assert_eq!(error.klass_name, "MissingResolutionOwner");
@@ -118,7 +125,7 @@ fn reports_load_missing_method_and_reference_kind_errors() {
             ] {
                 let reference =
                     method_ref(MethodMemRefKind::Class, "MethodResolution$Leaf", name, desc);
-                assert!(matches!(reference.resolve(None),
+                assert!(matches!(reference.resolve(caller),
                     Err(ResolveError::NoSuchMethod { owner, name: actual_name, desc: actual_desc })
                         if owner == "MethodResolution$Leaf" && actual_name == name && actual_desc == desc
                 ));
@@ -130,7 +137,7 @@ fn reports_load_missing_method_and_reference_kind_errors() {
                 (MethodMemRefKind::Interface, "MethodResolution$Base", true),
             ] {
                 let reference = method_ref(kind, owner, "missing", "()V");
-                assert!(matches!(reference.resolve(None),
+                assert!(matches!(reference.resolve(caller),
                     Err(ResolveError::IncompatibleClassChange { owner: actual, expected_interface: expected })
                         if actual == owner && expected == expected_interface
                 ));
@@ -153,6 +160,10 @@ fn retries_after_a_failed_owner_load() {
             )
             .unwrap();
             init_vm(dir.0.clone());
+            let cld = ClassLoaderData::new();
+            let caller = cld
+                .load_klass(&SymbolTable::intern("java/lang/Object"))
+                .unwrap();
             let reference = method_ref(
                 MethodMemRefKind::Class,
                 "MethodResolution$Base",
@@ -160,7 +171,7 @@ fn retries_after_a_failed_owner_load() {
                 "()I",
             );
             assert!(matches!(
-                reference.resolve(None),
+                reference.resolve(caller),
                 Err(ResolveError::Load(_))
             ));
             assert!(reference.resolved.get().is_none());
@@ -170,7 +181,7 @@ fn retries_after_a_failed_owner_load() {
                 dir.0.join("MethodResolution$Base.class"),
             )
             .unwrap();
-            let method = reference.resolve(None).unwrap();
+            let method = reference.resolve(caller).unwrap();
             assert!(std::ptr::eq(method, *reference.resolved.get().unwrap()));
         },
     );
@@ -185,6 +196,10 @@ fn resolves_interface_declarations_and_reports_unsupported_fallback() {
         ),
         || {
             init_vm(fixture_dir());
+            let cld = ClassLoaderData::new();
+            let caller = cld
+                .load_klass(&SymbolTable::intern("java/lang/Object"))
+                .unwrap();
             for name in ["declared", "abstractMethod", "defaultMethod"] {
                 let reference = method_ref(
                     MethodMemRefKind::Interface,
@@ -192,9 +207,9 @@ fn resolves_interface_declarations_and_reports_unsupported_fallback() {
                     name,
                     "()I",
                 );
-                let actual = reference.resolve(None).unwrap();
+                let actual = reference.resolve(caller).unwrap();
                 let expected =
-                    BootstrapCLD::find_normal_klass(&SymbolTable::intern("MethodResolution$Root"))
+                    load_normal_klass(&cld, &SymbolTable::intern("MethodResolution$Root"))
                         .unwrap()
                         .find_declared_method(name, "()I")
                         .unwrap();
@@ -228,7 +243,7 @@ fn resolves_interface_declarations_and_reports_unsupported_fallback() {
                 ),
             ] {
                 let reference = method_ref(kind, owner, name, "()I");
-                assert!(matches!(reference.resolve(None),
+                assert!(matches!(reference.resolve(caller),
                     Err(ResolveError::UnsupportedInterfaceLookup { owner: actual, name: actual_name, desc })
                         if actual == owner && actual_name == name && desc == "()I"
                 ));

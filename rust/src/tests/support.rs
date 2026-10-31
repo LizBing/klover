@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::{
-    class_loader::class_loader_data::ClassLoaderData,
+    class_loader::{class_loader_data::ClassLoaderData, load_error::LoadResult},
     engines::{
         exec_dispatcher::ExecDispatcher,
         invocation::Invocation,
@@ -15,7 +15,9 @@ use crate::{
     },
     oops::{
         jvalue::JValue,
+        klass::Klass,
         normal_klass::{NormalKlass, UnlinkedNormalKlass},
+        symbol_table::SymbolHandle,
     },
     runtime::{arguments::Arguments, java_thread::JavaThread, ms_api, vm},
 };
@@ -132,21 +134,26 @@ pub fn init_vm(path: PathBuf) {
     .unwrap();
 }
 
-pub fn parse_class<'a>(cld: &'a ClassLoaderData<'a>, bytes: &[u8]) -> NormalKlass<'a> {
+pub fn load_normal_klass<'a>(
+    cld: &'a ClassLoaderData,
+    name: &SymbolHandle,
+) -> LoadResult<&'a NormalKlass<'a>> {
+    let Klass::Normal(klass) = cld.load_klass(name)? else {
+        panic!("expected a normal class: {}", name.utf8());
+    };
+    Ok(klass)
+}
+
+pub fn parse_class<'a>(cld: &'a ClassLoaderData, bytes: &[u8]) -> NormalKlass<'a> {
     let parsed = crate::class_parser::parse_class(bytes).expect("parse test class");
     let interfaces =
         unsafe { ms_api::MsBox::new_uninit_slice(cld.ms_allocator(), 0).assume_init() };
-    NormalKlass::link(
-        UnlinkedNormalKlass::build(parsed, Some(cld)),
-        None,
-        interfaces,
-    )
-    .unwrap()
+    NormalKlass::link(UnlinkedNormalKlass::build(parsed, cld), None, interfaces).unwrap()
 }
 
 /// Build deliberately inconsistent runtime metadata after parsing a valid class.
 pub fn parse_class_with_runtime_max_locals<'a>(
-    cld: &'a ClassLoaderData<'a>,
+    cld: &'a ClassLoaderData,
     bytes: &[u8],
     max_locals: u16,
 ) -> NormalKlass<'a> {
@@ -154,12 +161,7 @@ pub fn parse_class_with_runtime_max_locals<'a>(
     parsed.set_max_locals_for_test(0, max_locals);
     let interfaces =
         unsafe { ms_api::MsBox::new_uninit_slice(cld.ms_allocator(), 0).assume_init() };
-    NormalKlass::link(
-        UnlinkedNormalKlass::build(parsed, Some(cld)),
-        None,
-        interfaces,
-    )
-    .unwrap()
+    NormalKlass::link(UnlinkedNormalKlass::build(parsed, cld), None, interfaces).unwrap()
 }
 
 /// Minimal, single-method root class. Bytecode remains explicit at call sites.
@@ -213,7 +215,7 @@ pub fn run_method(
     slice: u64,
 ) -> MethodReturn {
     assert!(slice > 0);
-    let invocation = Invocation::try_new(owner, name, desc, args).unwrap();
+    let invocation = Invocation::lookup_declared(owner, name, desc, args).unwrap();
     let mut thread = JavaThread::new();
     ExecDispatcher::start(&mut thread, invocation).unwrap();
     for _ in 0..100_000 {

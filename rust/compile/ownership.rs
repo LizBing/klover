@@ -7,7 +7,7 @@ include!("../src/lib.rs");
 #[link(name = "klover-core", kind = "static")]
 unsafe extern "C" {}
 
-use class_loader::oop_storage::OOPStorage;
+use class_loader::class_loader_data::ClassLoaderData;
 use runtime::ms_api::{MsAllocator, MsBox};
 
 #[cfg(not(any(
@@ -24,10 +24,11 @@ fn main() {
     *owner = 2;
     let published = owner.leak();
     println!("{published}");
-    let storage = OOPStorage::new(&arena);
+    let cld = ClassLoaderData::new();
+    let storage = cld.oop_storage();
     let handle = storage.create_strong();
     println!("{handle:?}");
-    drop(storage);
+    drop(cld);
     drop(arena);
 }
 
@@ -59,9 +60,9 @@ fn main() {
 
 #[cfg(klover_case = "handle")]
 fn main() {
-    let arena = MsAllocator::new();
-    let storage = OOPStorage::new(&arena);
+    let cld = ClassLoaderData::new();
+    let storage = cld.oop_storage();
     let handle = storage.create_strong();
-    drop(storage); // Must be E0505: registry must outlive its handle.
+    drop(cld); // Must be E0505: the registry owner must outlive its handle.
     println!("{handle:?}");
 }

@@ -1,7 +1,7 @@
-use super::support::{TempDir, fixture_dir, init_vm, isolated};
+use super::support::{TempDir, fixture_dir, init_vm, isolated, load_normal_klass};
 use crate::{
-    class_loader::{bs_cld::BootstrapCLD, load_error::LoadErrorKind},
-    oops::symbol_table::SymbolTable,
+    class_loader::{class_loader_data::ClassLoaderData, load_error::LoadErrorKind},
+    oops::{klass::Klass, symbol_table::SymbolTable},
 };
 
 #[test]
@@ -24,8 +24,9 @@ fn missing_interface_does_not_cache_a_partial_class() {
                 std::fs::copy(fixtures.join(file), dir.0.join(file)).unwrap();
             }
             init_vm(dir.0.clone());
+            let cld = ClassLoaderData::new();
             let name = SymbolTable::intern("InterfaceLoading$Base");
-            let error = BootstrapCLD::find_klass(&name).unwrap_err();
+            let error = cld.load_klass(&name).unwrap_err();
             assert!(matches!(error.kind, LoadErrorKind::NotFound));
             assert_eq!(error.klass_name, "InterfaceLoading$Second");
             std::fs::copy(
@@ -34,7 +35,7 @@ fn missing_interface_does_not_cache_a_partial_class() {
             )
             .unwrap();
             assert!(
-                BootstrapCLD::find_klass(&name).is_ok(),
+                cld.load_klass(&name).is_ok(),
                 "failed interface load poisoned the cache"
             );
         },
@@ -50,19 +51,20 @@ fn loads_superclass_and_reuses_class_identity() {
         ),
         || {
             init_vm(fixture_dir());
+            let cld = ClassLoaderData::new();
             let name = SymbolTable::intern("Cases");
-            let first = BootstrapCLD::find_klass(&name).unwrap();
-            let second = BootstrapCLD::find_klass(&name).unwrap();
+            let first = cld.load_klass(&name).unwrap();
+            let second = cld.load_klass(&name).unwrap();
             assert!(
                 std::ptr::eq(first, second),
                 "repeated lookup created a new class"
             );
-            let klass = first.as_normal().unwrap();
+            let Klass::Normal(klass) = first else {
+                panic!("expected a normal class")
+            };
             assert_eq!(klass.name().utf8(), "Cases");
             assert!(klass.find_declared_method("sum", "(I)I").is_some());
-            assert!(
-                BootstrapCLD::find_normal_klass(&SymbolTable::intern("java/lang/Object")).is_ok()
-            );
+            assert!(load_normal_klass(&cld, &SymbolTable::intern("java/lang/Object")).is_ok());
         },
     );
 }
@@ -78,11 +80,12 @@ fn missing_and_malformed_classes_report_context() {
             let dir = TempDir::new();
             std::fs::write(dir.0.join("Broken.class"), b"not a class file").unwrap();
             init_vm(dir.0.clone());
-            let error = BootstrapCLD::find_klass(&SymbolTable::intern("Missing")).unwrap_err();
+            let cld = ClassLoaderData::new();
+            let error = cld.load_klass(&SymbolTable::intern("Missing")).unwrap_err();
             assert!(matches!(error.kind, LoadErrorKind::NotFound));
             assert_eq!(error.klass_name, "Missing");
             assert!(error.cld_name.is_some());
-            let error = BootstrapCLD::find_klass(&SymbolTable::intern("Broken")).unwrap_err();
+            let error = cld.load_klass(&SymbolTable::intern("Broken")).unwrap_err();
             assert!(matches!(error.kind, LoadErrorKind::Parse(_)));
             assert_eq!(error.klass_name, "Broken");
         },
@@ -101,8 +104,9 @@ fn missing_superclass_does_not_cache_a_partial_class() {
             let fixtures = fixture_dir();
             std::fs::copy(fixtures.join("Cases.class"), dir.0.join("Cases.class")).unwrap();
             init_vm(dir.0.clone());
+            let cld = ClassLoaderData::new();
             let name = SymbolTable::intern("Cases");
-            let error = BootstrapCLD::find_klass(&name).unwrap_err();
+            let error = cld.load_klass(&name).unwrap_err();
             assert!(matches!(error.kind, LoadErrorKind::NotFound));
             assert_eq!(error.klass_name, "java/lang/Object");
             std::fs::create_dir_all(dir.0.join("java/lang")).unwrap();
@@ -112,7 +116,7 @@ fn missing_superclass_does_not_cache_a_partial_class() {
             )
             .unwrap();
             assert!(
-                BootstrapCLD::find_klass(&name).is_ok(),
+                cld.load_klass(&name).is_ok(),
                 "failed load poisoned the cache"
             );
         },

@@ -1,52 +1,71 @@
 use crate::{
-    code::instructions::{InstIdx, Instruction},
+    code::{
+        code::Code,
+        instructions::{InstIdx, Instruction},
+    },
     engines::{
         exec_error::{ExecError, ExecErrorKind, ExecResult},
         interpreter::{interpreter::Interpreter, slot::Slot},
-        invocation::Invocation,
-        java_frame::JavaFrame, protocol::{EngineExit, ExecBudget, MethodReturn},
+        invocation::{CallTarget, Invocation},
+        java_frame::JavaFrame,
+        protocol::{EngineExit, ExecBudget, MethodReturn},
     },
     oops::jvalue::{JDouble, JInt, JLong, JValue},
 };
 
-pub struct InterpreterFrame<'thread> {
-    pub invocation: Invocation<'thread>,
+pub struct InterpreterFrame<'exec, 'meta: 'exec> {
+    target: CallTarget<'exec, 'meta>,
+    code: &'exec Code<'meta>,
 
     oprand_stack: Vec<Slot>,
     locals: Box<[Slot]>,
 
     pc: usize,
-    last_pc: usize,
+    last_pc: Option<usize>,
 }
 
-impl<'thread> InterpreterFrame<'thread> {
+impl<'exec, 'meta: 'exec> InterpreterFrame<'exec, 'meta> {
     /// Initializes argument locals, rejecting calls whose slot requirements exceed max_locals.
     /// Long and double arguments occupy two slots; all others, including the receiver, occupy one.
-    pub fn try_new(invocation: Invocation<'thread>) -> ExecResult<Self> {
-        let required: usize = invocation
-            .args
+    pub fn try_new(invocation: Invocation<'exec, 'meta>) -> ExecResult<Self> {
+        let (target, args) = invocation.into_parts();
+        let method = target.method;
+        let code = method.code.as_ref().ok_or_else(|| {
+            ExecError::with_target(
+                &target,
+                None,
+                ExecErrorKind::NoCode {
+                    owner: target.declaring_class.name().utf8().into(),
+                    name: method.name.utf8().into(),
+                    desc: method.desc.raw().utf8().into(),
+                },
+            )
+        })?;
+        let required: usize = args
             .iter()
             .map(|arg| match arg {
                 JValue::Long(_) | JValue::Double(_) => 2,
                 _ => 1,
             })
             .sum();
-        let available = invocation.code().max_locals;
+        let available = code.max_locals;
         if required > available {
-            return Err(ExecError::with_invocation(
-                invocation,
-                ExecErrorKind::InsufficientLocalSlots { required, available },
+            return Err(ExecError::with_target(
+                &target,
+                None,
+                ExecErrorKind::InsufficientLocalSlots {
+                    required,
+                    available,
+                },
             ));
         }
 
         let oprand_stack = Vec::new();
 
-        let mut locals: Box<[Slot]> = std::iter::repeat(Slot::Unused)
-            .take(available)
-            .collect();
+        let mut locals: Box<[Slot]> = std::iter::repeat(Slot::Unused).take(available).collect();
 
         let mut idx = 0;
-        for arg in invocation.args.iter() {
+        for arg in args.iter() {
             match *arg {
                 JValue::Boolean(b) => locals[idx] = Slot::Int(b as JInt),
                 JValue::Byte(v) => locals[idx] = Slot::Int(v.into()),
@@ -72,22 +91,23 @@ impl<'thread> InterpreterFrame<'thread> {
         }
 
         Ok(Self {
-            invocation,
+            target,
+            code,
             oprand_stack,
             locals,
             pc: 0,
-            last_pc: 0,
+            last_pc: None,
         })
     }
 }
 
-impl InterpreterFrame<'_> {
+impl InterpreterFrame<'_, '_> {
     pub fn make_exec_error(&self, kind: ExecErrorKind) -> ExecError {
-        ExecError::with_invocation(self.invocation.clone(), kind)
+        ExecError::with_target(&self.target, self.last_pc, kind)
     }
 }
 
-impl JavaFrame for InterpreterFrame<'_> {
+impl JavaFrame for InterpreterFrame<'_, '_> {
     fn resume(&mut self, budget: &mut ExecBudget) -> ExecResult<EngineExit> {
         Interpreter::execute(self, budget)
     }
@@ -114,11 +134,11 @@ impl JavaFrame for InterpreterFrame<'_> {
     }
 }
 
-impl<'thread> InterpreterFrame<'thread> {
-    pub fn next_inst(&mut self) -> Option<Instruction<'thread>> {
-        let res = self.invocation.code().insts.get(self.pc).cloned();
+impl<'exec, 'meta: 'exec> InterpreterFrame<'exec, 'meta> {
+    pub fn next_inst(&mut self) -> Option<Instruction<'meta>> {
+        let res = self.code.insts.get(self.pc).cloned();
         if res.is_some() {
-            self.last_pc = self.pc;
+            self.last_pc = Some(self.pc);
             self.pc += 1;
         }
 
@@ -126,7 +146,7 @@ impl<'thread> InterpreterFrame<'thread> {
     }
 }
 
-impl InterpreterFrame<'_> {
+impl InterpreterFrame<'_, '_> {
     pub fn push(&mut self, slot: Slot) {
         self.oprand_stack.push(slot);
     }
@@ -203,9 +223,9 @@ impl InterpreterFrame<'_> {
     }
 }
 
-impl InterpreterFrame<'_> {
+impl InterpreterFrame<'_, '_> {
     pub fn jump_to(&mut self, target: InstIdx) -> ExecResult<()> {
-        if target.0 >= self.invocation.code().insts.len() {
+        if target.0 >= self.code.insts.len() {
             return Err(self.make_exec_error(ExecErrorKind::InvalidBranchTarget(target.0)));
         }
         self.pc = target.0;
@@ -247,7 +267,7 @@ impl InterpreterFrame<'_> {
     }
 }
 
-impl InterpreterFrame<'_> {
+impl InterpreterFrame<'_, '_> {
     pub fn push_int(&mut self, value: JInt) {
         self.push(Slot::Int(value));
     }
@@ -258,7 +278,7 @@ impl InterpreterFrame<'_> {
             _ => Err(self.make_exec_error(ExecErrorKind::MismatchSlotType)),
         }
     }
-    
+
     pub fn push_float(&mut self, value: crate::oops::jvalue::JFloat) {
         self.push(Slot::Float(value));
     }

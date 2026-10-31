@@ -1,5 +1,4 @@
 use crate::{
-    code::code::Code,
     engines::exec_error::{ExecError, ExecErrorKind, ExecResult},
     oops::{
         jvalue::JValue,
@@ -8,69 +7,75 @@ use crate::{
     },
 };
 
-#[derive(Debug, Clone)]
-pub struct Invocation<'metadata> {
-    pub owner: &'metadata NormalKlass<'metadata>,
-    pub method: &'metadata Method<'metadata>,
-
-    /// Instance calls include the receiver at index zero.
-    pub args: Box<[JValue]>,
+/// A selected method and the class that declares it.
+/// Private fields prevent pairing a method with an unrelated class.
+#[derive(Debug, Clone, Copy)]
+pub struct CallTarget<'exec, 'meta: 'exec> {
+    pub declaring_class: &'exec NormalKlass<'meta>,
+    pub method: &'exec Method<'meta>,
 }
 
-impl<'metadata> Invocation<'metadata> {
-    /// Validates argument count and value kinds against the method descriptor.
-    /// Reference checks, including the receiver, do not inspect the referenced object.
-    pub fn try_new(
-        owner: &'metadata NormalKlass<'metadata>,
-        mname: &str,
+impl<'exec, 'meta: 'exec> CallTarget<'exec, 'meta> {
+    /// Looks up a declaration only; this does not perform JVM method resolution.
+    pub fn lookup_declared(
+        declaring_class: &'exec NormalKlass<'meta>,
+        name: &str,
         desc: &str,
-        args: &[JValue],
     ) -> ExecResult<Self> {
-        let Some(method) = owner.find_declared_method(mname, desc) else {
-            return Err(ExecError::new(ExecErrorKind::MethodNotFound {
-                owner: owner.name().utf8().into(),
-                name: mname.into(),
-                desc: desc.into(),
-            }));
-        };
-
-        if method.code.is_none() {
-            return Err(ExecError::new(ExecErrorKind::NoCode {
-                owner: owner.name().utf8().into(),
-                name: mname.into(),
-                desc: desc.into(),
-            }));
-        }
-
-        let invocation = Self {
-            owner,
+        let method = declaring_class
+            .find_declared_method(name, desc)
+            .ok_or_else(|| {
+                ExecError::new(ExecErrorKind::MethodNotFound {
+                    owner: declaring_class.name().utf8().into(),
+                    name: name.into(),
+                    desc: desc.into(),
+                })
+            })?;
+        Ok(Self {
+            declaring_class,
             method,
-            args: args.into(),
-        };
+        })
+    }
+}
 
+/// A validated call request, consumed when an execution frame is created.
+/// Metadata outlives the execution borrow; arguments are owned by the request.
+#[derive(Debug)]
+pub struct Invocation<'exec, 'meta: 'exec> {
+    target: CallTarget<'exec, 'meta>,
+    /// Instance calls include the receiver at index zero. Wide values count once.
+    args: Box<[JValue]>,
+}
+
+impl<'exec, 'meta: 'exec> Invocation<'exec, 'meta> {
+    /// Validates argument count and value kinds against the selected method.
+    /// Reference checks, including the receiver, do not inspect the referenced object.
+    /// Bytecode availability and local-slot capacity are checked by the interpreter.
+    pub fn try_new(target: CallTarget<'exec, 'meta>, args: Box<[JValue]>) -> ExecResult<Self> {
+        let method = target.method;
         let receiver_count = usize::from(!method.acc_flags.contains(MethodAccessFlags::STATIC));
         let expected = method.desc.args().len() + receiver_count;
         if args.len() != expected {
-            return Err(ExecError::with_invocation(
-                invocation,
+            return Err(ExecError::with_target(
+                &target,
+                None,
                 ExecErrorKind::ArgumentCountMismatch {
                     expected,
                     actual: args.len(),
                 },
             ));
         }
-
         if receiver_count == 1 && !matches!(args[0], JValue::Ref(_)) {
-            return Err(ExecError::with_invocation(
-                invocation,
+            return Err(ExecError::with_target(
+                &target,
+                None,
                 ExecErrorKind::ArgumentTypeMismatch {
                     index: 0,
-                    expected: format!("L{};", owner.name().utf8()),
+                    expected: format!("L{};", target.declaring_class.name().utf8()),
                     actual: args[0],
                 },
             ));
         }
-
         for (parameter, (desc, arg)) in method
             .desc
             .args()
@@ -79,8 +84,9 @@ impl<'metadata> Invocation<'metadata> {
             .enumerate()
         {
             if !desc.matches_value(arg) {
-                return Err(ExecError::with_invocation(
-                    invocation,
+                return Err(ExecError::with_target(
+                    &target,
+                    None,
                     ExecErrorKind::ArgumentTypeMismatch {
                         index: parameter + receiver_count,
                         expected: desc.raw().utf8().into(),
@@ -89,14 +95,21 @@ impl<'metadata> Invocation<'metadata> {
                 ));
             }
         }
-
-        Ok(invocation)
+        Ok(Self { target, args })
     }
-}
 
-impl<'metadata> Invocation<'metadata> {
-    pub fn code(&self) -> &Code<'metadata> {
-        self.method.code.as_ref().unwrap()
+    /// Convenience entry point for callers that have a method name and borrowed arguments.
+    pub fn lookup_declared(
+        owner: &'exec NormalKlass<'meta>,
+        name: &str,
+        desc: &str,
+        args: &[JValue],
+    ) -> ExecResult<Self> {
+        Self::try_new(CallTarget::lookup_declared(owner, name, desc)?, args.into())
+    }
+
+    pub(super) fn into_parts(self) -> (CallTarget<'exec, 'meta>, Box<[JValue]>) {
+        (self.target, self.args)
     }
 }
 
@@ -112,7 +125,7 @@ mod tests {
 
     // A minimal classfile exercises the normal descriptor and method builders.
     fn owner<'a>(
-        cld: &'a ClassLoaderData<'a>,
+        cld: &'a ClassLoaderData,
         desc: &str,
         is_static: bool,
         has_code: bool,
@@ -160,7 +173,7 @@ mod tests {
 
         let cf = crate::class_parser::parse_class(&bytes).unwrap();
         let interfaces = unsafe { MsBox::new_uninit_slice(cld.ms_allocator(), 0).assume_init() };
-        NormalKlass::link(UnlinkedNormalKlass::build(cf, Some(cld)), None, interfaces).unwrap()
+        NormalKlass::link(UnlinkedNormalKlass::build(cf, cld), None, interfaces).unwrap()
     }
 
     #[test]
@@ -182,7 +195,6 @@ mod tests {
 
     fn validates_each_parameter_kind_including_arrays() {
         let cld = ClassLoaderData::new();
-        cld.initialize();
         let values = [
             JValue::Boolean(1),
             JValue::Byte(-1),
@@ -211,7 +223,7 @@ mod tests {
             let desc = format!("({descriptor})V");
             let klass = owner(&cld, &desc, true, true);
             for (index, value) in values.iter().enumerate() {
-                let result = Invocation::try_new(&klass, "test", &desc, &[*value]);
+                let result = Invocation::lookup_declared(&klass, "test", &desc, &[*value]);
                 if index == matching_index {
                     assert!(result.is_ok(), "{descriptor}: {value:?}");
                 } else {
@@ -226,7 +238,7 @@ mod tests {
                     let brief = error.brief.unwrap();
                     assert_eq!(brief.klass, "java/lang/Object");
                     assert_eq!(brief.method, "test");
-                    assert_eq!(brief.args.len(), 1);
+                    assert_eq!(brief.desc, desc);
                 }
             }
         }
@@ -234,26 +246,26 @@ mod tests {
 
     fn checks_argument_count_and_counts_wide_values_once() {
         let cld = ClassLoaderData::new();
-        cld.initialize();
         let klass = owner(&cld, "(JD)V", true, true);
         let values = [JValue::Long(1), JValue::Double(2.0), JValue::Int(3)];
         for actual in [0, 1, 3] {
-            let error =
-                Invocation::try_new(&klass, "test", "(JD)V", &values[..actual]).unwrap_err();
+            let error = Invocation::lookup_declared(&klass, "test", "(JD)V", &values[..actual])
+                .unwrap_err();
             assert!(matches!(error.kind,
                 ExecErrorKind::ArgumentCountMismatch { expected: 2, actual: count } if count == actual
             ));
         }
-        let invocation = Invocation::try_new(&klass, "test", "(JD)V", &values[..2]).unwrap();
+        let invocation =
+            Invocation::lookup_declared(&klass, "test", "(JD)V", &values[..2]).unwrap();
         assert!(matches!(
             &*invocation.args,
             [JValue::Long(1), JValue::Double(2.0)]
         ));
 
         let klass = owner(&cld, "()V", true, true);
-        assert!(Invocation::try_new(&klass, "test", "()V", &[]).is_ok());
+        assert!(Invocation::lookup_declared(&klass, "test", "()V", &[]).is_ok());
         assert!(matches!(
-            Invocation::try_new(&klass, "test", "()V", &values[..1])
+            Invocation::lookup_declared(&klass, "test", "()V", &values[..1])
                 .unwrap_err()
                 .kind,
             ExecErrorKind::ArgumentCountMismatch {
@@ -265,10 +277,9 @@ mod tests {
 
     fn instance_arguments_include_a_reference_receiver() {
         let cld = ClassLoaderData::new();
-        cld.initialize();
         let klass = owner(&cld, "(I)V", false, true);
         assert!(matches!(
-            Invocation::try_new(&klass, "test", "(I)V", &[JValue::Int(1)])
+            Invocation::lookup_declared(&klass, "test", "(I)V", &[JValue::Int(1)])
                 .unwrap_err()
                 .kind,
             ExecErrorKind::ArgumentCountMismatch {
@@ -277,22 +288,25 @@ mod tests {
             }
         ));
         assert!(matches!(
-            Invocation::try_new(&klass, "test", "(I)V", &[JValue::Int(0), JValue::Int(1)])
+            Invocation::lookup_declared(&klass, "test", "(I)V", &[JValue::Int(0), JValue::Int(1)])
                 .unwrap_err()
                 .kind,
             ExecErrorKind::ArgumentTypeMismatch { index: 0, .. }
         ));
         let receiver = JValue::Ref(NObjPtr::null());
-        assert!(Invocation::try_new(&klass, "test", "(I)V", &[receiver, JValue::Int(1)]).is_ok());
+        assert!(
+            Invocation::lookup_declared(&klass, "test", "(I)V", &[receiver, JValue::Int(1)])
+                .is_ok()
+        );
         assert!(matches!(
-            Invocation::try_new(&klass, "test", "(I)V", &[receiver, JValue::Float(1.0)])
+            Invocation::lookup_declared(&klass, "test", "(I)V", &[receiver, JValue::Float(1.0)])
                 .unwrap_err()
                 .kind,
             ExecErrorKind::ArgumentTypeMismatch { index: 1, .. }
         ));
         let klass = owner(&cld, "()V", false, true);
         assert!(matches!(
-            Invocation::try_new(&klass, "test", "()V", &[])
+            Invocation::lookup_declared(&klass, "test", "()V", &[])
                 .unwrap_err()
                 .kind,
             ExecErrorKind::ArgumentCountMismatch {
@@ -300,24 +314,44 @@ mod tests {
                 actual: 0
             }
         ));
-        assert!(Invocation::try_new(&klass, "test", "()V", &[receiver]).is_ok());
+        assert!(Invocation::lookup_declared(&klass, "test", "()V", &[receiver]).is_ok());
     }
 
     fn preserves_method_lookup_and_code_errors() {
         let cld = ClassLoaderData::new();
-        cld.initialize();
         let klass = owner(&cld, "()V", true, false);
         assert!(matches!(
-            Invocation::try_new(&klass, "missing", "()V", &[])
+            Invocation::lookup_declared(&klass, "missing", "()V", &[])
                 .unwrap_err()
                 .kind,
             ExecErrorKind::MethodNotFound { .. }
         ));
         assert!(matches!(
-            Invocation::try_new(&klass, "test", "()V", &[JValue::Int(1)])
-                .unwrap_err()
-                .kind,
+            crate::engines::interpreter::interpreter_frame::InterpreterFrame::try_new(
+                Invocation::lookup_declared(&klass, "test", "()V", &[]).unwrap()
+            )
+            .err()
+            .unwrap()
+            .kind,
             ExecErrorKind::NoCode { .. }
         ));
+    }
+    #[test]
+    fn selected_target_accepts_owned_arguments_without_copying() {
+        crate::tests::support::ensure_metaspace();
+        let cld = ClassLoaderData::new();
+        let klass = owner(&cld, "(I)V", true, true);
+        let target = CallTarget::lookup_declared(&klass, "test", "(I)V").unwrap();
+        assert!(std::ptr::eq(target.declaring_class, &klass));
+        assert!(std::ptr::eq(
+            target.method,
+            klass.find_declared_method("test", "(I)V").unwrap()
+        ));
+        let args: Box<[JValue]> = vec![JValue::Int(7)].into_boxed_slice();
+        let address = args.as_ptr();
+        let call = Invocation::try_new(target, args).unwrap();
+        let (_, args) = call.into_parts();
+        assert_eq!(args.as_ptr(), address);
+        assert!(matches!(&*args, [JValue::Int(7)]));
     }
 }

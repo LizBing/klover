@@ -1,4 +1,4 @@
-use crate::{engines::invocation::Invocation, oops::jvalue::JValue};
+use crate::{engines::invocation::CallTarget, oops::jvalue::JValue};
 
 #[derive(Debug)]
 pub enum ExecErrorKind {
@@ -56,7 +56,9 @@ pub struct InvocationBrief {
 
     pub klass: String,
     pub method: String,
-    pub args: Box<[JValue]>,
+    pub desc: String,
+    /// Lowered instruction index; absent before instruction execution.
+    pub instruction_index: Option<usize>,
 }
 
 #[derive(Debug)]
@@ -77,12 +79,17 @@ impl ExecError {
         }
     }
 
-    pub(super) fn with_invocation(invocation: Invocation, kind: ExecErrorKind) -> Self {
+    pub(super) fn with_target(
+        target: &CallTarget<'_, '_>,
+        instruction_index: Option<usize>,
+        kind: ExecErrorKind,
+    ) -> Self {
         let brief = InvocationBrief {
             _private: (),
-            klass: invocation.owner.name().utf8().into(),
-            method: invocation.method.name.utf8().into(),
-            args: invocation.args.into(),
+            klass: target.declaring_class.name().utf8().into(),
+            method: target.method.name.utf8().into(),
+            desc: target.method.desc.raw().utf8().into(),
+            instruction_index,
         };
 
         Self {

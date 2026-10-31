@@ -1,11 +1,11 @@
 use super::*;
-use crate::tests::support::ensure_metaspace;
+use crate::{class_loader::class_loader_data::ClassLoaderData, tests::support::ensure_metaspace};
 
 #[test]
 fn handles_are_distinct_and_registered_by_strength() {
     ensure_metaspace();
-    let arena = MsAllocator::new();
-    let storage = OOPStorage::new(&arena);
+    let cld = ClassLoaderData::new();
+    let storage = cld.oop_storage();
     let first = storage.create_strong();
     let second = storage.create_strong();
     let weak = storage.create_weak();
@@ -23,8 +23,8 @@ fn handles_are_distinct_and_registered_by_strength() {
 #[test]
 fn concurrent_handles_remain_distinct_and_registered() {
     ensure_metaspace();
-    let arena = MsAllocator::new();
-    let storage = OOPStorage::new(&arena);
+    let cld = ClassLoaderData::new();
+    let storage = cld.oop_storage();
     std::thread::scope(|scope| {
         let workers: Vec<_> = (0..4)
             .map(|_| {

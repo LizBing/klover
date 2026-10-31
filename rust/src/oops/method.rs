@@ -1,7 +1,7 @@
 pub(crate) use crate::class_parser::MethodAccessFlags;
 
 use crate::{
-    class_loader::oop_storage::OOPStorage,
+    class_loader::oop_storage::OopStorage,
     class_parser::MethodInfo,
     code::code::Code,
     oops::{
@@ -23,7 +23,7 @@ pub struct Method<'klass> {
 }
 
 impl<'klass> Method<'klass> {
-    pub(super) fn build(info: &MethodInfo, msa: &'klass MsAllocator, storage: &OOPStorage) -> Self {
+    pub(super) fn build(info: &MethodInfo, msa: &'klass MsAllocator, storage: &OopStorage) -> Self {
         let name = SymbolTable::intern(&info.name);
         let desc = MethodDesc::build(&info.descriptor, msa);
 

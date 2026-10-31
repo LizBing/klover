@@ -1,52 +1,37 @@
 use std::ops::Deref;
 
 use crate::{
-    class_loader::oop_storage::OOPStorage,
     class_parser::ClassImage,
     oops::oops_errors::{LinkageError, LinkageResult},
-    runtime::ms_api::{MsAllocator, MsBox},
+    runtime::ms_api::MsBox,
 };
 
 pub(crate) use crate::class_parser::ClassAccessFlags;
 
 use crate::{
-    class_loader::{bs_cld::BootstrapCLD, class_loader_data::ClassLoaderData},
+    class_loader::class_loader_data::ClassLoaderData,
     oops::{
         method::Method,
         symbol_table::{SymbolHandle, SymbolTable},
     },
 };
 
-fn get_msa<'cld>(cld: Option<&'cld ClassLoaderData<'cld>>) -> &'cld MsAllocator {
-    match cld {
-        Some(cld) => cld.ms_allocator(),
-        None => BootstrapCLD::ms_allocator(),
-    }
-}
-
-fn get_storage<'cld>(cld: Option<&'cld ClassLoaderData<'cld>>) -> &'cld OOPStorage<'cld> {
-    match cld {
-        Some(cld) => cld.oop_storage(),
-        None => BootstrapCLD::oop_storage(),
-    }
-}
-
-pub struct UnlinkedNormalKlass<'cld> {
+pub struct UnlinkedNormalKlass<'dc> {
     name: SymbolHandle,
     acc_flags: ClassAccessFlags,
-    cld: Option<&'cld ClassLoaderData<'cld>>,
+    def_cld: &'dc ClassLoaderData,
 
     pub super_name: Option<SymbolHandle>,
     pub interfaces: Box<[SymbolHandle]>,
 
-    methods: MsBox<'cld, [Method<'cld>]>,
+    methods: MsBox<'dc, [Method<'dc>]>,
 }
 
-impl<'cld> UnlinkedNormalKlass<'cld> {
-    pub fn build(cf: ClassImage, cld: Option<&'cld ClassLoaderData<'cld>>) -> Self {
-        let msa = get_msa(cld);
-        let storage = get_storage(cld);
-
+impl<'dc> UnlinkedNormalKlass<'dc> {
+    pub fn build(cf: ClassImage, cld: &'dc ClassLoaderData) -> Self {
+        let msa = cld.ms_allocator();
+        let storage = cld.oop_storage();
+        
         let name = SymbolTable::intern(cf.this_class_name());
         let super_name = cf.super_class_name().map(|name| SymbolTable::intern(name));
 
@@ -63,7 +48,7 @@ impl<'cld> UnlinkedNormalKlass<'cld> {
         Self {
             name,
             acc_flags: cf.access_flags(),
-            cld,
+            def_cld: cld,
             super_name,
             interfaces: ifaces.into(),
             methods: unsafe { methods.assume_init() },
@@ -72,22 +57,22 @@ impl<'cld> UnlinkedNormalKlass<'cld> {
 }
 
 #[derive(Debug)]
-pub struct NormalKlass<'cld> {
+pub struct NormalKlass<'dc> {
     name: SymbolHandle,
     acc_flags: ClassAccessFlags,
-    cld: Option<&'cld ClassLoaderData<'cld>>,
+    pub(super) def_cld: &'dc ClassLoaderData,
 
-    super_klass: Option<&'cld NormalKlass<'cld>>,
-    interfaces: MsBox<'cld, [&'cld NormalKlass<'cld>]>,
+    pub(super) super_klass: Option<&'dc NormalKlass<'dc>>,
+    interfaces: MsBox<'dc, [&'dc NormalKlass<'dc>]>,
 
-    methods: MsBox<'cld, [Method<'cld>]>,
+    methods: MsBox<'dc, [Method<'dc>]>,
 }
 
-impl<'cld> NormalKlass<'cld> {
+impl<'dc> NormalKlass<'dc> {
     pub fn link(
-        unlinked: UnlinkedNormalKlass<'cld>,
-        super_klass: Option<&'cld NormalKlass<'cld>>,
-        interfaces: MsBox<'cld, [&'cld NormalKlass<'cld>]>,
+        unlinked: UnlinkedNormalKlass<'dc>,
+        super_klass: Option<&'dc NormalKlass<'dc>>,
+        interfaces: MsBox<'dc, [&'dc NormalKlass<'dc>]>,
     ) -> LinkageResult<Self> {
         for interface in interfaces.iter() {
             if !interface.is_interface() {
@@ -96,12 +81,11 @@ impl<'cld> NormalKlass<'cld> {
                 });
             }
         }
-        let cld = unlinked.cld;
 
         Ok(Self {
             name: unlinked.name,
             acc_flags: unlinked.acc_flags,
-            cld,
+            def_cld: unlinked.def_cld,
             super_klass,
             interfaces,
             methods: unlinked.methods,
@@ -116,10 +100,6 @@ impl<'cld> NormalKlass<'cld> {
 
     pub(super) fn is_interface(&self) -> bool {
         self.acc_flags.contains(ClassAccessFlags::INTERFACE)
-    }
-
-    pub(super) fn super_klass(&self) -> Option<&'cld NormalKlass<'cld>> {
-        self.super_klass
     }
 
     pub(super) fn has_interfaces(&self) -> bool {
@@ -140,62 +120,59 @@ impl<'cld> NormalKlass<'cld> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tests::support::{fixture_dir, init_vm, isolated};
+    use crate::tests::support::{ensure_metaspace, fixture_dir};
+
+    fn build<'a>(
+        cld: &'a ClassLoaderData,
+        name: &str,
+        super_klass: Option<&'a NormalKlass<'a>>,
+        interfaces: &[&'a NormalKlass<'a>],
+    ) -> LinkageResult<&'a NormalKlass<'a>> {
+        let bytes = std::fs::read(fixture_dir().join(format!("{name}.class"))).unwrap();
+        let image = crate::class_parser::parse_class(&bytes).unwrap();
+        let unlinked = UnlinkedNormalKlass::build(image, cld);
+        let mut slots = MsBox::new_uninit_slice(cld.ms_allocator(), interfaces.len());
+        for (slot, interface) in slots.iter_mut().zip(interfaces) {
+            slot.write(*interface);
+        }
+        NormalKlass::link(unlinked, super_klass, unsafe { slots.assume_init() })
+            .map(|klass| MsBox::new(cld.ms_allocator(), klass).leak())
+    }
 
     #[test]
     fn links_direct_interfaces_in_declaration_order() {
-        isolated(
-            concat!(
-                module_path!(),
-                "::links_direct_interfaces_in_declaration_order"
-            ),
-            || {
-                init_vm(fixture_dir());
-                let load =
-                    |name| BootstrapCLD::find_normal_klass(&SymbolTable::intern(name)).unwrap();
-                let base = load("InterfaceLoading$Base");
-                let first = load("InterfaceLoading$First");
-                let second = load("InterfaceLoading$Second");
-                let root = load("InterfaceLoading$Root");
+        ensure_metaspace();
+        let cld = ClassLoaderData::new();
+        let object = build(&cld, "java/lang/Object", None, &[]).unwrap();
+        let root = build(&cld, "InterfaceLoading$Root", Some(object), &[]).unwrap();
+        let first = build(&cld, "InterfaceLoading$First", Some(object), &[root]).unwrap();
+        let second = build(&cld, "InterfaceLoading$Second", Some(object), &[]).unwrap();
+        let base = build(
+            &cld,
+            "InterfaceLoading$Base",
+            Some(object),
+            &[first, second],
+        )
+        .unwrap();
 
-                assert_eq!(base.interfaces.len(), 2);
-                assert!(std::ptr::eq(base.interfaces[0], first));
-                assert!(std::ptr::eq(base.interfaces[1], second));
-                assert_eq!(first.interfaces.len(), 1);
-                assert!(std::ptr::eq(first.interfaces[0], root));
-                assert!(!root.has_interfaces());
-                assert!(!second.has_interfaces());
-                let leaf = load("InterfaceLoading$Leaf");
-                assert!(!leaf.has_interfaces());
-                assert!(std::ptr::eq(leaf.super_klass().unwrap(), base));
-            },
-        );
+        assert_eq!(base.interfaces.len(), 2);
+        assert!(std::ptr::eq(base.interfaces[0], first));
+        assert!(std::ptr::eq(base.interfaces[1], second));
+        assert_eq!(first.interfaces.len(), 1);
+        assert!(std::ptr::eq(first.interfaces[0], root));
+        assert!(!root.has_interfaces());
+        assert!(!second.has_interfaces());
+        let leaf = build(&cld, "InterfaceLoading$Leaf", Some(base), &[]).unwrap();
+        assert!(!leaf.has_interfaces());
+        assert!(std::ptr::eq(leaf.super_klass.unwrap(), base));
     }
 
     #[test]
     fn rejects_non_interface_metadata() {
-        isolated(
-            concat!(module_path!(), "::rejects_non_interface_metadata"),
-            || {
-                let fixtures = fixture_dir();
-                init_vm(fixtures.clone());
-                let object =
-                    BootstrapCLD::find_normal_klass(&SymbolTable::intern("java/lang/Object"))
-                        .unwrap();
-                let bytes = std::fs::read(fixtures.join("InterfaceLoading$Base.class")).unwrap();
-                let unlinked = UnlinkedNormalKlass::build(
-                    crate::class_parser::parse_class(&bytes).unwrap(),
-                    None,
-                );
-                let mut interfaces = MsBox::new_uninit_slice(BootstrapCLD::ms_allocator(), 1);
-                interfaces[0].write(object);
-                let error =
-                    NormalKlass::link(unlinked, Some(object), unsafe { interfaces.assume_init() })
-                        .unwrap_err();
-                assert!(
-                    matches!(error, LinkageError::NotInterface { name } if name == "java/lang/Object")
-                );
-            },
-        );
+        ensure_metaspace();
+        let cld = ClassLoaderData::new();
+        let object = build(&cld, "java/lang/Object", None, &[]).unwrap();
+        let error = build(&cld, "InterfaceLoading$Base", Some(object), &[object]).unwrap_err();
+        assert!(matches!(error, LinkageError::NotInterface { name } if name == "java/lang/Object"));
     }
 }

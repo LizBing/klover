@@ -2,30 +2,30 @@ use std::ops::{Deref, DerefMut};
 
 use crate::engines::java_frame::JavaFrame;
 
-struct JavaStack<'metadata> {
-    frames: Vec<Box<dyn JavaFrame + 'metadata>>,
+struct JavaStack<'exec> {
+    frames: Vec<Box<dyn JavaFrame + 'exec>>,
 }
 
-impl<'metadata> JavaStack<'metadata> {
+impl<'exec> JavaStack<'exec> {
     fn new() -> Self {
         Self { frames: Vec::new() }
     }
 }
 
-impl<'metadata> JavaStack<'metadata> {
-    fn push(&mut self, frame: impl JavaFrame + 'metadata) {
+impl<'exec> JavaStack<'exec> {
+    fn push(&mut self, frame: impl JavaFrame + 'exec) {
         self.frames.push(Box::new(frame));
     }
 
-    fn pop(&mut self) -> Option<Box<dyn JavaFrame + 'metadata>> {
+    fn pop(&mut self) -> Option<Box<dyn JavaFrame + 'exec>> {
         self.frames.pop()
     }
 
-    fn current_frame(&self) -> Option<&(dyn JavaFrame + 'metadata)> {
+    fn current_frame(&self) -> Option<&(dyn JavaFrame + 'exec)> {
         self.frames.last().map(|f| f.deref())
     }
 
-    fn current_frame_mut(&mut self) -> Option<&mut (dyn JavaFrame + 'metadata)> {
+    fn current_frame_mut(&mut self) -> Option<&mut (dyn JavaFrame + 'exec)> {
         self.frames.last_mut().map(|f| f.deref_mut())
     }
 }
@@ -36,15 +36,15 @@ pub enum JavaThreadState {
     Terminated,
 }
 
-/// Frames may borrow class metadata, which must outlive the thread's stack.
+/// Frames borrow metadata for an execution scope that outlives the thread's stack.
 /// The lifetime on the trait objects is explicit: Box<dyn JavaFrame> alone
 /// would require every frame to own its data or borrow it for 'static.
-pub struct JavaThread<'metadata> {
+pub struct JavaThread<'exec> {
     state: JavaThreadState,
-    stack: JavaStack<'metadata>,
+    stack: JavaStack<'exec>,
 }
 
-impl<'metadata> JavaThread<'metadata> {
+impl<'exec> JavaThread<'exec> {
     pub fn new() -> Self {
         Self {
             state: JavaThreadState::New,
@@ -53,15 +53,15 @@ impl<'metadata> JavaThread<'metadata> {
     }
 }
 
-impl<'metadata> JavaThread<'metadata> {
+impl<'exec> JavaThread<'exec> {
     pub fn state(&self) -> &JavaThreadState {
         &self.state
     }
 }
 
-impl<'metadata> JavaThread<'metadata> {
+impl<'exec> JavaThread<'exec> {
     // state: New -> Runnable
-    pub fn start_with_frame(&mut self, frame: impl JavaFrame + 'metadata) {
+    pub fn start_with_frame(&mut self, frame: impl JavaFrame + 'exec) {
         assert!(
             matches!(self.state, JavaThreadState::New),
             "Thread state should be 'New' before getting started."
@@ -72,8 +72,8 @@ impl<'metadata> JavaThread<'metadata> {
     }
 }
 
-impl<'metadata> JavaThread<'metadata> {
-    pub fn push_frame(&mut self, frame: impl JavaFrame + 'metadata) {
+impl<'exec> JavaThread<'exec> {
+    pub fn push_frame(&mut self, frame: impl JavaFrame + 'exec) {
         assert!(
             matches!(self.state, JavaThreadState::Runnable),
             "Thread state should be runnable."
@@ -82,7 +82,7 @@ impl<'metadata> JavaThread<'metadata> {
         self.stack.push(frame);
     }
 
-    pub fn pop_frame(&mut self) -> Option<Box<dyn JavaFrame + 'metadata>> {
+    pub fn pop_frame(&mut self) -> Option<Box<dyn JavaFrame + 'exec>> {
         assert!(
             matches!(self.state, JavaThreadState::Runnable),
             "Thread state should be runnable."
@@ -91,11 +91,11 @@ impl<'metadata> JavaThread<'metadata> {
         self.stack.pop()
     }
 
-    pub fn current_frame(&mut self) -> Option<&(dyn JavaFrame + 'metadata)> {
+    pub fn current_frame(&mut self) -> Option<&(dyn JavaFrame + 'exec)> {
         self.stack.current_frame()
     }
 
-    pub fn current_frame_mut(&mut self) -> Option<&mut (dyn JavaFrame + 'metadata)> {
+    pub fn current_frame_mut(&mut self) -> Option<&mut (dyn JavaFrame + 'exec)> {
         self.stack.current_frame_mut()
     }
 }

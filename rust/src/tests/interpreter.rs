@@ -24,25 +24,24 @@ use crate::{
     runtime::java_thread::{JavaThread, JavaThreadState},
 };
 
-fn with_code(code: &[u8], test: impl FnOnce(&mut InterpreterFrame<'_>)) {
+fn with_code(code: &[u8], test: impl FnOnce(&mut InterpreterFrame<'_, '_>)) {
     ensure_metaspace();
     let cld = ClassLoaderData::new();
-    cld.initialize();
     let owner = parse_class(&cld, &class_bytes("()V", code, 16, 16));
-    let call = Invocation::try_new(&owner, "test", "()V", &[]).unwrap();
+    let call = Invocation::lookup_declared(&owner, "test", "()V", &[]).unwrap();
     test(&mut InterpreterFrame::try_new(call).unwrap());
 }
 
-fn with_frame(test: impl FnOnce(&mut InterpreterFrame<'_>)) {
+fn with_frame(test: impl FnOnce(&mut InterpreterFrame<'_, '_>)) {
     with_code(&[0xb1], test);
 }
 
-fn step<'a>(frame: &mut InterpreterFrame<'a>, inst: Instruction<'a>) {
+fn step(frame: &mut InterpreterFrame<'_, '_>, inst: Instruction<'_>) {
     // These instructions own no borrowed switch tables.
     Interpreter::execute_instruction(frame, inst).unwrap();
 }
 
-fn assert_stack(frame: &InterpreterFrame<'_>, expected: &[Slot]) {
+fn assert_stack(frame: &InterpreterFrame<'_, '_>, expected: &[Slot]) {
     let actual = frame.operand_stack();
     assert_eq!(
         actual.len(),
@@ -69,7 +68,6 @@ fn assert_stack(frame: &InterpreterFrame<'_>, expected: &[Slot]) {
 fn frame_initializes_arguments_with_their_local_slot_widths() {
     ensure_metaspace();
     let cld = ClassLoaderData::new();
-    cld.initialize();
     let desc = "(ZBSCIJDFLjava/lang/Object;)V";
     let args = [
         JValue::Boolean(1),
@@ -84,7 +82,7 @@ fn frame_initializes_arguments_with_their_local_slot_widths() {
     ];
     for max_locals in [11, 12] {
         let owner = parse_class(&cld, &class_bytes(desc, &[0xb1], 2, max_locals));
-        let call = Invocation::try_new(&owner, "test", desc, &args).unwrap();
+        let call = Invocation::lookup_declared(&owner, "test", desc, &args).unwrap();
         let mut frame = InterpreterFrame::try_new(call).unwrap();
         for (idx, expected) in [1, -2, -300, 65535, 42].into_iter().enumerate() {
             assert!(matches!(frame.get_local(idx).unwrap(), Slot::Int(v) if v == expected));
@@ -109,7 +107,6 @@ fn frame_initializes_arguments_with_their_local_slot_widths() {
 fn frame_rejects_arguments_that_exceed_max_locals() {
     ensure_metaspace();
     let cld = ClassLoaderData::new();
-    cld.initialize();
     for (desc, args, required, available) in [
         ("(I)V", vec![JValue::Int(1)], 1, 0),
         ("(J)V", vec![JValue::Long(1)], 2, 0),
@@ -122,7 +119,7 @@ fn frame_rejects_arguments_that_exceed_max_locals() {
             &class_bytes(desc, &[0xb1], 0, required as u16),
             available,
         );
-        let call = Invocation::try_new(&owner, "test", desc, &args).unwrap();
+        let call = Invocation::lookup_declared(&owner, "test", desc, &args).unwrap();
         let error = InterpreterFrame::try_new(call).err().unwrap();
         assert!(matches!(
             error.kind,
@@ -132,9 +129,10 @@ fn frame_rejects_arguments_that_exceed_max_locals() {
         let brief = error.brief.unwrap();
         assert_eq!(brief.klass, "java/lang/Object");
         assert_eq!(brief.method, "test");
-        assert_eq!(brief.args.len(), args.len());
+        assert_eq!(brief.desc, desc);
+        assert_eq!(brief.instruction_index, None);
 
-        let call = Invocation::try_new(&owner, "test", desc, &args).unwrap();
+        let call = Invocation::lookup_declared(&owner, "test", desc, &args).unwrap();
         let mut thread = JavaThread::new();
         let error = ExecDispatcher::start(&mut thread, call).unwrap_err();
         assert!(matches!(
@@ -150,9 +148,8 @@ fn frame_rejects_arguments_that_exceed_max_locals() {
 fn frame_accepts_no_arguments_with_zero_locals() {
     ensure_metaspace();
     let cld = ClassLoaderData::new();
-    cld.initialize();
     let owner = parse_class(&cld, &class_bytes("()V", &[0xb1], 0, 0));
-    let call = Invocation::try_new(&owner, "test", "()V", &[]).unwrap();
+    let call = Invocation::lookup_declared(&owner, "test", "()V", &[]).unwrap();
     let frame = InterpreterFrame::try_new(call).unwrap();
     assert!(matches!(
         frame.get_local(0).unwrap_err().kind,
@@ -164,13 +161,12 @@ fn frame_accepts_no_arguments_with_zero_locals() {
 fn frame_counts_the_receiver_as_one_local_slot() {
     ensure_metaspace();
     let cld = ClassLoaderData::new();
-    cld.initialize();
     for max_locals in [2, 3] {
         let bytes = class_bytes_with_flags("(J)V", &[0xb1], 2, 3, 0x1);
         let owner =
             crate::tests::support::parse_class_with_runtime_max_locals(&cld, &bytes, max_locals);
         let args = [JValue::Ref(NObjPtr::null()), JValue::Long(42)];
-        let call = Invocation::try_new(&owner, "test", "(J)V", &args).unwrap();
+        let call = Invocation::lookup_declared(&owner, "test", "(J)V", &args).unwrap();
         let result = InterpreterFrame::try_new(call);
         if max_locals == 2 {
             assert!(matches!(
@@ -321,7 +317,7 @@ fn floating_arithmetic_and_signed_zero() {
     });
 }
 
-fn push_value(f: &mut InterpreterFrame<'_>, value: JValue) {
+fn push_value(f: &mut InterpreterFrame<'_, '_>, value: JValue) {
     match value {
         JValue::Int(v) => f.push_int(v),
         JValue::Long(v) => f.push_long(v),
@@ -741,7 +737,6 @@ fn dispatcher_without_frame_reports_no_frame() {
 fn wide_bytecode_survives_parsing_lowering_and_execution() {
     ensure_metaspace();
     let cld = ClassLoaderData::new();
-    cld.initialize();
     // iload_0; wide istore 300; wide iinc 300,-1000; wide iload 300; ireturn.
     let owner = parse_class(
         &cld,
@@ -773,4 +768,48 @@ fn wide_bytecode_survives_parsing_lowering_and_execution() {
         run_method(&owner, "test", "(J)J", &[JValue::Long(1 << 40)], 1),
         JValue::Long(1 << 40),
     );
+}
+
+#[test]
+fn execution_error_context_outlives_metadata() {
+    ensure_metaspace();
+    let error = {
+        let cld = ClassLoaderData::new();
+        let owner = parse_class(&cld, &class_bytes("()I", &[0x04, 0x03, 0x6c, 0xac], 2, 0));
+        let call = Invocation::lookup_declared(&owner, "test", "()I", &[]).unwrap();
+        let mut thread = JavaThread::new();
+        ExecDispatcher::start(&mut thread, call).unwrap();
+        match ExecDispatcher::poll(&mut thread, &mut ExecBudget::new(10)) {
+            Err(error) => error,
+            Ok(_) => panic!("expected division by zero"),
+        }
+    };
+    assert!(matches!(error.kind, ExecErrorKind::DivisionByZero));
+    let brief = error.brief.unwrap();
+    assert_eq!(brief.klass, "java/lang/Object");
+    assert_eq!(brief.method, "test");
+    assert_eq!(brief.desc, "()I");
+    assert_eq!(brief.instruction_index, Some(2));
+}
+
+#[test]
+fn frame_and_thread_preserve_distinct_execution_and_metadata_lifetimes() {
+    // This generic signature must compile without equating 'exec and 'meta.
+    fn run<'exec, 'meta: 'exec>(owner: &'exec crate::oops::normal_klass::NormalKlass<'meta>) {
+        let call = Invocation::lookup_declared(owner, "test", "()V", &[]).unwrap();
+        let mut frame: InterpreterFrame<'exec, 'meta> = InterpreterFrame::try_new(call).unwrap();
+        let inst: Instruction<'meta> = frame.next_inst().unwrap();
+        assert!(matches!(inst, Return));
+        let call = Invocation::lookup_declared(owner, "test", "()V", &[]).unwrap();
+        let mut thread: JavaThread<'exec> = JavaThread::new();
+        ExecDispatcher::start(&mut thread, call).unwrap();
+        assert!(matches!(
+            ExecDispatcher::poll(&mut thread, &mut ExecBudget::new(1)).unwrap(),
+            crate::engines::protocol::DispatchOutcome::Completed(MethodReturn::Void)
+        ));
+    }
+    ensure_metaspace();
+    let cld = ClassLoaderData::new();
+    let owner = parse_class(&cld, &class_bytes("()V", &[0xb1], 0, 0));
+    run(&owner);
 }
