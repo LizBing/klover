@@ -26,7 +26,7 @@ use crate::{
 
 fn with_code(code: &[u8], test: impl FnOnce(&mut InterpreterFrame<'_, '_>)) {
     ensure_metaspace();
-    let cld = ClassLoaderData::new();
+    let cld = ClassLoaderData::new(None);
     let owner = parse_class(&cld, &class_bytes("()V", code, 16, 16));
     let call = Invocation::lookup_declared(&owner, "test", "()V", &[]).unwrap();
     test(&mut InterpreterFrame::try_new(call).unwrap());
@@ -67,7 +67,7 @@ fn assert_stack(frame: &InterpreterFrame<'_, '_>, expected: &[Slot]) {
 #[test]
 fn frame_initializes_arguments_with_their_local_slot_widths() {
     ensure_metaspace();
-    let cld = ClassLoaderData::new();
+    let cld = ClassLoaderData::new(None);
     let desc = "(ZBSCIJDFLjava/lang/Object;)V";
     let args = [
         JValue::Boolean(1),
@@ -106,7 +106,7 @@ fn frame_initializes_arguments_with_their_local_slot_widths() {
 #[test]
 fn frame_rejects_arguments_that_exceed_max_locals() {
     ensure_metaspace();
-    let cld = ClassLoaderData::new();
+    let cld = ClassLoaderData::new(None);
     for (desc, args, required, available) in [
         ("(I)V", vec![JValue::Int(1)], 1, 0),
         ("(J)V", vec![JValue::Long(1)], 2, 0),
@@ -147,7 +147,7 @@ fn frame_rejects_arguments_that_exceed_max_locals() {
 #[test]
 fn frame_accepts_no_arguments_with_zero_locals() {
     ensure_metaspace();
-    let cld = ClassLoaderData::new();
+    let cld = ClassLoaderData::new(None);
     let owner = parse_class(&cld, &class_bytes("()V", &[0xb1], 0, 0));
     let call = Invocation::lookup_declared(&owner, "test", "()V", &[]).unwrap();
     let frame = InterpreterFrame::try_new(call).unwrap();
@@ -160,7 +160,7 @@ fn frame_accepts_no_arguments_with_zero_locals() {
 #[test]
 fn frame_counts_the_receiver_as_one_local_slot() {
     ensure_metaspace();
-    let cld = ClassLoaderData::new();
+    let cld = ClassLoaderData::new(None);
     for max_locals in [2, 3] {
         let bytes = class_bytes_with_flags("(J)V", &[0xb1], 2, 3, 0x1);
         let owner =
@@ -736,7 +736,7 @@ fn dispatcher_without_frame_reports_no_frame() {
 #[test]
 fn wide_bytecode_survives_parsing_lowering_and_execution() {
     ensure_metaspace();
-    let cld = ClassLoaderData::new();
+    let cld = ClassLoaderData::new(None);
     // iload_0; wide istore 300; wide iinc 300,-1000; wide iload 300; ireturn.
     let owner = parse_class(
         &cld,
@@ -774,7 +774,7 @@ fn wide_bytecode_survives_parsing_lowering_and_execution() {
 fn execution_error_context_outlives_metadata() {
     ensure_metaspace();
     let error = {
-        let cld = ClassLoaderData::new();
+        let cld = ClassLoaderData::new(None);
         let owner = parse_class(&cld, &class_bytes("()I", &[0x04, 0x03, 0x6c, 0xac], 2, 0));
         let call = Invocation::lookup_declared(&owner, "test", "()I", &[]).unwrap();
         let mut thread = JavaThread::new();
@@ -809,7 +809,7 @@ fn frame_and_thread_preserve_distinct_execution_and_metadata_lifetimes() {
         ));
     }
     ensure_metaspace();
-    let cld = ClassLoaderData::new();
+    let cld = ClassLoaderData::new(None);
     let owner = parse_class(&cld, &class_bytes("()V", &[0xb1], 0, 0));
     run(&owner);
 }

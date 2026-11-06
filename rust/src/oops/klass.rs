@@ -7,20 +7,31 @@ pub enum Klass<'cld> {
     Array,
 }
 
-impl<'this> Klass<'this> {
-    pub fn def_cld(&self) -> &'this ClassLoaderData {
+impl<'dc> Klass<'dc> {
+    pub fn as_normal(&self) -> Option<&NormalKlass<'dc>> {
         if let Klass::Normal(klass) = self {
-            return klass.def_cld;
+            Some(klass)
+        } else {
+            None
+        }
+    }
+}
+
+impl<'this> Klass<'this> {
+    pub fn name(&self) -> &SymbolHandle {
+        if let Klass::Normal(klass) = self {
+            return klass.name();
         }
 
         unreachable!("Unsupported klass variance")
     }
 
-    pub fn find_declared_method(&self, name: &str, desc: &str) -> Option<&Method<'this>> {
+    pub fn def_cld(&self) -> &'this ClassLoaderData {
         if let Klass::Normal(klass) = self {
-            return klass.find_declared_method(name, desc);
+            return klass.def_cld;
         }
 
+        // todo: return bootstrap here
         unreachable!("Unsupported klass variance")
     }
 
@@ -29,6 +40,7 @@ impl<'this> Klass<'this> {
             return klass.super_klass;
         }
 
+        // todo: return java.lang.Object here
         unreachable!("Unsupported klass variance")
     }
 }

@@ -194,7 +194,7 @@ mod tests {
     }
 
     fn validates_each_parameter_kind_including_arrays() {
-        let cld = ClassLoaderData::new();
+        let cld = ClassLoaderData::new(None);
         let values = [
             JValue::Boolean(1),
             JValue::Byte(-1),
@@ -245,7 +245,7 @@ mod tests {
     }
 
     fn checks_argument_count_and_counts_wide_values_once() {
-        let cld = ClassLoaderData::new();
+        let cld = ClassLoaderData::new(None);
         let klass = owner(&cld, "(JD)V", true, true);
         let values = [JValue::Long(1), JValue::Double(2.0), JValue::Int(3)];
         for actual in [0, 1, 3] {
@@ -276,7 +276,7 @@ mod tests {
     }
 
     fn instance_arguments_include_a_reference_receiver() {
-        let cld = ClassLoaderData::new();
+        let cld = ClassLoaderData::new(None);
         let klass = owner(&cld, "(I)V", false, true);
         assert!(matches!(
             Invocation::lookup_declared(&klass, "test", "(I)V", &[JValue::Int(1)])
@@ -318,7 +318,7 @@ mod tests {
     }
 
     fn preserves_method_lookup_and_code_errors() {
-        let cld = ClassLoaderData::new();
+        let cld = ClassLoaderData::new(None);
         let klass = owner(&cld, "()V", true, false);
         assert!(matches!(
             Invocation::lookup_declared(&klass, "missing", "()V", &[])
@@ -339,7 +339,7 @@ mod tests {
     #[test]
     fn selected_target_accepts_owned_arguments_without_copying() {
         crate::tests::support::ensure_metaspace();
-        let cld = ClassLoaderData::new();
+        let cld = ClassLoaderData::new(None);
         let klass = owner(&cld, "(I)V", true, true);
         let target = CallTarget::lookup_declared(&klass, "test", "(I)V").unwrap();
         assert!(std::ptr::eq(target.declaring_class, &klass));

@@ -21,7 +21,7 @@ fn java_arithmetic_and_wide_arguments() {
         concat!(module_path!(), "::java_arithmetic_and_wide_arguments"),
         || {
             init_vm(fixture_dir());
-            let cld = ClassLoaderData::new();
+            let cld = ClassLoaderData::new(None);
             let owner = load_normal_klass(&cld, &SymbolTable::intern("Cases")).unwrap();
             let cases: &[(&str, &str, &[JValue], JValue)] = &[
                 ("subtract", "(II)I", &[Int(7), Int(12)], Int(-5)),
@@ -62,7 +62,7 @@ fn java_branches_loops_and_switches_survive_yielding() {
         ),
         || {
             init_vm(fixture_dir());
-            let cld = ClassLoaderData::new();
+            let cld = ClassLoaderData::new(None);
             let owner = load_normal_klass(&cld, &SymbolTable::intern("Cases")).unwrap();
             for slice in [1, 3, 10_000] {
                 for (n, expected) in [(0, 0), (1, 1), (100, 5050)] {
@@ -107,7 +107,7 @@ fn java_conversions_floats_and_returns() {
         concat!(module_path!(), "::java_conversions_floats_and_returns"),
         || {
             init_vm(fixture_dir());
-            let cld = ClassLoaderData::new();
+            let cld = ClassLoaderData::new(None);
             let owner = load_normal_klass(&cld, &SymbolTable::intern("Cases")).unwrap();
             for (input, expected) in [
                 (f64::NAN, 0),
@@ -177,7 +177,7 @@ fn java_division_error_preserves_invocation_context() {
         ),
         || {
             init_vm(fixture_dir());
-            let cld = ClassLoaderData::new();
+            let cld = ClassLoaderData::new(None);
             let owner = load_normal_klass(&cld, &SymbolTable::intern("Cases")).unwrap();
             let call =
                 Invocation::lookup_declared(owner, "divide", "(II)I", &[Int(7), Int(0)]).unwrap();

@@ -4,7 +4,7 @@ use crate::{class_loader::class_loader_data::ClassLoaderData, tests::support::en
 #[test]
 fn handles_are_distinct_and_registered_by_strength() {
     ensure_metaspace();
-    let cld = ClassLoaderData::new();
+    let cld = ClassLoaderData::new(None);
     let storage = cld.oop_storage();
     let first = storage.create_strong();
     let second = storage.create_strong();
@@ -14,16 +14,16 @@ fn handles_are_distinct_and_registered_by_strength() {
     let strongs = storage.strongs.lock();
     let weaks = storage.weaks.lock();
     assert_eq!(strongs.len(), 2);
-    assert_eq!(weaks.len(), 1);
+    assert_eq!(weaks.len(), 2); // Includes the class-loader mirror.
     assert_eq!(strongs[0].0.as_ptr().cast_const(), first.slot as *const _);
     assert_eq!(strongs[1].0.as_ptr().cast_const(), second.slot as *const _);
-    assert_eq!(weaks[0].0.as_ptr().cast_const(), weak.slot as *const _);
+    assert_eq!(weaks[1].0.as_ptr().cast_const(), weak.slot as *const _);
 }
 
 #[test]
 fn concurrent_handles_remain_distinct_and_registered() {
     ensure_metaspace();
-    let cld = ClassLoaderData::new();
+    let cld = ClassLoaderData::new(None);
     let storage = cld.oop_storage();
     std::thread::scope(|scope| {
         let workers: Vec<_> = (0..4)

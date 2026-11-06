@@ -24,6 +24,18 @@ pub enum ResolveError {
 pub enum LinkageError {
     SuperNotFound { name: String },
 
+    InvalidSuperclass { name: String },
+
+    SuperIsInterface { name: String },
+
+    FinalSuperclass { name: String },
+
+    InvalidInterfaces { name: String },
+
+    ClassCircularity { name: String },
+
+    IllegalAccess { from: String, target: String },
+
     NotInterface { name: String },
 
     NotNormalKlass { name: String },

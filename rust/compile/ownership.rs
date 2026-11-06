@@ -24,7 +24,7 @@ fn main() {
     *owner = 2;
     let published = owner.leak();
     println!("{published}");
-    let cld = ClassLoaderData::new();
+    let cld = ClassLoaderData::new(None);
     let storage = cld.oop_storage();
     let handle = storage.create_strong();
     println!("{handle:?}");
@@ -60,7 +60,7 @@ fn main() {
 
 #[cfg(klover_case = "handle")]
 fn main() {
-    let cld = ClassLoaderData::new();
+    let cld = ClassLoaderData::new(None);
     let storage = cld.oop_storage();
     let handle = storage.create_strong();
     drop(cld); // Must be E0505: the registry owner must outlive its handle.

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::tests::support::{TempDir, fixture_dir, init_vm, isolated, load_normal_klass};
 use crate::{
-    class_loader::{class_loader_data::ClassLoaderData, load_error::LoadErrorKind},
+    class_loader::{class_loader_data::ClassLoaderData, load_error::LoadError},
     class_parser::{ClassRef, MethodDescriptor, MethodMemRef, MethodMemRefKind},
     oops::{constant_entries::MethodRef, oops_errors::ResolveError, symbol_table::SymbolTable},
 };
@@ -25,7 +25,7 @@ fn resolves_declared_inherited_overloaded_and_hidden_methods() {
         ),
         || {
             init_vm(fixture_dir());
-            let cld = ClassLoaderData::new();
+            let cld = ClassLoaderData::new(None);
             let caller = cld
                 .load_klass(&SymbolTable::intern("java/lang/Object"))
                 .unwrap();
@@ -101,7 +101,7 @@ fn reports_load_missing_method_and_reference_kind_errors() {
         ),
         || {
             init_vm(fixture_dir());
-            let cld = ClassLoaderData::new();
+            let cld = ClassLoaderData::new(None);
             let caller = cld
                 .load_klass(&SymbolTable::intern("java/lang/Object"))
                 .unwrap();
@@ -114,8 +114,7 @@ fn reports_load_missing_method_and_reference_kind_errors() {
             let Err(ResolveError::Load(error)) = reference.resolve(caller) else {
                 panic!("expected owner load failure");
             };
-            assert_eq!(error.klass_name, "MissingResolutionOwner");
-            assert!(matches!(error.kind, LoadErrorKind::NotFound));
+            assert!(matches!(error, LoadError::NotFound));
             assert!(reference.resolved.get().is_none());
 
             for (name, desc) in [
@@ -160,7 +159,7 @@ fn retries_after_a_failed_owner_load() {
             )
             .unwrap();
             init_vm(dir.0.clone());
-            let cld = ClassLoaderData::new();
+            let cld = ClassLoaderData::new(None);
             let caller = cld
                 .load_klass(&SymbolTable::intern("java/lang/Object"))
                 .unwrap();
@@ -196,7 +195,7 @@ fn resolves_interface_declarations_and_reports_unsupported_fallback() {
         ),
         || {
             init_vm(fixture_dir());
-            let cld = ClassLoaderData::new();
+            let cld = ClassLoaderData::new(None);
             let caller = cld
                 .load_klass(&SymbolTable::intern("java/lang/Object"))
                 .unwrap();

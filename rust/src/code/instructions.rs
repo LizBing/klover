@@ -382,7 +382,7 @@ mod tests {
     #[test]
     fn lower_branches_use_byte_addresses_not_instruction_indices() {
         ensure_metaspace();
-        let cld = ClassLoaderData::new();
+        let cld = ClassLoaderData::new(None);
         let msa = cld.ms_allocator();
         let mut tmp_cp = TmpConstantPool::new();
         let storage = cld.oop_storage();
@@ -419,7 +419,7 @@ mod tests {
     #[test]
     fn lower_retains_wide_local_indices_and_signed_increments() {
         ensure_metaspace();
-        let cld = ClassLoaderData::new();
+        let cld = ClassLoaderData::new(None);
         let msa = cld.ms_allocator();
         let mut tmp_cp = TmpConstantPool::new();
         let storage = cld.oop_storage();
@@ -448,7 +448,7 @@ mod tests {
     #[test]
     fn lower_stack_variants_without_losing_their_forms() {
         ensure_metaspace();
-        let cld = ClassLoaderData::new();
+        let cld = ClassLoaderData::new(None);
         let msa = cld.ms_allocator();
         let mut tmp_cp = TmpConstantPool::new();
         let storage = cld.oop_storage();

@@ -207,6 +207,42 @@ pub fn class_bytes_with_flags(
     out
 }
 
+/// Minimal hierarchy-only class files for loader/linker failure cases.
+pub fn hierarchy_bytes(
+    name: &str,
+    parent: Option<&str>,
+    interfaces: &[&str],
+    flags: u16,
+) -> Vec<u8> {
+    let names: Vec<_> = std::iter::once(name)
+        .chain(parent)
+        .chain(interfaces.iter().copied())
+        .collect();
+    let mut bytes = vec![0xca, 0xfe, 0xba, 0xbe, 0, 0, 0, 52];
+    bytes.extend_from_slice(&(1 + names.len() as u16 * 2).to_be_bytes());
+    for (index, name) in names.iter().enumerate() {
+        bytes.push(1); // CONSTANT_Utf8
+        bytes.extend_from_slice(&(name.len() as u16).to_be_bytes());
+        bytes.extend_from_slice(name.as_bytes());
+        bytes.push(7); // CONSTANT_Class
+        bytes.extend_from_slice(&(index as u16 * 2 + 1).to_be_bytes());
+    }
+    for value in [
+        flags,
+        2,
+        if parent.is_some() { 4 } else { 0 },
+        interfaces.len() as u16,
+    ] {
+        bytes.extend_from_slice(&value.to_be_bytes());
+    }
+    let first_interface = if parent.is_some() { 6 } else { 4 };
+    for index in 0..interfaces.len() {
+        bytes.extend_from_slice(&(first_interface + index as u16 * 2).to_be_bytes());
+    }
+    bytes.extend_from_slice(&[0; 6]); // No fields, methods, or attributes.
+    bytes
+}
+
 pub fn run_method(
     owner: &NormalKlass<'_>,
     name: &str,
