@@ -5,7 +5,9 @@ use crate::engines::{
 
 macro_rules! convert {
     ($name:ident, $pop:ident, $push:ident, $target:ty) => {
-        pub fn $name(f: &mut InterpreterFrame) -> ExecResult<StepControl> {
+        pub fn $name<'exec, 'meta: 'exec>(
+            f: &mut InterpreterFrame<'exec, 'meta>,
+        ) -> ExecResult<StepControl<'exec, 'meta>> {
             let value = f.$pop()?;
             f.$push(value as $target);
             Ok(StepControl::Continue)
@@ -28,19 +30,25 @@ convert!(d2i, pop_double, push_int, i32);
 convert!(d2l, pop_double, push_long, i64);
 convert!(d2f, pop_double, push_float, f32);
 
-pub fn i2b(f: &mut InterpreterFrame) -> ExecResult<StepControl> {
+pub fn i2b<'exec, 'meta: 'exec>(
+    f: &mut InterpreterFrame<'exec, 'meta>,
+) -> ExecResult<StepControl<'exec, 'meta>> {
     let value = f.pop_int()?;
     f.push_int(value as i8 as i32);
     Ok(StepControl::Continue)
 }
 
-pub fn i2c(f: &mut InterpreterFrame) -> ExecResult<StepControl> {
+pub fn i2c<'exec, 'meta: 'exec>(
+    f: &mut InterpreterFrame<'exec, 'meta>,
+) -> ExecResult<StepControl<'exec, 'meta>> {
     let value = f.pop_int()?;
     f.push_int(value as u16 as i32);
     Ok(StepControl::Continue)
 }
 
-pub fn i2s(f: &mut InterpreterFrame) -> ExecResult<StepControl> {
+pub fn i2s<'exec, 'meta: 'exec>(
+    f: &mut InterpreterFrame<'exec, 'meta>,
+) -> ExecResult<StepControl<'exec, 'meta>> {
     let value = f.pop_int()?;
     f.push_int(value as i16 as i32);
     Ok(StepControl::Continue)

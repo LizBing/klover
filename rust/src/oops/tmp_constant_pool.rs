@@ -5,18 +5,24 @@ use crate::{class_parser::MethodMemRef, oops::constant_entries::MethodRef, runti
 #[derive(Debug, Clone)]
 pub enum TmpConstantPoolEntry<'metadata> {
     MethodRef(&'metadata MethodRef<'metadata>),
+    FieldRef,
 }
 
 pub struct TmpConstantPool<'metadata> {
     table: HashMap<usize, TmpConstantPoolEntry<'metadata>>,
 }
 
-pub trait IntoTmpCPEntry<'metadata> {
-    fn into(self, msa: &'metadata MsAllocator) -> TmpConstantPoolEntry<'metadata>;
+pub trait IntoTmpCPEntry<'metadata>: Copy {
+    fn into_key(self) -> usize;
+    fn into_value(self, msa: &'metadata MsAllocator) -> TmpConstantPoolEntry<'metadata>;
 }
 
 impl<'metadata> IntoTmpCPEntry<'metadata> for &MethodMemRef {
-    fn into(self, msa: &'metadata MsAllocator) -> TmpConstantPoolEntry<'metadata> {
+    fn into_key(self) -> usize {
+        self as *const _ as _
+    }
+
+    fn into_value(self, msa: &'metadata MsAllocator) -> TmpConstantPoolEntry<'metadata> {
         let mref = MethodRef::build(self);
         TmpConstantPoolEntry::MethodRef(MsBox::new(msa, mref).leak())
     }
@@ -31,14 +37,15 @@ impl TmpConstantPool<'_> {
 }
 
 impl<'metadata> TmpConstantPool<'metadata> {
-    pub fn resolve<T>(&mut self, msa: &'metadata MsAllocator, addr: usize, into_entry: T) -> TmpConstantPoolEntry<'metadata>
+    pub fn resolve<T>(&mut self, msa: &'metadata MsAllocator, into_entry: T) -> TmpConstantPoolEntry<'metadata>
     where
         T: IntoTmpCPEntry<'metadata>
     {
-        match self.table.entry(addr) {
+        let key = into_entry.into_key();
+        match self.table.entry(key) {
             Entry::Occupied(entry) => entry.get().clone(),
             Entry::Vacant(entry) => {
-                entry.insert(into_entry.into(msa)).clone()
+                entry.insert(into_entry.into_value(msa)).clone()
             }
         }
     }

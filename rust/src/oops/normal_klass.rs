@@ -11,7 +11,7 @@ pub(crate) use crate::class_parser::ClassAccessFlags;
 use crate::{
     class_loader::class_loader_data::ClassLoaderData,
     oops::{
-        method::Method,
+        method::{Method, MethodAccessFlags},
         symbol_table::{SymbolHandle, SymbolTable},
     },
 };
@@ -154,7 +154,7 @@ impl<'dc> NormalKlass<'dc> {
     }
 }
 
-impl NormalKlass<'_> {
+impl<'meta> NormalKlass<'meta> {
     pub fn name(&self) -> &SymbolHandle {
         &self.name
     }
@@ -178,6 +178,64 @@ impl NormalKlass<'_> {
         self.acc_flags.contains(ClassAccessFlags::PUBLIC)
             || (std::ptr::eq(self.def_cld, accessing_cld)
                 && package_name(self.name.utf8()) == package_name(accessing_name))
+    }
+
+    pub(crate) fn same_runtime_package(&self, other: &NormalKlass<'_>) -> bool {
+        fn package(name: &str) -> &str {
+            name.rsplit_once('/').map_or("", |(package, _)| package)
+        }
+        std::ptr::eq(self.def_cld, other.def_cld)
+            && package(self.name.utf8()) == package(other.name.utf8())
+    }
+
+    /// Includes this class itself; identity includes the defining loader.
+    pub(crate) fn is_subclass_of(&self, other: &NormalKlass<'meta>) -> bool {
+        let mut current = Some(self);
+        while let Some(klass) = current {
+            if std::ptr::eq(klass, other) {
+                return true;
+            }
+            current = klass.super_klass;
+        }
+        false
+    }
+
+    /// Initialization is not executable yet. Find an initializer that an active
+    /// use would need, including superinterfaces that declare default methods.
+    pub(crate) fn required_initializer(&self) -> Option<&NormalKlass<'meta>> {
+        fn default_initializer<'a, 'meta>(
+            klass: &'a NormalKlass<'meta>,
+        ) -> Option<&'a NormalKlass<'meta>> {
+            for interface in klass.interfaces.iter() {
+                if let Some(found) = default_initializer(interface) {
+                    return Some(found);
+                }
+            }
+            if klass.methods.iter().any(|method| {
+                !method.acc_flags.intersects(
+                    MethodAccessFlags::STATIC
+                        | MethodAccessFlags::ABSTRACT
+                        | MethodAccessFlags::PRIVATE,
+                ) && !method.name.utf8().starts_with('<')
+            }) && klass.find_declared_method("<clinit>", "()V").is_some()
+            {
+                return Some(klass);
+            }
+            None
+        }
+        if !self.is_interface() {
+            if let Some(parent) = self.super_klass {
+                if let Some(found) = parent.required_initializer() {
+                    return Some(found);
+                }
+            }
+            for interface in self.interfaces.iter() {
+                if let Some(found) = default_initializer(interface) {
+                    return Some(found);
+                }
+            }
+        }
+        self.find_declared_method("<clinit>", "()V").map(|_| self)
     }
 
     pub(super) fn has_interfaces(&self) -> bool {

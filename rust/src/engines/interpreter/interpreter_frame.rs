@@ -14,7 +14,7 @@ use crate::{
 };
 
 pub struct InterpreterFrame<'exec, 'meta: 'exec> {
-    target: CallTarget<'exec, 'meta>,
+    pub target: CallTarget<'exec, 'meta>,
     code: &'exec Code<'meta>,
 
     oprand_stack: Vec<Slot>,
@@ -107,8 +107,8 @@ impl InterpreterFrame<'_, '_> {
     }
 }
 
-impl JavaFrame for InterpreterFrame<'_, '_> {
-    fn resume(&mut self, budget: &mut ExecBudget) -> ExecResult<EngineExit> {
+impl<'exec, 'meta: 'exec> JavaFrame<'exec, 'meta> for InterpreterFrame<'exec, 'meta> {
+    fn resume(&mut self, budget: &mut ExecBudget) -> ExecResult<EngineExit<'exec, 'meta>> {
         Interpreter::execute(self, budget)
     }
 

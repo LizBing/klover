@@ -28,7 +28,10 @@ fn group<'a>(
     Ok(slots)
 }
 
-fn discard(f: &mut InterpreterFrame, width: usize) -> ExecResult<StepControl> {
+fn discard<'exec, 'meta: 'exec>(
+    f: &mut InterpreterFrame<'exec, 'meta>,
+    width: usize,
+) -> ExecResult<StepControl<'exec, 'meta>> {
     let mut end = f.operand_stack().len();
     group(f.operand_stack(), &mut end, width).map_err(|e| f.make_exec_error(e))?;
     f.replace_stack_top(width, &[]);
@@ -37,7 +40,11 @@ fn discard(f: &mut InterpreterFrame, width: usize) -> ExecResult<StepControl> {
 
 // All dup forms duplicate a one- or two-slot group and insert it beneath
 // another whole group. Validate both groups before mutating the stack.
-fn duplicate(f: &mut InterpreterFrame, width: usize, beneath: usize) -> ExecResult<StepControl> {
+fn duplicate<'exec, 'meta: 'exec>(
+    f: &mut InterpreterFrame<'exec, 'meta>,
+    width: usize,
+    beneath: usize,
+) -> ExecResult<StepControl<'exec, 'meta>> {
     let stack = f.operand_stack();
     let mut end = stack.len();
     let top = group(stack, &mut end, width).map_err(|e| f.make_exec_error(e))?;
@@ -56,32 +63,50 @@ fn duplicate(f: &mut InterpreterFrame, width: usize, beneath: usize) -> ExecResu
     Ok(StepControl::Continue)
 }
 
-pub fn pop(f: &mut InterpreterFrame) -> ExecResult<StepControl> {
+pub fn pop<'exec, 'meta: 'exec>(
+    f: &mut InterpreterFrame<'exec, 'meta>,
+) -> ExecResult<StepControl<'exec, 'meta>> {
     discard(f, 1)
 }
-pub fn pop2(f: &mut InterpreterFrame) -> ExecResult<StepControl> {
+pub fn pop2<'exec, 'meta: 'exec>(
+    f: &mut InterpreterFrame<'exec, 'meta>,
+) -> ExecResult<StepControl<'exec, 'meta>> {
     discard(f, 2)
 }
-pub fn dup(f: &mut InterpreterFrame) -> ExecResult<StepControl> {
+pub fn dup<'exec, 'meta: 'exec>(
+    f: &mut InterpreterFrame<'exec, 'meta>,
+) -> ExecResult<StepControl<'exec, 'meta>> {
     duplicate(f, 1, 0)
 }
-pub fn dup_x1(f: &mut InterpreterFrame) -> ExecResult<StepControl> {
+pub fn dup_x1<'exec, 'meta: 'exec>(
+    f: &mut InterpreterFrame<'exec, 'meta>,
+) -> ExecResult<StepControl<'exec, 'meta>> {
     duplicate(f, 1, 1)
 }
-pub fn dup_x2(f: &mut InterpreterFrame) -> ExecResult<StepControl> {
+pub fn dup_x2<'exec, 'meta: 'exec>(
+    f: &mut InterpreterFrame<'exec, 'meta>,
+) -> ExecResult<StepControl<'exec, 'meta>> {
     duplicate(f, 1, 2)
 }
-pub fn dup2(f: &mut InterpreterFrame) -> ExecResult<StepControl> {
+pub fn dup2<'exec, 'meta: 'exec>(
+    f: &mut InterpreterFrame<'exec, 'meta>,
+) -> ExecResult<StepControl<'exec, 'meta>> {
     duplicate(f, 2, 0)
 }
-pub fn dup2_x1(f: &mut InterpreterFrame) -> ExecResult<StepControl> {
+pub fn dup2_x1<'exec, 'meta: 'exec>(
+    f: &mut InterpreterFrame<'exec, 'meta>,
+) -> ExecResult<StepControl<'exec, 'meta>> {
     duplicate(f, 2, 1)
 }
-pub fn dup2_x2(f: &mut InterpreterFrame) -> ExecResult<StepControl> {
+pub fn dup2_x2<'exec, 'meta: 'exec>(
+    f: &mut InterpreterFrame<'exec, 'meta>,
+) -> ExecResult<StepControl<'exec, 'meta>> {
     duplicate(f, 2, 2)
 }
 
-pub fn swap(f: &mut InterpreterFrame) -> ExecResult<StepControl> {
+pub fn swap<'exec, 'meta: 'exec>(
+    f: &mut InterpreterFrame<'exec, 'meta>,
+) -> ExecResult<StepControl<'exec, 'meta>> {
     let stack = f.operand_stack();
     let mut end = stack.len();
     let top = group(stack, &mut end, 1).map_err(|e| f.make_exec_error(e))?[0];

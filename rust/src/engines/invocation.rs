@@ -1,6 +1,7 @@
 use crate::{
     engines::exec_error::{ExecError, ExecErrorKind, ExecResult},
     oops::{
+        constant_entries::{MethodRef, ResolvedMethod},
         jvalue::JValue,
         method::{Method, MethodAccessFlags},
         normal_klass::NormalKlass,
@@ -13,6 +14,15 @@ use crate::{
 pub struct CallTarget<'exec, 'meta: 'exec> {
     pub declaring_class: &'exec NormalKlass<'meta>,
     pub method: &'exec Method<'meta>,
+}
+
+impl<'exec, 'meta: 'exec> From<ResolvedMethod<'meta>> for CallTarget<'exec, 'meta> {
+    fn from(value: ResolvedMethod<'meta>) -> Self {
+        Self {
+            declaring_class: value.declaring_klass,
+            method: value.method,
+        }
+    }
 }
 
 impl<'exec, 'meta: 'exec> CallTarget<'exec, 'meta> {
@@ -52,6 +62,23 @@ impl<'exec, 'meta: 'exec> Invocation<'exec, 'meta> {
     /// Reference checks, including the receiver, do not inspect the referenced object.
     /// Bytecode availability and local-slot capacity are checked by the interpreter.
     pub fn try_new(target: CallTarget<'exec, 'meta>, args: Box<[JValue]>) -> ExecResult<Self> {
+        Self::validate(target, args, false)
+    }
+
+    /// Bytecode represents boolean, byte, char and short parameters as ints.
+    /// Preserve those values without narrowing when transferring argument locals.
+    pub(crate) fn try_new_bytecode(
+        target: CallTarget<'exec, 'meta>,
+        args: Box<[JValue]>,
+    ) -> ExecResult<Self> {
+        Self::validate(target, args, true)
+    }
+
+    fn validate(
+        target: CallTarget<'exec, 'meta>,
+        args: Box<[JValue]>,
+        bytecode: bool,
+    ) -> ExecResult<Self> {
         let method = target.method;
         let receiver_count = usize::from(!method.acc_flags.contains(MethodAccessFlags::STATIC));
         let expected = method.desc.args().len() + receiver_count;
@@ -83,7 +110,10 @@ impl<'exec, 'meta: 'exec> Invocation<'exec, 'meta> {
             .zip(&args[receiver_count..])
             .enumerate()
         {
-            if !desc.matches_value(arg) {
+            let int_parameter = matches!(desc.raw().utf8(), "Z" | "B" | "C" | "S");
+            if !desc.matches_value(arg)
+                && !(bytecode && int_parameter && matches!(arg, JValue::Int(_)))
+            {
                 return Err(ExecError::with_target(
                     &target,
                     None,

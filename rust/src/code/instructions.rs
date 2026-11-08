@@ -352,13 +352,19 @@ impl<'metadata> Instruction<'metadata> {
             Opcode::DReturn => Self::DReturn,
             Opcode::AReturn => Self::AReturn,
             Opcode::Return => Self::Return,        
+            Opcode::InvokeStatic(info) => {
+                let TmpConstantPoolEntry::MethodRef(mref) = tmp_cp.resolve(msa, info.as_ref()) else {
+                    unreachable!("Mismatch constant pool entry")
+                };
+
+                Self::InvokeStatic(mref)
+            }
             Opcode::GetStatic(_)
             | Opcode::PutStatic(_)
             | Opcode::GetField(_)
             | Opcode::PutField(_)
             | Opcode::InvokeVirtual(_)
             | Opcode::InvokeSpecial(_)
-            | Opcode::InvokeStatic(_)
             | Opcode::InvokeInterface { .. }
             | Opcode::InvokeDynamic(_)
             | Opcode::New(_)

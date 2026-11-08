@@ -2,34 +2,43 @@ use super::instructions::{
     comparisons::*, constants::*, control::*, conversions::*, loads::*, math::*, stack,
 };
 use crate::{
-    code::instructions::{Instruction::{self, *}, LocalIdx},
+    code::instructions::{
+        Instruction::{self, *},
+        LocalIdx,
+    },
     engines::{
         exec_error::{ExecErrorKind, ExecResult},
         interpreter::{
-            instructions::references::invoke_static, interpreter_frame::InterpreterFrame, step_outcome::{StepControl, StepOutcome}
-        }, protocol::{EngineExit, ExecBudget},
+            instructions::references::invoke_static,
+            interpreter_frame::InterpreterFrame,
+            step_outcome::{StepControl, StepOutcome},
+        },
+        protocol::{EngineExit, ExecBudget},
     },
 };
 
 pub struct Interpreter;
 
 impl Interpreter {
-    pub fn execute(
-        frame: &mut InterpreterFrame,
+    pub fn execute<'exec, 'meta: 'exec>(
+        frame: &mut InterpreterFrame<'exec, 'meta>,
         budget: &mut ExecBudget,
-    ) -> ExecResult<EngineExit> {
+    ) -> ExecResult<EngineExit<'exec, 'meta>> {
         while budget.is_startable() {
             let StepOutcome { cost, result, .. } = Self::execute_one(frame);
             budget.charge(cost);
             match result? {
                 StepControl::Continue => {}
                 StepControl::Return(value) => return Ok(EngineExit::Return(value)),
+                StepControl::Invoke(invocation) => return Ok(EngineExit::Invoke(invocation)),
             }
         }
         Ok(EngineExit::BudgetExhausted)
     }
 
-    fn execute_one(f: &mut InterpreterFrame) -> StepOutcome {
+    fn execute_one<'exec, 'meta: 'exec>(
+        f: &mut InterpreterFrame<'exec, 'meta>,
+    ) -> StepOutcome<'exec, 'meta> {
         let Some(inst) = f.next_inst() else {
             return StepOutcome::new(0, Err(f.make_exec_error(ExecErrorKind::UnexpectedEOF)));
         };
@@ -42,10 +51,10 @@ impl Interpreter {
         StepOutcome::new(cost, Self::execute_instruction(f, inst))
     }
 
-    pub fn execute_instruction(
-        f: &mut InterpreterFrame,
-        inst: Instruction,
-    ) -> ExecResult<StepControl> {
+    pub fn execute_instruction<'exec, 'meta: 'exec>(
+        f: &mut InterpreterFrame<'exec, 'meta>,
+        inst: Instruction<'meta>,
+    ) -> ExecResult<StepControl<'exec, 'meta>> {
         match inst {
             NOp => nop(f),
             AConstNull => aconst_null(f),

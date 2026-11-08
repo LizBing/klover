@@ -3,6 +3,16 @@ use crate::class_loader::load_error::LoadError;
 #[derive(Debug)]
 pub enum ResolveError {
     Load(LoadError),
+    IllegalClassAccess {
+        from: String,
+        target: String,
+    },
+    IllegalMethodAccess {
+        from: String,
+        owner: String,
+        name: String,
+        desc: String,
+    },
     IncompatibleClassChange {
         owner: String,
         expected_interface: bool,

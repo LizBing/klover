@@ -1,4 +1,7 @@
-use crate::{engines::invocation::CallTarget, oops::jvalue::JValue};
+use crate::{
+    engines::invocation::CallTarget,
+    oops::{jvalue::JValue, oops_errors::ResolveError},
+};
 
 #[derive(Debug)]
 pub enum ExecErrorKind {
@@ -48,12 +51,31 @@ pub enum ExecErrorKind {
     UnsupportedInstruction,
 
     NoFrame,
+
+    Resolve(ResolveError),
+
+    ExpectedStaticMethod {
+        owner: String,
+        name: String,
+        desc: String,
+    },
+
+    UnsupportedInvocation {
+        owner: String,
+        name: String,
+        desc: String,
+        reason: &'static str,
+    },
+
+    UnsupportedClassInitialization {
+        owner: String,
+    },
+
+    ThreadTerminated,
 }
 
 #[derive(Debug)]
 pub struct InvocationBrief {
-    _private: (),
-
     pub klass: String,
     pub method: String,
     pub desc: String,
@@ -63,8 +85,6 @@ pub struct InvocationBrief {
 
 #[derive(Debug)]
 pub struct ExecError {
-    _private: (),
-
     pub brief: Option<InvocationBrief>,
 
     pub kind: ExecErrorKind,
@@ -72,11 +92,7 @@ pub struct ExecError {
 
 impl ExecError {
     pub(super) fn new(kind: ExecErrorKind) -> Self {
-        Self {
-            _private: (),
-            brief: None,
-            kind,
-        }
+        Self { brief: None, kind }
     }
 
     pub(super) fn with_target(
@@ -85,7 +101,6 @@ impl ExecError {
         kind: ExecErrorKind,
     ) -> Self {
         let brief = InvocationBrief {
-            _private: (),
             klass: target.declaring_class.name().utf8().into(),
             method: target.method.name.utf8().into(),
             desc: target.method.desc.raw().utf8().into(),
@@ -93,7 +108,6 @@ impl ExecError {
         };
 
         Self {
-            _private: (),
             brief: Some(brief),
             kind,
         }

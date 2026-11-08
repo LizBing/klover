@@ -5,7 +5,9 @@ use crate::engines::{
 
 macro_rules! binary {
     ($name:ident, $pop:ident, $push:ident, $op:expr) => {
-        pub fn $name(f: &mut InterpreterFrame) -> ExecResult<StepControl> {
+        pub fn $name<'exec, 'meta: 'exec>(
+            f: &mut InterpreterFrame<'exec, 'meta>,
+        ) -> ExecResult<StepControl<'exec, 'meta>> {
             let right = f.$pop()?;
             let left = f.$pop()?;
             f.$push(($op)(left, right));
@@ -16,7 +18,9 @@ macro_rules! binary {
 
 macro_rules! unary {
     ($name:ident, $pop:ident, $push:ident, $op:expr) => {
-        pub fn $name(f: &mut InterpreterFrame) -> ExecResult<StepControl> {
+        pub fn $name<'exec, 'meta: 'exec>(
+            f: &mut InterpreterFrame<'exec, 'meta>,
+        ) -> ExecResult<StepControl<'exec, 'meta>> {
             let value = f.$pop()?;
             f.$push(($op)(value));
             Ok(StepControl::Continue)
@@ -27,7 +31,9 @@ binary!(iadd, pop_int, push_int, i32::wrapping_add);
 binary!(isub, pop_int, push_int, i32::wrapping_sub);
 binary!(imul, pop_int, push_int, i32::wrapping_mul);
 
-pub fn idiv(f: &mut InterpreterFrame) -> ExecResult<StepControl> {
+pub fn idiv<'exec, 'meta: 'exec>(
+    f: &mut InterpreterFrame<'exec, 'meta>,
+) -> ExecResult<StepControl<'exec, 'meta>> {
     let right = f.pop_int()?;
     let left = f.pop_int()?;
     if right == 0 {
@@ -37,7 +43,9 @@ pub fn idiv(f: &mut InterpreterFrame) -> ExecResult<StepControl> {
     Ok(StepControl::Continue)
 }
 
-pub fn irem(f: &mut InterpreterFrame) -> ExecResult<StepControl> {
+pub fn irem<'exec, 'meta: 'exec>(
+    f: &mut InterpreterFrame<'exec, 'meta>,
+) -> ExecResult<StepControl<'exec, 'meta>> {
     let right = f.pop_int()?;
     let left = f.pop_int()?;
     if right == 0 {
@@ -51,21 +59,27 @@ binary!(iand, pop_int, push_int, |a: i32, b: i32| a & b);
 binary!(ior, pop_int, push_int, |a: i32, b: i32| a | b);
 binary!(ixor, pop_int, push_int, |a: i32, b: i32| a ^ b);
 
-pub fn ishl(f: &mut InterpreterFrame) -> ExecResult<StepControl> {
+pub fn ishl<'exec, 'meta: 'exec>(
+    f: &mut InterpreterFrame<'exec, 'meta>,
+) -> ExecResult<StepControl<'exec, 'meta>> {
     let distance = f.pop_int()? as u32;
     let value = f.pop_int()?;
     f.push_int(value.wrapping_shl(distance));
     Ok(StepControl::Continue)
 }
 
-pub fn ishr(f: &mut InterpreterFrame) -> ExecResult<StepControl> {
+pub fn ishr<'exec, 'meta: 'exec>(
+    f: &mut InterpreterFrame<'exec, 'meta>,
+) -> ExecResult<StepControl<'exec, 'meta>> {
     let distance = f.pop_int()? as u32;
     let value = f.pop_int()?;
     f.push_int(value.wrapping_shr(distance));
     Ok(StepControl::Continue)
 }
 
-pub fn iushr(f: &mut InterpreterFrame) -> ExecResult<StepControl> {
+pub fn iushr<'exec, 'meta: 'exec>(
+    f: &mut InterpreterFrame<'exec, 'meta>,
+) -> ExecResult<StepControl<'exec, 'meta>> {
     let distance = f.pop_int()? as u32;
     let value = f.pop_int()?;
     f.push_int((value as u32).wrapping_shr(distance) as i32);
@@ -75,7 +89,9 @@ binary!(ladd, pop_long, push_long, i64::wrapping_add);
 binary!(lsub, pop_long, push_long, i64::wrapping_sub);
 binary!(lmul, pop_long, push_long, i64::wrapping_mul);
 
-pub fn ldiv(f: &mut InterpreterFrame) -> ExecResult<StepControl> {
+pub fn ldiv<'exec, 'meta: 'exec>(
+    f: &mut InterpreterFrame<'exec, 'meta>,
+) -> ExecResult<StepControl<'exec, 'meta>> {
     let right = f.pop_long()?;
     let left = f.pop_long()?;
     if right == 0 {
@@ -85,7 +101,9 @@ pub fn ldiv(f: &mut InterpreterFrame) -> ExecResult<StepControl> {
     Ok(StepControl::Continue)
 }
 
-pub fn lrem(f: &mut InterpreterFrame) -> ExecResult<StepControl> {
+pub fn lrem<'exec, 'meta: 'exec>(
+    f: &mut InterpreterFrame<'exec, 'meta>,
+) -> ExecResult<StepControl<'exec, 'meta>> {
     let right = f.pop_long()?;
     let left = f.pop_long()?;
     if right == 0 {
@@ -99,21 +117,27 @@ binary!(land, pop_long, push_long, |a: i64, b: i64| a & b);
 binary!(lor, pop_long, push_long, |a: i64, b: i64| a | b);
 binary!(lxor, pop_long, push_long, |a: i64, b: i64| a ^ b);
 
-pub fn lshl(f: &mut InterpreterFrame) -> ExecResult<StepControl> {
+pub fn lshl<'exec, 'meta: 'exec>(
+    f: &mut InterpreterFrame<'exec, 'meta>,
+) -> ExecResult<StepControl<'exec, 'meta>> {
     let distance = f.pop_int()? as u32;
     let value = f.pop_long()?;
     f.push_long(value.wrapping_shl(distance));
     Ok(StepControl::Continue)
 }
 
-pub fn lshr(f: &mut InterpreterFrame) -> ExecResult<StepControl> {
+pub fn lshr<'exec, 'meta: 'exec>(
+    f: &mut InterpreterFrame<'exec, 'meta>,
+) -> ExecResult<StepControl<'exec, 'meta>> {
     let distance = f.pop_int()? as u32;
     let value = f.pop_long()?;
     f.push_long(value.wrapping_shr(distance));
     Ok(StepControl::Continue)
 }
 
-pub fn lushr(f: &mut InterpreterFrame) -> ExecResult<StepControl> {
+pub fn lushr<'exec, 'meta: 'exec>(
+    f: &mut InterpreterFrame<'exec, 'meta>,
+) -> ExecResult<StepControl<'exec, 'meta>> {
     let distance = f.pop_int()? as u32;
     let value = f.pop_long()?;
     f.push_long((value as u64).wrapping_shr(distance) as i64);
@@ -132,7 +156,11 @@ binary!(ddiv, pop_double, push_double, |a: f64, b: f64| a / b);
 binary!(drem, pop_double, push_double, |a: f64, b: f64| a % b);
 unary!(dneg, pop_double, push_double, |v: f64| -v);
 
-pub fn iinc(f: &mut InterpreterFrame, idx: usize, amount: i16) -> ExecResult<StepControl> {
+pub fn iinc<'exec, 'meta: 'exec>(
+    f: &mut InterpreterFrame<'exec, 'meta>,
+    idx: usize,
+    amount: i16,
+) -> ExecResult<StepControl<'exec, 'meta>> {
     let Slot::Int(value) = f.get_local(idx)? else {
         return Err(f.make_exec_error(ExecErrorKind::MismatchSlotType));
     };

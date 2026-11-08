@@ -63,14 +63,26 @@ fn resolves_declared_inherited_overloaded_and_hidden_methods() {
             ] {
                 let reference = method_ref(MethodMemRefKind::Class, owner, name, desc);
                 assert!(reference.resolved.get().is_none());
-                let actual = reference.resolve(caller).unwrap();
+                let actual = reference.resolve(caller.as_normal().unwrap()).unwrap();
                 let expected = load_normal_klass(&cld, &SymbolTable::intern(declaring_class))
                     .unwrap()
                     .find_declared_method(name, desc)
                     .unwrap();
-                assert!(std::ptr::eq(actual, expected), "{owner}.{name}{desc}");
-                assert!(std::ptr::eq(actual, *reference.resolved.get().unwrap()));
-                assert!(std::ptr::eq(actual, reference.resolve(caller).unwrap()));
+                assert!(
+                    std::ptr::eq(actual.method, expected),
+                    "{owner}.{name}{desc}"
+                );
+                assert!(std::ptr::eq(
+                    actual.method,
+                    reference.resolved.get().unwrap().method
+                ));
+                assert!(std::ptr::eq(
+                    actual.method,
+                    reference
+                        .resolve(caller.as_normal().unwrap())
+                        .unwrap()
+                        .method
+                ));
             }
 
             let reference = method_ref(
@@ -81,11 +93,13 @@ fn resolves_declared_inherited_overloaded_and_hidden_methods() {
             );
             std::thread::scope(|scope| {
                 let handles: Vec<_> = (0..4)
-                    .map(|_| scope.spawn(|| reference.resolve(caller).unwrap()))
+                    .map(|_| {
+                        scope.spawn(|| reference.resolve(caller.as_normal().unwrap()).unwrap())
+                    })
                     .collect();
-                let expected = reference.resolve(caller).unwrap();
+                let expected = reference.resolve(caller.as_normal().unwrap()).unwrap();
                 for handle in handles {
-                    assert!(std::ptr::eq(handle.join().unwrap(), expected));
+                    assert!(std::ptr::eq(handle.join().unwrap().method, expected.method));
                 }
             });
         },
@@ -111,7 +125,8 @@ fn reports_load_missing_method_and_reference_kind_errors() {
                 "test",
                 "()V",
             );
-            let Err(ResolveError::Load(error)) = reference.resolve(caller) else {
+            let Err(ResolveError::Load(error)) = reference.resolve(caller.as_normal().unwrap())
+            else {
                 panic!("expected owner load failure");
             };
             assert!(matches!(error, LoadError::NotFound));
@@ -124,7 +139,7 @@ fn reports_load_missing_method_and_reference_kind_errors() {
             ] {
                 let reference =
                     method_ref(MethodMemRefKind::Class, "MethodResolution$Leaf", name, desc);
-                assert!(matches!(reference.resolve(caller),
+                assert!(matches!(reference.resolve(caller.as_normal().unwrap()),
                     Err(ResolveError::NoSuchMethod { owner, name: actual_name, desc: actual_desc })
                         if owner == "MethodResolution$Leaf" && actual_name == name && actual_desc == desc
                 ));
@@ -136,7 +151,7 @@ fn reports_load_missing_method_and_reference_kind_errors() {
                 (MethodMemRefKind::Interface, "MethodResolution$Base", true),
             ] {
                 let reference = method_ref(kind, owner, "missing", "()V");
-                assert!(matches!(reference.resolve(caller),
+                assert!(matches!(reference.resolve(caller.as_normal().unwrap()),
                     Err(ResolveError::IncompatibleClassChange { owner: actual, expected_interface: expected })
                         if actual == owner && expected == expected_interface
                 ));
@@ -170,7 +185,7 @@ fn retries_after_a_failed_owner_load() {
                 "()I",
             );
             assert!(matches!(
-                reference.resolve(caller),
+                reference.resolve(caller.as_normal().unwrap()),
                 Err(ResolveError::Load(_))
             ));
             assert!(reference.resolved.get().is_none());
@@ -180,8 +195,11 @@ fn retries_after_a_failed_owner_load() {
                 dir.0.join("MethodResolution$Base.class"),
             )
             .unwrap();
-            let method = reference.resolve(caller).unwrap();
-            assert!(std::ptr::eq(method, *reference.resolved.get().unwrap()));
+            let method = reference.resolve(caller.as_normal().unwrap()).unwrap();
+            assert!(std::ptr::eq(
+                method.method,
+                reference.resolved.get().unwrap().method
+            ));
         },
     );
 }
@@ -206,13 +224,13 @@ fn resolves_interface_declarations_and_reports_unsupported_fallback() {
                     name,
                     "()I",
                 );
-                let actual = reference.resolve(caller).unwrap();
+                let actual = reference.resolve(caller.as_normal().unwrap()).unwrap();
                 let expected =
                     load_normal_klass(&cld, &SymbolTable::intern("MethodResolution$Root"))
                         .unwrap()
                         .find_declared_method(name, "()I")
                         .unwrap();
-                assert!(std::ptr::eq(actual, expected));
+                assert!(std::ptr::eq(actual.method, expected));
             }
             for (kind, owner, name) in [
                 (
@@ -242,7 +260,7 @@ fn resolves_interface_declarations_and_reports_unsupported_fallback() {
                 ),
             ] {
                 let reference = method_ref(kind, owner, name, "()I");
-                assert!(matches!(reference.resolve(caller),
+                assert!(matches!(reference.resolve(caller.as_normal().unwrap()),
                     Err(ResolveError::UnsupportedInterfaceLookup { owner: actual, name: actual_name, desc })
                         if actual == owner && actual_name == name && desc == "()I"
                 ));

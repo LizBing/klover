@@ -5,7 +5,9 @@ use crate::engines::{
     interpreter::{interpreter_frame::InterpreterFrame, step_outcome::StepControl},
 };
 
-pub fn lcmp(f: &mut InterpreterFrame) -> ExecResult<StepControl> {
+pub fn lcmp<'exec, 'meta: 'exec>(
+    f: &mut InterpreterFrame<'exec, 'meta>,
+) -> ExecResult<StepControl<'exec, 'meta>> {
     let right = f.pop_long()?;
     let left = f.pop_long()?;
     f.push_int(if left < right {
@@ -20,7 +22,10 @@ pub fn lcmp(f: &mut InterpreterFrame) -> ExecResult<StepControl> {
 
 macro_rules! float_compare {
     ($name:ident, $pop:ident) => {
-        pub fn $name(f: &mut InterpreterFrame, nan: i32) -> ExecResult<StepControl> {
+        pub fn $name<'exec, 'meta: 'exec>(
+            f: &mut InterpreterFrame<'exec, 'meta>,
+            nan: i32,
+        ) -> ExecResult<StepControl<'exec, 'meta>> {
             let right = f.$pop()?;
             let left = f.$pop()?;
             let result = if left.is_nan() || right.is_nan() {
@@ -42,11 +47,11 @@ float_compare!(dcmp, pop_double);
 
 macro_rules! int_branch {
     ($zero:ident, $pair:ident, $op:tt) => {
-        pub fn $zero(f: &mut InterpreterFrame, target: InstIdx) -> ExecResult<StepControl> {
+        pub fn $zero<'exec, 'meta: 'exec>(f: &mut InterpreterFrame<'exec, 'meta>, target: InstIdx) -> ExecResult<StepControl<'exec, 'meta>> {
             let value = f.pop_int()?;
             branch(f, target, value $op 0)
         }
-        pub fn $pair(f: &mut InterpreterFrame, target: InstIdx) -> ExecResult<StepControl> {
+        pub fn $pair<'exec, 'meta: 'exec>(f: &mut InterpreterFrame<'exec, 'meta>, target: InstIdx) -> ExecResult<StepControl<'exec, 'meta>> {
             let right = f.pop_int()?;
             let left = f.pop_int()?;
             branch(f, target, left $op right)
@@ -60,13 +65,21 @@ int_branch!(ifge, if_icmpge, >=);
 int_branch!(ifgt, if_icmpgt, >);
 int_branch!(ifle, if_icmple, <=);
 
-pub fn if_acmp(f: &mut InterpreterFrame, target: InstIdx, equal: bool) -> ExecResult<StepControl> {
+pub fn if_acmp<'exec, 'meta: 'exec>(
+    f: &mut InterpreterFrame<'exec, 'meta>,
+    target: InstIdx,
+    equal: bool,
+) -> ExecResult<StepControl<'exec, 'meta>> {
     let right = f.pop_ref()?;
     let left = f.pop_ref()?;
     branch(f, target, (left.as_u32() == right.as_u32()) == equal)
 }
 
-pub fn if_null(f: &mut InterpreterFrame, target: InstIdx, null: bool) -> ExecResult<StepControl> {
+pub fn if_null<'exec, 'meta: 'exec>(
+    f: &mut InterpreterFrame<'exec, 'meta>,
+    target: InstIdx,
+    null: bool,
+) -> ExecResult<StepControl<'exec, 'meta>> {
     let value = f.pop_ref()?;
     branch(f, target, value.is_null() == null)
 }

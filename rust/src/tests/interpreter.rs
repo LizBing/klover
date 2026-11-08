@@ -21,23 +21,27 @@ use crate::{
     },
     gc_bindings::oop_hierarchy::NObjPtr,
     oops::jvalue::JValue,
-    runtime::java_thread::{JavaThread, JavaThreadState},
+    runtime::java_thread::JavaThread,
 };
 
-fn with_code(code: &[u8], test: impl FnOnce(&mut InterpreterFrame<'_, '_>)) {
-    ensure_metaspace();
-    let cld = ClassLoaderData::new(None);
-    let owner = parse_class(&cld, &class_bytes("()V", code, 16, 16));
+fn with_code<'meta>(
+    cld: &'meta ClassLoaderData,
+    code: &[u8],
+    test: impl FnOnce(&mut InterpreterFrame<'_, 'meta>),
+) {
+    let owner = parse_class(cld, &class_bytes("()V", code, 16, 16));
     let call = Invocation::lookup_declared(&owner, "test", "()V", &[]).unwrap();
     test(&mut InterpreterFrame::try_new(call).unwrap());
 }
 
-fn with_frame(test: impl FnOnce(&mut InterpreterFrame<'_, '_>)) {
-    with_code(&[0xb1], test);
+fn with_frame<'meta>(
+    cld: &'meta ClassLoaderData,
+    test: impl FnOnce(&mut InterpreterFrame<'_, 'meta>),
+) {
+    with_code(cld, &[0xb1], test);
 }
 
-fn step(frame: &mut InterpreterFrame<'_, '_>, inst: Instruction<'_>) {
-    // These instructions own no borrowed switch tables.
+fn step<'exec, 'meta: 'exec>(frame: &mut InterpreterFrame<'exec, 'meta>, inst: Instruction<'meta>) {
     Interpreter::execute_instruction(frame, inst).unwrap();
 }
 
@@ -139,7 +143,7 @@ fn frame_rejects_arguments_that_exceed_max_locals() {
             error.kind,
             ExecErrorKind::InsufficientLocalSlots { .. }
         ));
-        assert!(matches!(thread.state(), JavaThreadState::New));
+        assert!(thread.is_new());
         assert!(thread.current_frame().is_none());
     }
 }
@@ -187,6 +191,8 @@ fn frame_counts_the_receiver_as_one_local_slot() {
 
 #[test]
 fn integer_binary_operations_cover_boundaries_and_operand_order() {
+    ensure_metaspace();
+    let cld = ClassLoaderData::new(None);
     let cases = [
         (IAdd, i32::MAX, 1, i32::MIN),
         (ISub, 7, 12, -5),
@@ -205,7 +211,7 @@ fn integer_binary_operations_cover_boundaries_and_operand_order() {
         (IUShR, -1, 33, i32::MAX),
     ];
     for (inst, left, right, expected) in cases {
-        with_frame(|frame| {
+        with_frame(&cld, |frame| {
             frame.push_int(left);
             frame.push_int(right);
             step(frame, inst);
@@ -217,6 +223,8 @@ fn integer_binary_operations_cover_boundaries_and_operand_order() {
 
 #[test]
 fn long_binary_operations_cover_boundaries_and_operand_order() {
+    ensure_metaspace();
+    let cld = ClassLoaderData::new(None);
     for (inst, left, right, expected) in [
         (LAdd, i64::MAX, 1, i64::MIN),
         (LSub, 7, 12, -5),
@@ -229,7 +237,7 @@ fn long_binary_operations_cover_boundaries_and_operand_order() {
         (LOr, 12, 10, 14),
         (LXor, 12, 10, 6),
     ] {
-        with_frame(|frame| {
+        with_frame(&cld, |frame| {
             frame.push_long(left);
             frame.push_long(right);
             step(frame, inst);
@@ -244,7 +252,7 @@ fn long_binary_operations_cover_boundaries_and_operand_order() {
         (LUShR, -1, 1, i64::MAX),
         (LUShR, -1, 65, i64::MAX),
     ] {
-        with_frame(|frame| {
+        with_frame(&cld, |frame| {
             frame.push_long(value);
             frame.push_int(distance);
             step(frame, inst);
@@ -255,8 +263,10 @@ fn long_binary_operations_cover_boundaries_and_operand_order() {
 
 #[test]
 fn division_and_remainder_by_zero_are_structured_errors() {
+    ensure_metaspace();
+    let cld = ClassLoaderData::new(None);
     for inst in [IDiv, IRem, LDiv, LRem] {
-        with_frame(|frame| {
+        with_frame(&cld, |frame| {
             if matches!(inst, LDiv | LRem) {
                 frame.push_long(1);
                 frame.push_long(0);
@@ -273,6 +283,8 @@ fn division_and_remainder_by_zero_are_structured_errors() {
 
 #[test]
 fn floating_arithmetic_and_signed_zero() {
+    ensure_metaspace();
+    let cld = ClassLoaderData::new(None);
     for (inst, expected) in [
         (FAdd, 9.0),
         (FSub, 5.0),
@@ -280,7 +292,7 @@ fn floating_arithmetic_and_signed_zero() {
         (FDiv, 3.5),
         (FRem, 1.0),
     ] {
-        with_frame(|f| {
+        with_frame(&cld, |f| {
             f.push_float(7.0);
             f.push_float(2.0);
             step(f, inst);
@@ -294,14 +306,14 @@ fn floating_arithmetic_and_signed_zero() {
         (DDiv, 3.5),
         (DRem, 1.0),
     ] {
-        with_frame(|f| {
+        with_frame(&cld, |f| {
             f.push_double(7.0);
             f.push_double(2.0);
             step(f, inst);
             assert_eq!(f.pop_double().unwrap(), expected);
         });
     }
-    with_frame(|f| {
+    with_frame(&cld, |f| {
         f.push_float(0.0);
         step(f, FNeg);
         assert_eq!(f.pop_float().unwrap().to_bits(), (-0.0f32).to_bits());
@@ -330,6 +342,8 @@ fn push_value(f: &mut InterpreterFrame<'_, '_>, value: JValue) {
 
 #[test]
 fn numeric_conversions_preserve_java_rules() {
+    ensure_metaspace();
+    let cld = ClassLoaderData::new(None);
     use JValue::{Double, Float, Int, Long};
     let cases = [
         (I2L, Int(-3), Long(-3)),
@@ -354,7 +368,7 @@ fn numeric_conversions_preserve_java_rules() {
         (D2L, Double(f64::NAN), Long(0)),
     ];
     for (inst, input, expected) in cases {
-        with_frame(|f| {
+        with_frame(&cld, |f| {
             push_value(f, input);
             step(f, inst);
             let actual = match expected {
@@ -372,6 +386,8 @@ fn numeric_conversions_preserve_java_rules() {
 
 #[test]
 fn comparisons_cover_nan_ordering_and_equal_zero() {
+    ensure_metaspace();
+    let cld = ClassLoaderData::new(None);
     for (inst, left, right, expected) in [
         (FCmpL, f32::NAN, 0.0, -1),
         (FCmpG, f32::NAN, 0.0, 1),
@@ -379,7 +395,7 @@ fn comparisons_cover_nan_ordering_and_equal_zero() {
         (FCmpG, 3.0, 2.0, 1),
         (FCmpG, 1.0, 2.0, -1),
     ] {
-        with_frame(|f| {
+        with_frame(&cld, |f| {
             f.push_float(left);
             f.push_float(right);
             step(f, inst);
@@ -393,7 +409,7 @@ fn comparisons_cover_nan_ordering_and_equal_zero() {
         (DCmpG, 3.0, 2.0, 1),
         (DCmpG, 1.0, 2.0, -1),
     ] {
-        with_frame(|f| {
+        with_frame(&cld, |f| {
             f.push_double(left);
             f.push_double(right);
             step(f, inst);
@@ -401,7 +417,7 @@ fn comparisons_cover_nan_ordering_and_equal_zero() {
         });
     }
     for (left, right, expected) in [(i64::MIN, i64::MAX, -1), (4, 4, 0), (5, 4, 1)] {
-        with_frame(|f| {
+        with_frame(&cld, |f| {
             f.push_long(left);
             f.push_long(right);
             step(f, LCmp);
@@ -412,6 +428,8 @@ fn comparisons_cover_nan_ordering_and_equal_zero() {
 
 #[test]
 fn constants_and_typed_returns() {
+    ensure_metaspace();
+    let cld = ClassLoaderData::new(None);
     use JValue::{Double, Float, Int, Long, Ref};
     for (inst, ret, expected) in [
         (IConst(-1), IReturn, Int(-1)),
@@ -422,7 +440,7 @@ fn constants_and_typed_returns() {
         (DConst(1.0), DReturn, Double(1.0)),
         (AConstNull, AReturn, Ref(NObjPtr::null())),
     ] {
-        with_frame(|f| {
+        with_frame(&cld, |f| {
             step(f, inst);
             let StepControl::Return(value) = Interpreter::execute_instruction(f, ret).unwrap()
             else {
@@ -431,7 +449,7 @@ fn constants_and_typed_returns() {
             assert_value(value, expected);
         });
     }
-    with_frame(|f| {
+    with_frame(&cld, |f| {
         step(f, NOp);
         assert_stack(f, &[]);
         assert!(matches!(
@@ -443,6 +461,8 @@ fn constants_and_typed_returns() {
 
 #[test]
 fn stack_forms_preserve_value_order() {
+    ensure_metaspace();
+    let cld = ClassLoaderData::new(None);
     use Slot::{DoubleHigh, DoubleLow, Int, LongHigh, LongLow};
     let h = LongHigh([0, 0, 0, 1]);
     let l = LongLow([0, 0, 0, 2]);
@@ -491,7 +511,7 @@ fn stack_forms_preserve_value_order() {
         (Swap, vec![Int(1), Int(2)], vec![Int(2), Int(1)]),
     ];
     for (inst, before, expected) in cases {
-        with_frame(|f| {
+        with_frame(&cld, |f| {
             for slot in before {
                 f.push(slot);
             }
@@ -503,6 +523,8 @@ fn stack_forms_preserve_value_order() {
 
 #[test]
 fn invalid_stack_forms_fail_without_partial_mutation() {
+    ensure_metaspace();
+    let cld = ClassLoaderData::new(None);
     let h = Slot::LongHigh([0; 4]);
     let l = Slot::LongLow([0; 4]);
     for (inst, before) in [
@@ -514,7 +536,7 @@ fn invalid_stack_forms_fail_without_partial_mutation() {
         (DupX1, vec![Slot::Int(1)]),
         (Dup2X2, vec![h, l]),
     ] {
-        with_frame(|f| {
+        with_frame(&cld, |f| {
             for &slot in &before {
                 f.push(slot);
             }
@@ -530,7 +552,9 @@ fn invalid_stack_forms_fail_without_partial_mutation() {
 
 #[test]
 fn local_loads_stores_and_signed_increment() {
-    with_frame(|f| {
+    ensure_metaspace();
+    let cld = ClassLoaderData::new(None);
+    with_frame(&cld, |f| {
         f.push_int(i32::MAX);
         step(f, IStore(LocalIdx(3)));
         step(f, IInc(LocalIdx(3), 1));
@@ -561,8 +585,10 @@ fn local_loads_stores_and_signed_increment() {
 
 #[test]
 fn overwriting_either_wide_local_half_invalidates_its_partner() {
+    ensure_metaspace();
+    let cld = ClassLoaderData::new(None);
     for idx in [4, 5] {
-        with_frame(|f| {
+        with_frame(&cld, |f| {
             f.push_long(42);
             step(f, LStore(LocalIdx(4)));
             f.set_local(idx, Slot::Int(7)).unwrap();
@@ -583,7 +609,9 @@ fn overwriting_either_wide_local_half_invalidates_its_partner() {
 
 #[test]
 fn invalid_locals_and_types_report_structured_errors() {
-    with_frame(|f| {
+    ensure_metaspace();
+    let cld = ClassLoaderData::new(None);
+    with_frame(&cld, |f| {
         assert!(matches!(
             f.get_local(16).unwrap_err().kind,
             ExecErrorKind::InvalidLocalIndex(16)
@@ -612,61 +640,68 @@ fn invalid_locals_and_types_report_structured_errors() {
 
 #[test]
 fn conditional_branches_cover_taken_and_untaken_paths() {
-    let branches: [(fn(InstIdx) -> Instruction<'static>, i32, i32); 6] = [
-        (IfEq, 0, 1),
-        (IfNe, 1, 0),
-        (IfLt, -1, 0),
-        (IfGe, 0, -1),
-        (IfGt, 1, 0),
-        (IfLe, 0, 1),
-    ];
-    for (branch, taken, untaken) in branches {
-        for (value, expected) in [(taken, 2), (untaken, 1)] {
-            with_code(&[0x04, 0x05, 0xb1], |f| {
-                f.push_int(value);
-                step(f, branch(InstIdx(1)));
-                assert!(matches!(f.next_inst(), Some(IConst(v)) if v == expected));
-            });
+    fn run<'meta>(cld: &'meta ClassLoaderData) {
+        let branches: [(fn(InstIdx) -> Instruction<'meta>, i32, i32); 6] = [
+            (IfEq, 0, 1),
+            (IfNe, 1, 0),
+            (IfLt, -1, 0),
+            (IfGe, 0, -1),
+            (IfGt, 1, 0),
+            (IfLe, 0, 1),
+        ];
+        for (branch, taken, untaken) in branches {
+            for (value, expected) in [(taken, 2), (untaken, 1)] {
+                with_code(&cld, &[0x04, 0x05, 0xb1], |f| {
+                    f.push_int(value);
+                    step(f, branch(InstIdx(1)));
+                    assert!(matches!(f.next_inst(), Some(IConst(v)) if v == expected));
+                });
+            }
+        }
+        let pairs: [(fn(InstIdx) -> Instruction<'meta>, i32, i32); 6] = [
+            (IfICmpEq, 5, 6),
+            (IfICmpNe, 6, 5),
+            (IfICmpLt, 4, 5),
+            (IfICmpGe, 5, 4),
+            (IfICmpGt, 6, 5),
+            (IfICmpLe, 5, 6),
+        ];
+        for (branch, taken, untaken) in pairs {
+            for (left, expected) in [(taken, 2), (untaken, 1)] {
+                with_code(&cld, &[0x04, 0x05, 0xb1], |f| {
+                    f.push_int(left);
+                    f.push_int(5);
+                    step(f, branch(InstIdx(1)));
+                    assert!(matches!(f.next_inst(), Some(IConst(v)) if v == expected));
+                });
+            }
         }
     }
-    let pairs: [(fn(InstIdx) -> Instruction<'static>, i32, i32); 6] = [
-        (IfICmpEq, 5, 6),
-        (IfICmpNe, 6, 5),
-        (IfICmpLt, 4, 5),
-        (IfICmpGe, 5, 4),
-        (IfICmpGt, 6, 5),
-        (IfICmpLe, 5, 6),
-    ];
-    for (branch, taken, untaken) in pairs {
-        for (left, expected) in [(taken, 2), (untaken, 1)] {
-            with_code(&[0x04, 0x05, 0xb1], |f| {
-                f.push_int(left);
-                f.push_int(5);
-                step(f, branch(InstIdx(1)));
-                assert!(matches!(f.next_inst(), Some(IConst(v)) if v == expected));
-            });
-        }
-    }
+    ensure_metaspace();
+    let cld = ClassLoaderData::new(None);
+    run(&cld);
 }
 
 #[test]
 fn reference_branches_and_invalid_targets() {
+    ensure_metaspace();
+    let cld = ClassLoaderData::new(None);
     for (inst, expected) in [(IfNull(InstIdx(1)), 2), (IfNonNull(InstIdx(1)), 1)] {
-        with_code(&[0x04, 0x05, 0xb1], |f| {
+        with_code(&cld, &[0x04, 0x05, 0xb1], |f| {
             f.push_ref(NObjPtr::null());
             step(f, inst);
             assert!(matches!(f.next_inst(), Some(IConst(v)) if v == expected));
         });
     }
     for (inst, expected) in [(IfACmpEq(InstIdx(1)), 2), (IfACmpNe(InstIdx(1)), 1)] {
-        with_code(&[0x04, 0x05, 0xb1], |f| {
+        with_code(&cld, &[0x04, 0x05, 0xb1], |f| {
             f.push_ref(NObjPtr::null());
             f.push_ref(NObjPtr::null());
             step(f, inst);
             assert!(matches!(f.next_inst(), Some(IConst(v)) if v == expected));
         });
     }
-    with_frame(|f| {
+    with_frame(&cld, |f| {
         assert!(matches!(
             f.jump_to(InstIdx(1)).unwrap_err().kind,
             ExecErrorKind::InvalidBranchTarget(1)
@@ -678,7 +713,9 @@ fn reference_branches_and_invalid_targets() {
 
 #[test]
 fn budget_zero_and_instruction_cost_preserve_resumption() {
-    with_code(&[0x04, 0x05, 0x60, 0xac], |f| {
+    ensure_metaspace();
+    let cld = ClassLoaderData::new(None);
+    with_code(&cld, &[0x04, 0x05, 0x60, 0xac], |f| {
         assert!(matches!(
             f.resume(&mut ExecBudget::new(0)).unwrap(),
             EngineExit::BudgetExhausted
@@ -706,7 +743,9 @@ fn budget_zero_and_instruction_cost_preserve_resumption() {
 
 #[test]
 fn unsupported_instruction_and_unexpected_eof_are_errors() {
-    with_frame(|f| {
+    ensure_metaspace();
+    let cld = ClassLoaderData::new(None);
+    with_frame(&cld, |f| {
         assert!(matches!(
             Interpreter::execute_instruction(f, Unsupported)
                 .err()
@@ -715,7 +754,7 @@ fn unsupported_instruction_and_unexpected_eof_are_errors() {
             ExecErrorKind::UnsupportedInstruction
         ));
     });
-    with_code(&[0x00], |f| {
+    with_code(&cld, &[0x00], |f| {
         assert!(matches!(
             f.resume(&mut ExecBudget::new(2)).err().unwrap().kind,
             ExecErrorKind::UnexpectedEOF
@@ -726,7 +765,7 @@ fn unsupported_instruction_and_unexpected_eof_are_errors() {
 #[test]
 fn dispatcher_without_frame_reports_no_frame() {
     let mut thread = JavaThread::new();
-    assert!(matches!(thread.state(), JavaThreadState::New));
+    assert!(thread.is_new());
     let error = ExecDispatcher::poll(&mut thread, &mut ExecBudget::new(10))
         .err()
         .unwrap();
@@ -801,7 +840,7 @@ fn frame_and_thread_preserve_distinct_execution_and_metadata_lifetimes() {
         let inst: Instruction<'meta> = frame.next_inst().unwrap();
         assert!(matches!(inst, Return));
         let call = Invocation::lookup_declared(owner, "test", "()V", &[]).unwrap();
-        let mut thread: JavaThread<'exec> = JavaThread::new();
+        let mut thread: JavaThread<'exec, 'meta> = JavaThread::new();
         ExecDispatcher::start(&mut thread, call).unwrap();
         assert!(matches!(
             ExecDispatcher::poll(&mut thread, &mut ExecBudget::new(1)).unwrap(),

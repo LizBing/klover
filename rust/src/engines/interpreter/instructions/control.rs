@@ -1,7 +1,5 @@
 use crate::engines::protocol::MethodReturn;
-use crate::{
-    code::instructions::InstIdx, oops::jvalue::JValue,
-};
+use crate::{code::instructions::InstIdx, oops::jvalue::JValue};
 use crate::{
     code::instructions::{LookupTable, RangeTable},
     engines::{
@@ -10,49 +8,68 @@ use crate::{
     },
 };
 
-pub fn ireturn(f: &mut InterpreterFrame) -> ExecResult<StepControl> {
+pub fn ireturn<'exec, 'meta: 'exec>(
+    f: &mut InterpreterFrame<'exec, 'meta>,
+) -> ExecResult<StepControl<'exec, 'meta>> {
     let value = f.pop_int()?;
     Ok(StepControl::Return(MethodReturn::Value(JValue::Int(value))))
 }
 
-pub fn lreturn(f: &mut InterpreterFrame) -> ExecResult<StepControl> {
+pub fn lreturn<'exec, 'meta: 'exec>(
+    f: &mut InterpreterFrame<'exec, 'meta>,
+) -> ExecResult<StepControl<'exec, 'meta>> {
     let value = f.pop_long()?;
     Ok(StepControl::Return(MethodReturn::Value(JValue::Long(
         value,
     ))))
 }
 
-pub fn freturn(f: &mut InterpreterFrame) -> ExecResult<StepControl> {
+pub fn freturn<'exec, 'meta: 'exec>(
+    f: &mut InterpreterFrame<'exec, 'meta>,
+) -> ExecResult<StepControl<'exec, 'meta>> {
     let value = f.pop_float()?;
     Ok(StepControl::Return(MethodReturn::Value(JValue::Float(
         value,
     ))))
 }
 
-pub fn dreturn(f: &mut InterpreterFrame) -> ExecResult<StepControl> {
+pub fn dreturn<'exec, 'meta: 'exec>(
+    f: &mut InterpreterFrame<'exec, 'meta>,
+) -> ExecResult<StepControl<'exec, 'meta>> {
     let value = f.pop_double()?;
     Ok(StepControl::Return(MethodReturn::Value(JValue::Double(
         value,
     ))))
 }
 
-pub fn areturn(f: &mut InterpreterFrame) -> ExecResult<StepControl> {
+pub fn areturn<'exec, 'meta: 'exec>(
+    f: &mut InterpreterFrame<'exec, 'meta>,
+) -> ExecResult<StepControl<'exec, 'meta>> {
     let value = f.pop_ref()?;
     Ok(StepControl::Return(MethodReturn::Value(JValue::Ref(value))))
 }
 
-pub fn return_void(_: &mut InterpreterFrame) -> ExecResult<StepControl> {
+pub fn return_void<'exec, 'meta: 'exec>(
+    _: &mut InterpreterFrame<'exec, 'meta>,
+) -> ExecResult<StepControl<'exec, 'meta>> {
     Ok(StepControl::Return(MethodReturn::Void))
 }
 
-pub fn branch(f: &mut InterpreterFrame, target: InstIdx, taken: bool) -> ExecResult<StepControl> {
+pub fn branch<'exec, 'meta: 'exec>(
+    f: &mut InterpreterFrame<'exec, 'meta>,
+    target: InstIdx,
+    taken: bool,
+) -> ExecResult<StepControl<'exec, 'meta>> {
     if taken {
         f.jump_to(target)?;
     }
     Ok(StepControl::Continue)
 }
 
-pub fn table_switch(f: &mut InterpreterFrame, rt: &RangeTable) -> ExecResult<StepControl> {
+pub fn table_switch<'exec, 'meta: 'exec>(
+    f: &mut InterpreterFrame<'exec, 'meta>,
+    rt: &RangeTable,
+) -> ExecResult<StepControl<'exec, 'meta>> {
     let Slot::Int(index) = f.pop()? else {
         return Err(f.make_exec_error(ExecErrorKind::MismatchSlotType));
     };
@@ -61,7 +78,10 @@ pub fn table_switch(f: &mut InterpreterFrame, rt: &RangeTable) -> ExecResult<Ste
     branch(f, target, true)
 }
 
-pub fn lookup_switch(f: &mut InterpreterFrame, lt: &LookupTable) -> ExecResult<StepControl> {
+pub fn lookup_switch<'exec, 'meta: 'exec>(
+    f: &mut InterpreterFrame<'exec, 'meta>,
+    lt: &LookupTable,
+) -> ExecResult<StepControl<'exec, 'meta>> {
     let Slot::Int(key) = f.pop()? else {
         return Err(f.make_exec_error(ExecErrorKind::MismatchSlotType));
     };

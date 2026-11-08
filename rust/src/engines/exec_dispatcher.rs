@@ -12,7 +12,7 @@ pub struct ExecDispatcher;
 
 impl ExecDispatcher {
     pub fn start<'exec, 'meta: 'exec>(
-        thread: &mut JavaThread<'exec>,
+        thread: &mut JavaThread<'exec, 'meta>,
         invocation: Invocation<'exec, 'meta>,
     ) -> ExecResult<()> {
         // directly create Interpreter frame for now
@@ -22,14 +22,52 @@ impl ExecDispatcher {
         Ok(())
     }
 
-    pub fn poll(thread: &mut JavaThread, budget: &mut ExecBudget) -> ExecResult<DispatchOutcome> {
-        let Some(frame) = thread.current_frame_mut() else {
-            return Err(ExecError::new(ExecErrorKind::NoFrame));
-        };
+    pub fn poll<'exec, 'meta: 'exec>(
+        thread: &mut JavaThread<'exec, 'meta>,
+        budget: &mut ExecBudget,
+    ) -> ExecResult<DispatchOutcome> {
+        loop {
+            if thread.is_terminated() {
+                return Err(ExecError::new(ExecErrorKind::ThreadTerminated));
+            }
 
-        match frame.resume(budget)? {
-            EngineExit::BudgetExhausted => Ok(DispatchOutcome::Yielded),
-            EngineExit::Return(r) => Ok(DispatchOutcome::Completed(r)),
+            let Some(frame) = thread.current_frame_mut() else {
+                return Err(ExecError::new(ExecErrorKind::NoFrame));
+            };
+
+            // The exit borrows metadata, not the temporary mutable frame borrow.
+            // End that borrow before changing the thread's frame stack.
+            let exit = frame.resume(budget)
+                .map_err(|e| {
+                    thread.terminate();
+                    e
+                })?;
+            match exit {
+                EngineExit::BudgetExhausted => return Ok(DispatchOutcome::Yielded),
+                EngineExit::Return(r) => {
+                    thread.pop_frame();
+                    match thread.current_frame_mut() {
+                        Some(frame) => frame.accept_return(r)
+                            .map_err(|e| {
+                                thread.terminate();
+                                e
+                            })?,
+                        None => return Ok(DispatchOutcome::Completed(r)),
+                    }
+                }
+                EngineExit::Invoke(invocation) => {
+                    let frame = InterpreterFrame::try_new(invocation)
+                        .map_err(|e| {
+                            thread.terminate();
+                            e
+                        })?;
+                    thread.push_frame(frame);
+                }
+            }
         }
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/exec_dispatcher.rs"]
+mod tests;

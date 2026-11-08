@@ -1,21 +1,19 @@
-use crate::engines::{exec_error::ExecResult, protocol::MethodReturn};
+use crate::engines::{exec_error::ExecResult, invocation::Invocation, protocol::MethodReturn};
 
-pub enum StepControl {
+pub enum StepControl<'exec, 'meta: 'exec> {
     Continue,
     Return(MethodReturn),
+    Invoke(Invocation<'exec, 'meta>),
 }
 
-pub struct StepOutcome {
-    _private: (),
-
+pub struct StepOutcome<'exec, 'meta: 'exec> {
     pub cost: u64,
-    pub result: ExecResult<StepControl>,
+    pub result: ExecResult<StepControl<'exec, 'meta>>,
 }
 
-impl StepOutcome {
-    pub(super) fn new(cost: u64, result: ExecResult<StepControl>) -> Self {
+impl<'exec, 'meta: 'exec> StepOutcome<'exec, 'meta> {
+    pub(super) fn new(cost: u64, result: ExecResult<StepControl<'exec, 'meta>>) -> Self {
         Self {
-            _private: (),
             cost,
             result,
         }

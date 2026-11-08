@@ -1,4 +1,4 @@
-use crate::oops::jvalue::JValue;
+use crate::{engines::invocation::Invocation, oops::jvalue::JValue};
 
 pub struct ExecBudget {
     remaining: u64,
@@ -31,9 +31,9 @@ pub enum MethodReturn {
 
 // pub struct JavaException;
 
-pub enum EngineExit {
+pub enum EngineExit<'exec, 'meta: 'exec> {
     BudgetExhausted,
-    // Invoke(Invocation),
+    Invoke(Invocation<'exec, 'meta>),
     Return(MethodReturn),
     // Throw(JavaException),
 }
