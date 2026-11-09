@@ -546,3 +546,148 @@ fn parses_javac_debug_tables_and_method_parameters() {
                 && local.signature.eq_str("Ljava/util/List<TT;>;"))
     );
 }
+
+#[test]
+fn lays_out_instance_fields_and_enumerates_inherited_reference_slots() {
+    ensure_metaspace();
+    let cld = ClassLoaderData::new(None);
+    let define = |name: &str| {
+        let bytes = std::fs::read(fixture_dir().join(format!("{name}.class"))).unwrap();
+        cld.define_klass(&bytes).unwrap().as_normal().unwrap()
+    };
+    let object = define("java/lang/Object");
+    let base = define("FieldLayout$Base");
+    let middle = define("FieldLayout$Middle");
+    let child = define("FieldLayout$Child");
+    let empty = define("FieldLayout$Empty");
+
+    for (klass, start, end, refs) in [
+        (object, 8, 8, 0),
+        (base, 8, 32, 1),
+        (middle, 32, 40, 0),
+        (child, 40, 64, 2),
+        (empty, 64, 64, 0),
+    ] {
+        let layout = &klass.fields().instance;
+        assert_eq!(
+            (layout.begin_offs, klass.instance_size(), layout.ptrs_count),
+            (start, end, refs)
+        );
+    }
+
+    for (klass, name, desc, offset, size) in [
+        (base, "owner", "Ljava/lang/Object;", 8, 4),
+        (base, "ticks", "J", 16, 8),
+        (base, "weight", "F", 24, 4),
+        (base, "code", "C", 28, 2),
+        (base, "tag", "B", 30, 1),
+        (base, "shared", "Ljava/lang/Object;", 0, 4),
+        (middle, "count", "I", 32, 4),
+        (child, "matrix", "[[J", 40, 4),
+        (child, "owner", "[I", 44, 4),
+        (child, "value", "D", 48, 8),
+        (child, "delta", "S", 56, 2),
+        (child, "ready", "Z", 58, 1),
+        (empty, "cache", "[I", 0, 4),
+    ] {
+        let field = klass.find_declared_field(name, desc).unwrap();
+        assert_eq!((field.offset, field.size()), (offset, size), "{name}");
+    }
+    assert!(
+        child
+            .find_declared_field("owner", "Ljava/lang/Object;")
+            .is_none()
+    );
+
+    assert_eq!(
+        child
+            .fields()
+            .instance
+            .reference_offsets()
+            .collect::<Vec<_>>(),
+        [40, 44]
+    );
+    let mut offsets: Vec<_> = empty.instance_reference_offsets().collect();
+    offsets.sort_unstable();
+    assert_eq!(offsets, [8, 40, 44]);
+}
+
+#[test]
+fn prepares_separate_static_blocks_in_the_defining_loaders_metaspace() {
+    ensure_metaspace();
+    let fixture = |name: &str| std::fs::read(fixture_dir().join(format!("{name}.class"))).unwrap();
+    let root_bytes = fixture("java/lang/Object");
+    let base_bytes = fixture("FieldLayout$Base");
+    let first = ClassLoaderData::new(None);
+    let second = ClassLoaderData::new(None);
+    for loader in [&first, &second] {
+        loader.define_klass(&root_bytes).unwrap();
+        loader.define_klass(&base_bytes).unwrap();
+    }
+    let name = SymbolTable::intern("FieldLayout$Base");
+    let base = first.load_klass(&name).unwrap().as_normal().unwrap();
+    let other = second.load_klass(&name).unwrap().as_normal().unwrap();
+    for (name, desc, offset) in [
+        ("shared", "Ljava/lang/Object;", 0),
+        ("names", "[Ljava/lang/Object;", 4),
+        ("indices", "[I", 8),
+        ("sequence", "J", 16),
+        ("mask", "I", 24),
+        ("kind", "S", 28),
+        ("flag", "B", 30),
+    ] {
+        assert_eq!(
+            base.find_declared_field(name, desc).unwrap().offset,
+            offset,
+            "{name}"
+        );
+    }
+
+    let statics = &base.fields().statics;
+    assert_eq!(
+        (statics.layout.begin_offs, statics.layout.byte_size),
+        (0, 32)
+    );
+    assert_eq!(
+        statics.layout.reference_offsets().collect::<Vec<_>>(),
+        [0, 4, 8]
+    );
+    let offset = base.find_declared_field("sequence", "J").unwrap().offset;
+    {
+        let mut bytes = statics.bytes();
+        assert_eq!(&*bytes, &[0; 32]);
+        let address = bytes.as_ptr() as usize;
+        assert_eq!(address % 8, 0);
+        bytes[offset..offset + 8].copy_from_slice(&42i64.to_ne_bytes());
+    }
+    let reloaded = first.load_klass(&name).unwrap().as_normal().unwrap();
+    assert_eq!(
+        &reloaded.fields().statics.bytes()[offset..offset + 8],
+        &42i64.to_ne_bytes()
+    );
+    assert_eq!(&*other.fields().statics.bytes(), &[0; 32]);
+
+    let define = |name: &str| {
+        first
+            .define_klass(&fixture(name))
+            .unwrap()
+            .as_normal()
+            .unwrap()
+    };
+    let middle = define("FieldLayout$Middle");
+    let child = define("FieldLayout$Child");
+    for klass in [middle, child] {
+        assert!(klass.fields().statics.bytes().is_empty());
+        assert_eq!(klass.fields().statics.layout.reference_offsets().count(), 0);
+    }
+    let leaf = define("FieldLayout$Empty");
+    assert_eq!(&*leaf.fields().statics.bytes(), &[0; 8]);
+    assert_eq!(
+        leaf.fields()
+            .statics
+            .layout
+            .reference_offsets()
+            .collect::<Vec<_>>(),
+        [0]
+    );
+}

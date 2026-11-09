@@ -2,6 +2,7 @@ use std::ops::Deref;
 
 use crate::{
     class_parser::ClassImage,
+    gc_bindings::obj_layout::OBJECT_HEADER_SIZE,
     oops::oops_errors::{LinkageError, LinkageResult},
     runtime::ms_api::MsBox,
 };
@@ -11,6 +12,7 @@ pub(crate) use crate::class_parser::ClassAccessFlags;
 use crate::{
     class_loader::class_loader_data::ClassLoaderData,
     oops::{
+        fields::{Field, Fields},
         method::{Method, MethodAccessFlags},
         symbol_table::{SymbolHandle, SymbolTable},
     },
@@ -24,6 +26,7 @@ pub struct UnlinkedNormalKlass<'dc> {
     pub super_name: Option<SymbolHandle>,
     pub interfaces: Box<[SymbolHandle]>,
 
+    declared_fields: MsBox<'dc, [Field]>,
     methods: MsBox<'dc, [Method<'dc>]>,
 }
 
@@ -51,6 +54,7 @@ impl<'dc> UnlinkedNormalKlass<'dc> {
             def_cld: cld,
             super_name,
             interfaces: ifaces.into(),
+            declared_fields: Field::build_declared(cf.fields(), msa),
             methods: unsafe { methods.assume_init() },
         }
     }
@@ -65,12 +69,12 @@ pub struct NormalKlass<'dc> {
     pub(super) super_klass: Option<&'dc NormalKlass<'dc>>,
     interfaces: MsBox<'dc, [&'dc NormalKlass<'dc>]>,
 
+    fields: Fields<'dc>,
     methods: MsBox<'dc, [Method<'dc>]>,
 }
 
 impl<'dc> NormalKlass<'dc> {
-    /// Assemble and validate direct hierarchy metadata. Bytecode verification,
-    /// field preparation, and loading constraints are not yet implemented.
+    /// Validate the hierarchy, lay out declared fields, and prepare static storage.
     pub fn link(
         unlinked: UnlinkedNormalKlass<'dc>,
         super_klass: Option<&'dc NormalKlass<'dc>>,
@@ -143,12 +147,18 @@ impl<'dc> NormalKlass<'dc> {
             return Err(LinkageError::InvalidInterfaces { name: name.into() });
         }
 
+        let begin_offs = super_klass.map_or(OBJECT_HEADER_SIZE, |parent| parent.instance_size());
         Ok(Self {
             name: unlinked.name,
             acc_flags: unlinked.acc_flags,
             def_cld: unlinked.def_cld,
             super_klass,
             interfaces,
+            fields: Fields::build(
+                unlinked.declared_fields,
+                begin_offs,
+                unlinked.def_cld.ms_allocator(),
+            ),
             methods: unlinked.methods,
         })
     }
@@ -244,6 +254,27 @@ impl<'meta> NormalKlass<'meta> {
 }
 
 impl<'cld> NormalKlass<'cld> {
+    pub fn fields(&self) -> &Fields<'cld> {
+        &self.fields
+    }
+
+    pub fn instance_size(&self) -> usize {
+        self.fields.instance.byte_size
+    }
+
+    /// Visit slot offsets in this class's segment, then each superclass's segment.
+    pub fn instance_reference_offsets(&self) -> impl Iterator<Item = usize> + '_ {
+        std::iter::successors(Some(self), |klass| klass.super_klass)
+            .flat_map(|klass| klass.fields.instance.reference_offsets())
+    }
+
+    pub fn find_declared_field(&self, name: &str, desc: &str) -> Option<&Field> {
+        self.fields
+            .declared()
+            .iter()
+            .find(|field| field.name.utf8() == name && field.desc.raw().utf8() == desc)
+    }
+
     pub fn find_declared_method(&self, name: &str, desc: &str) -> Option<&Method<'cld>> {
         for method in self.methods.deref() {
             if method.name.utf8() == name && method.desc.raw().utf8() == desc {

@@ -1,5 +1,6 @@
 use crate::{
     class_parser::{FieldDescriptor as ParsedFieldDescriptor, FieldType, MethodDescriptor},
+    gc_bindings::oop_hierarchy::NObjPtr,
     oops::{
         jvalue::JValue,
         symbol_table::{SymbolHandle, SymbolTable},
@@ -27,9 +28,43 @@ pub struct FieldDesc {
     elem: ElemDesc,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum FieldGroup {
+    Reference,
+    EightBytes,
+    FourBytes,
+    TwoBytes,
+    OneByte,
+}
+
+impl FieldGroup {
+    pub(super) fn size(self) -> usize {
+        match self {
+            Self::Reference => size_of::<NObjPtr>(),
+            Self::EightBytes => 8,
+            Self::FourBytes => 4,
+            Self::TwoBytes => 2,
+            Self::OneByte => 1,
+        }
+    }
+}
+
 impl FieldDesc {
     pub fn raw(&self) -> &SymbolHandle {
         &self.raw
+    }
+
+    pub(super) fn field_group(&self) -> FieldGroup {
+        if self.dimensions > 0 {
+            return FieldGroup::Reference;
+        }
+        match self.elem {
+            ElemDesc::Class(_) => FieldGroup::Reference,
+            ElemDesc::Long | ElemDesc::Double => FieldGroup::EightBytes,
+            ElemDesc::Int | ElemDesc::Float => FieldGroup::FourBytes,
+            ElemDesc::Short | ElemDesc::Char => FieldGroup::TwoBytes,
+            ElemDesc::Boolean | ElemDesc::Byte => FieldGroup::OneByte,
+        }
     }
 
     /// Checks the value kind only; reference assignability requires runtime class metadata.

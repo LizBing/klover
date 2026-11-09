@@ -1,7 +1,6 @@
 pub mod constant_entries;
 pub mod desc;
-mod field;
-mod fields;
+pub mod fields;
 pub mod jvalue;
 pub mod klass;
 pub mod method;

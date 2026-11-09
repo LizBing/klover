@@ -36,7 +36,7 @@ pub(crate) use descriptor::{FieldDescriptor, FieldType, MethodDescriptor};
 pub(crate) use error::ParseError;
 #[cfg(test)]
 pub(crate) use error::ParseErrorKind;
-pub(crate) use flags::{ClassAccessFlags, MethodAccessFlags};
+pub(crate) use flags::{ClassAccessFlags, MethodAccessFlags, FieldAccessFlags};
 pub(crate) use model::{ClassImage, CodeData, FieldInfo, MethodInfo};
 pub(crate) use text::JavaText;
 
