@@ -5,6 +5,16 @@ use crate::{
 
 #[derive(Debug)]
 pub enum ExecErrorKind {
+    ExpectedStaticField {
+        owner: String,
+        name: String,
+        desc: String,
+    },
+    IllegalFinalFieldWrite {
+        owner: String,
+        name: String,
+        desc: String,
+    },
     UnexpectedEOF,
 
     MethodNotFound {

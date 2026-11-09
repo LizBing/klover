@@ -1,8 +1,9 @@
 use crate::{
     class_loader::oop_storage::OopStorage,
     oops::{
-        constant_entries::{LdC2Loadable, LdCLoadable, MethodRef},
-        jvalue::{JByte, JDouble, JFloat, JInt, JLong, JShort}, tmp_constant_pool::{TmpConstantPool, TmpConstantPoolEntry},
+        constant_entries::{FieldRef, LdC2Loadable, LdCLoadable, MethodRef},
+        jvalue::{JByte, JDouble, JFloat, JInt, JLong, JShort},
+        tmp_constant_pool::{TmpConstantPool, TmpConstantPoolEntry},
     },
     runtime::ms_api::{MsAllocator, MsBox},
 };
@@ -181,6 +182,8 @@ pub enum Instruction<'inst> {
     Return,
 
     // --- References ---
+    GetStatic(&'inst FieldRef<'inst>),
+    PutStatic(&'inst FieldRef<'inst>),
     InvokeStatic(&'inst MethodRef<'inst>),
 
     // --- Extended ---
@@ -351,17 +354,27 @@ impl<'metadata> Instruction<'metadata> {
             Opcode::FReturn => Self::FReturn,
             Opcode::DReturn => Self::DReturn,
             Opcode::AReturn => Self::AReturn,
-            Opcode::Return => Self::Return,        
+            Opcode::Return => Self::Return,
             Opcode::InvokeStatic(info) => {
-                let TmpConstantPoolEntry::MethodRef(mref) = tmp_cp.resolve(msa, info.as_ref()) else {
+                let TmpConstantPoolEntry::MethodRef(mref) = tmp_cp.resolve(msa, info.as_ref())
+                else {
                     unreachable!("Mismatch constant pool entry")
                 };
 
                 Self::InvokeStatic(mref)
             }
-            Opcode::GetStatic(_)
-            | Opcode::PutStatic(_)
-            | Opcode::GetField(_)
+            Opcode::GetStatic(info) | Opcode::PutStatic(info) => {
+                let TmpConstantPoolEntry::FieldRef(fref) = tmp_cp.resolve(msa, info.as_ref())
+                else {
+                    unreachable!("Mismatch constant pool entry")
+                };
+                if matches!(opcode, Opcode::GetStatic(_)) {
+                    Self::GetStatic(fref)
+                } else {
+                    Self::PutStatic(fref)
+                }
+            }
+            Opcode::GetField(_)
             | Opcode::PutField(_)
             | Opcode::InvokeVirtual(_)
             | Opcode::InvokeSpecial(_)

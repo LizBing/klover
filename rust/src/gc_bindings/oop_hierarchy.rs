@@ -32,6 +32,9 @@ impl ObjPtr {
 pub struct NObjPtr(u32);
 
 impl NObjPtr {
+    pub(crate) fn from_u32(raw: u32) -> Self {
+        Self(raw)
+    }
     pub fn null() -> Self {
         Self(0)
     }

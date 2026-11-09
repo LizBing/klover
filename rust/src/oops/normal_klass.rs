@@ -227,7 +227,12 @@ impl<'meta> NormalKlass<'meta> {
                         | MethodAccessFlags::ABSTRACT
                         | MethodAccessFlags::PRIVATE,
                 ) && !method.name.utf8().starts_with('<')
-            }) && klass.find_declared_method("<clinit>", "()V").is_some()
+            }) && (klass.find_declared_method("<clinit>", "()V").is_some()
+                || klass
+                    .fields
+                    .declared()
+                    .iter()
+                    .any(|field| field.has_constant_value))
             {
                 return Some(klass);
             }
@@ -245,7 +250,13 @@ impl<'meta> NormalKlass<'meta> {
                 }
             }
         }
-        self.find_declared_method("<clinit>", "()V").map(|_| self)
+        (self.find_declared_method("<clinit>", "()V").is_some()
+            || self
+                .fields
+                .declared()
+                .iter()
+                .any(|field| field.has_constant_value))
+        .then_some(self)
     }
 
     pub(super) fn has_interfaces(&self) -> bool {
@@ -273,6 +284,20 @@ impl<'cld> NormalKlass<'cld> {
             .declared()
             .iter()
             .find(|field| field.name.utf8() == name && field.desc.raw().utf8() == desc)
+    }
+
+    /// Field resolution searches the declaration, superinterfaces, then superclass.
+    pub(crate) fn resolve_field(&self, name: &str, desc: &str) -> Option<(&Self, &Field)> {
+        if let Some(field) = self.find_declared_field(name, desc) {
+            return Some((self, field));
+        }
+        for interface in self.interfaces.iter() {
+            if let Some(found) = interface.resolve_field(name, desc) {
+                return Some(found);
+            }
+        }
+        self.super_klass
+            .and_then(|parent| parent.resolve_field(name, desc))
     }
 
     pub fn find_declared_method(&self, name: &str, desc: &str) -> Option<&Method<'cld>> {

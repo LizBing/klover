@@ -1,8 +1,9 @@
 use std::sync::OnceLock;
 
 use crate::{
-    class_parser::{MethodMemRef, MethodMemRefKind},
+    class_parser::{FieldAccessFlags, FieldMemRef, MethodMemRef, MethodMemRefKind},
     oops::{
+        fields::Field,
         jvalue::{JDouble, JFloat, JInt, JLong},
         klass::Klass,
         method::{Method, MethodAccessFlags},
@@ -104,7 +105,7 @@ pub struct MethodRef<'metadata> {
     resolved: OnceLock<ResolvedMethod<'metadata>>,
 }
 
-impl<'metadata> MethodRef<'metadata> {
+impl MethodRef<'_> {
     pub fn build(mref: &MethodMemRef) -> Self {
         let is_interface = matches!(mref.kind, MethodMemRefKind::Interface);
 
@@ -229,5 +230,95 @@ impl<'metadata> MethodRef<'metadata> {
                 desc: self.desc.utf8().into(),
             })
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct ResolvedField<'meta> {
+    pub declaring_klass: &'meta NormalKlass<'meta>,
+    pub field: &'meta Field,
+}
+
+#[derive(Debug)]
+pub struct FieldRef<'meta> {
+    declaring_klass_name: SymbolHandle,
+    field_name: SymbolHandle,
+    desc: SymbolHandle,
+    resolved: OnceLock<ResolvedField<'meta>>,
+}
+
+impl FieldRef<'_> {
+    pub fn build(mref: &FieldMemRef) -> Self {
+        let declaring_klass_name = SymbolTable::intern(&mref.owner.name);
+        let field_name = SymbolTable::intern(&mref.name);
+        let desc = SymbolTable::intern(mref.descriptor.raw());
+
+        Self {
+            declaring_klass_name,
+            field_name,
+            desc,
+            resolved: OnceLock::new(),
+        }
+    }
+}
+
+impl<'meta> FieldRef<'meta> {
+    pub fn resolve(&self, caller: &NormalKlass<'meta>) -> ResolveResult<ResolvedField<'meta>> {
+        let owner = caller
+            .def_cld
+            .load_klass(&self.declaring_klass_name)
+            .map_err(ResolveError::Load)?
+            .as_normal()
+            .expect("field owner must be a normal class");
+        if !owner.is_accessible_to(caller.name().utf8(), caller.def_cld) {
+            return Err(ResolveError::IllegalClassAccess {
+                from: caller.name().utf8().into(),
+                target: self.declaring_klass_name.utf8().into(),
+            });
+        }
+        let resolved = match self
+            .resolved
+            .get()
+            .filter(|resolved| std::ptr::eq(resolved.declaring_klass.def_cld, caller.def_cld))
+        {
+            Some(resolved) => *resolved,
+            None => {
+                let (declaring_klass, field) = owner
+                    .resolve_field(self.field_name.utf8(), self.desc.utf8())
+                    .ok_or_else(|| ResolveError::NoSuchField {
+                        owner: self.declaring_klass_name.utf8().into(),
+                        name: self.field_name.utf8().into(),
+                        desc: self.desc.utf8().into(),
+                    })?;
+                ResolvedField {
+                    declaring_klass,
+                    field,
+                }
+            }
+        };
+        let declaring = resolved.declaring_klass;
+        let flags = resolved.field.acc_flags;
+        let allowed = if flags.contains(FieldAccessFlags::PUBLIC) {
+            true
+        } else if flags.contains(FieldAccessFlags::PRIVATE) {
+            std::ptr::eq(caller, declaring)
+        } else {
+            declaring.same_runtime_package(caller)
+                || (flags.contains(FieldAccessFlags::PROTECTED)
+                    && caller.is_subclass_of(declaring)
+                    && (flags.contains(FieldAccessFlags::STATIC)
+                        || caller.is_subclass_of(owner)
+                        || owner.is_subclass_of(caller)))
+        };
+        if !allowed {
+            return Err(ResolveError::IllegalFieldAccess {
+                from: caller.name().utf8().into(),
+                owner: declaring.name().utf8().into(),
+                name: self.field_name.utf8().into(),
+                desc: self.desc.utf8().into(),
+            });
+        }
+        let _ = self.resolved.set(resolved);
+        Ok(resolved)
     }
 }

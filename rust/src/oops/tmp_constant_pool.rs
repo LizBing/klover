@@ -1,11 +1,24 @@
 use std::collections::{HashMap, hash_map::Entry};
 
-use crate::{class_parser::MethodMemRef, oops::constant_entries::MethodRef, runtime::ms_api::{MsAllocator, MsBox}};
+use crate::{
+    class_parser::{FieldMemRef, MethodMemRef},
+    oops::constant_entries::{FieldRef, MethodRef},
+    runtime::ms_api::{MsAllocator, MsBox},
+};
 
 #[derive(Debug, Clone)]
 pub enum TmpConstantPoolEntry<'metadata> {
     MethodRef(&'metadata MethodRef<'metadata>),
-    FieldRef,
+    FieldRef(&'metadata FieldRef<'metadata>),
+}
+
+impl<'metadata> IntoTmpCPEntry<'metadata> for &FieldMemRef {
+    fn into_key(self) -> usize {
+        self as *const _ as usize
+    }
+    fn into_value(self, msa: &'metadata MsAllocator) -> TmpConstantPoolEntry<'metadata> {
+        TmpConstantPoolEntry::FieldRef(MsBox::new(msa, FieldRef::build(self)).leak())
+    }
 }
 
 pub struct TmpConstantPool<'metadata> {
@@ -37,16 +50,18 @@ impl TmpConstantPool<'_> {
 }
 
 impl<'metadata> TmpConstantPool<'metadata> {
-    pub fn resolve<T>(&mut self, msa: &'metadata MsAllocator, into_entry: T) -> TmpConstantPoolEntry<'metadata>
+    pub fn resolve<T>(
+        &mut self,
+        msa: &'metadata MsAllocator,
+        into_entry: T,
+    ) -> TmpConstantPoolEntry<'metadata>
     where
-        T: IntoTmpCPEntry<'metadata>
+        T: IntoTmpCPEntry<'metadata>,
     {
         let key = into_entry.into_key();
         match self.table.entry(key) {
             Entry::Occupied(entry) => entry.get().clone(),
-            Entry::Vacant(entry) => {
-                entry.insert(into_entry.into_value(msa)).clone()
-            }
+            Entry::Vacant(entry) => entry.insert(into_entry.into_value(msa)).clone(),
         }
     }
 }

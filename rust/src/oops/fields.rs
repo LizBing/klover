@@ -12,6 +12,7 @@ use std::mem::MaybeUninit;
 
 #[derive(Debug)]
 pub struct Field {
+    pub(super) has_constant_value: bool,
     pub name: SymbolHandle,
     pub desc: FieldDesc,
     pub acc_flags: FieldAccessFlags,
@@ -31,6 +32,8 @@ impl Field {
         let mut declared = MsBox::new_uninit_slice(msa, infos.len());
         for (slot, info) in declared.iter_mut().zip(infos) {
             slot.write(Field {
+                has_constant_value: info.access_flags.contains(FieldAccessFlags::STATIC)
+                    && info.attributes.constant_value.is_some(),
                 name: SymbolTable::intern(&info.name),
                 desc: FieldDesc::from(&info.descriptor),
                 acc_flags: info.access_flags,

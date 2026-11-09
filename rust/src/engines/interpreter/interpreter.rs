@@ -9,7 +9,7 @@ use crate::{
     engines::{
         exec_error::{ExecErrorKind, ExecResult},
         interpreter::{
-            instructions::references::invoke_static,
+            instructions::references::{get_static, invoke_static, put_static},
             interpreter_frame::InterpreterFrame,
             step_outcome::{StepControl, StepOutcome},
         },
@@ -168,6 +168,8 @@ impl Interpreter {
             AReturn => areturn(f),
             Return => return_void(f),
             InvokeStatic(mref) => invoke_static(f, mref),
+            GetStatic(fref) => get_static(f, fref),
+            PutStatic(fref) => put_static(f, fref),
             Unsupported => Err(f.make_exec_error(ExecErrorKind::UnsupportedInstruction)),
         }
     }

@@ -12,6 +12,7 @@ selected static methods directly through the internal Rust runtime.
 | --- | --- |
 | Class loading | Bootstrap loading from one directory, superclass loading, and caching of loaded classes |
 | Field layout | Declared field lookup, instance reference slots across superclass segments, and a zero-initialized static block per declaring class in metaspace |
+| Static field access | Field resolution through classes and interfaces, access checks, and `getstatic`/`putstatic` for every field type using the declaring class's storage |
 | Method entry | Lookup of a method declared in a class, argument count/type checks, and argument local-slot capacity checks |
 | Numeric execution | Integer, long, float, and double constants, arithmetic, comparisons, and conversions |
 | Frame operations | Local loads/stores, stack manipulation, and typed or void returns |
@@ -20,9 +21,11 @@ selected static methods directly through the internal Rust runtime.
 | Execution budget | Pausing and resuming the current interpreter frame when its budget runs out |
 | VM lifecycle | One successful VM initialization per process, with retry after failed native heap initialization |
 
-Method-call bytecodes, field-access bytecodes, object creation, arrays, class initialization,
+Instance field-access bytecodes, object creation, arrays, class initialization,
 Java exception handling, and a complete bytecode verifier are not implemented.
-The dispatcher currently executes one entry frame. Numeric constant loading is
+Static field access reports unsupported initialization when the declaring type
+requires `<clinit>` execution or `ConstantValue` assignment.
+Numeric constant loading is
 supported; String and class literals are not. Integer division by zero reports
 a VM execution error rather than throwing a Java exception. The native heap
 allocates memory but does not yet reclaim it.

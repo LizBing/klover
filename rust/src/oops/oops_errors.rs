@@ -2,6 +2,17 @@ use crate::class_loader::load_error::LoadError;
 
 #[derive(Debug)]
 pub enum ResolveError {
+    NoSuchField {
+        owner: String,
+        name: String,
+        desc: String,
+    },
+    IllegalFieldAccess {
+        from: String,
+        owner: String,
+        name: String,
+        desc: String,
+    },
     Load(LoadError),
     IllegalClassAccess {
         from: String,

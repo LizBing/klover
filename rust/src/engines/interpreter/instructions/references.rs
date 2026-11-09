@@ -7,6 +7,10 @@ use crate::{
     oops::{constant_entries::MethodRef, jvalue::JValue, method::MethodAccessFlags},
 };
 
+// A common lock gives volatile accesses across different declaring classes a
+// single synchronization order. Each class's byte storage is locked as well.
+static VOLATILE_FIELDS: parking_lot::Mutex<()> = parking_lot::Mutex::new(());
+
 /// Prepare an interpreted static call. The dispatcher owns callee execution.
 pub fn invoke_static<'exec, 'meta: 'exec>(
     f: &mut InterpreterFrame<'exec, 'meta>,
@@ -102,3 +106,125 @@ pub fn invoke_static<'exec, 'meta: 'exec>(
 #[cfg(test)]
 #[path = "../../../tests/invoke_static.rs"]
 mod tests;
+
+fn resolve_static<'meta>(
+    f: &InterpreterFrame<'_, 'meta>,
+    fref: &crate::oops::constant_entries::FieldRef<'meta>,
+    writing: bool,
+) -> ExecResult<crate::oops::constant_entries::ResolvedField<'meta>> {
+    use crate::class_parser::FieldAccessFlags;
+    let resolved = fref
+        .resolve(f.target.declaring_class)
+        .map_err(|e| f.make_exec_error(ExecErrorKind::Resolve(e)))?;
+    let field = resolved.field;
+    let owner = resolved.declaring_klass;
+    if !field.acc_flags.contains(FieldAccessFlags::STATIC) {
+        return Err(f.make_exec_error(ExecErrorKind::ExpectedStaticField {
+            owner: owner.name().utf8().into(),
+            name: field.name.utf8().into(),
+            desc: field.desc.raw().utf8().into(),
+        }));
+    }
+    if writing
+        && field.acc_flags.contains(FieldAccessFlags::FINAL)
+        && !(std::ptr::eq(owner, f.target.declaring_class)
+            && f.target.method.name.utf8() == "<clinit>")
+    {
+        return Err(f.make_exec_error(ExecErrorKind::IllegalFinalFieldWrite {
+            owner: owner.name().utf8().into(),
+            name: field.name.utf8().into(),
+            desc: field.desc.raw().utf8().into(),
+        }));
+    }
+    if let Some(klass) = owner.required_initializer() {
+        return Err(
+            f.make_exec_error(ExecErrorKind::UnsupportedClassInitialization {
+                owner: klass.name().utf8().into(),
+            }),
+        );
+    }
+    Ok(resolved)
+}
+
+pub fn get_static<'exec, 'meta: 'exec>(
+    f: &mut InterpreterFrame<'exec, 'meta>,
+    fref: &crate::oops::constant_entries::FieldRef<'meta>,
+) -> ExecResult<StepControl<'exec, 'meta>> {
+    use crate::gc_bindings::oop_hierarchy::NObjPtr;
+    let resolved = resolve_static(f, fref, false)?;
+    let field = resolved.field;
+    let _volatile = field
+        .acc_flags
+        .contains(crate::class_parser::FieldAccessFlags::VOLATILE)
+        .then(|| VOLATILE_FIELDS.lock());
+    let storage = resolved.declaring_klass.fields().statics.bytes();
+    let bytes = &storage[field.offset..field.offset + field.size()];
+    match field.desc.raw().utf8().as_bytes()[0] {
+        b'Z' => f.push(Slot::Int(i32::from(bytes[0] & 1))),
+        b'B' => f.push(Slot::Int(i32::from(bytes[0] as i8))),
+        b'C' => f.push(Slot::Int(
+            u16::from_ne_bytes(bytes.try_into().unwrap()).into(),
+        )),
+        b'S' => f.push(Slot::Int(
+            i16::from_ne_bytes(bytes.try_into().unwrap()).into(),
+        )),
+        b'I' => f.push(Slot::Int(i32::from_ne_bytes(bytes.try_into().unwrap()))),
+        b'F' => f.push(Slot::Float(f32::from_ne_bytes(bytes.try_into().unwrap()))),
+        b'J' => f.push_long(i64::from_ne_bytes(bytes.try_into().unwrap())),
+        b'D' => f.push_double(f64::from_ne_bytes(bytes.try_into().unwrap())),
+        b'L' | b'[' => f.push(Slot::Ref(NObjPtr::from_u32(u32::from_ne_bytes(
+            bytes.try_into().unwrap(),
+        )))),
+        _ => unreachable!("validated field descriptor"),
+    }
+    Ok(StepControl::Continue)
+}
+
+pub fn put_static<'exec, 'meta: 'exec>(
+    f: &mut InterpreterFrame<'exec, 'meta>,
+    fref: &crate::oops::constant_entries::FieldRef<'meta>,
+) -> ExecResult<StepControl<'exec, 'meta>> {
+    let resolved = resolve_static(f, fref, true)?;
+    let field = resolved.field;
+    let descriptor = field.desc.raw().utf8().as_bytes()[0];
+    let width = if matches!(descriptor, b'J' | b'D') {
+        2
+    } else {
+        1
+    };
+    let start = f
+        .operand_stack()
+        .len()
+        .checked_sub(width)
+        .ok_or_else(|| f.make_exec_error(ExecErrorKind::StackUnderflow))?;
+    // Validate the entire suffix before modifying the field or operand stack.
+    let mut encoded = [0u8; 8];
+    match (descriptor, &f.operand_stack()[start..]) {
+        (b'Z', [Slot::Int(v)]) => encoded[0] = (*v & 1) as u8,
+        (b'B', [Slot::Int(v)]) => encoded[0] = *v as u8,
+        (b'C' | b'S', [Slot::Int(v)]) => encoded[..2].copy_from_slice(&(*v as u16).to_ne_bytes()),
+        (b'I', [Slot::Int(v)]) => encoded[..4].copy_from_slice(&v.to_ne_bytes()),
+        (b'F', [Slot::Float(v)]) => encoded[..4].copy_from_slice(&v.to_ne_bytes()),
+        (b'J', [Slot::LongHigh(high), Slot::LongLow(low)])
+        | (b'D', [Slot::DoubleHigh(high), Slot::DoubleLow(low)]) => {
+            let bits = u64::from_be_bytes([
+                high[0], high[1], high[2], high[3], low[0], low[1], low[2], low[3],
+            ]);
+            encoded.copy_from_slice(&bits.to_ne_bytes());
+        }
+        (b'L' | b'[', [Slot::Ref(v)]) => encoded[..4].copy_from_slice(&v.as_u32().to_ne_bytes()),
+        _ => return Err(f.make_exec_error(ExecErrorKind::MismatchSlotType)),
+    }
+    let _volatile = field
+        .acc_flags
+        .contains(crate::class_parser::FieldAccessFlags::VOLATILE)
+        .then(|| VOLATILE_FIELDS.lock());
+    let mut storage = resolved.declaring_klass.fields().statics.bytes();
+    storage[field.offset..field.offset + field.size()].copy_from_slice(&encoded[..field.size()]);
+    f.replace_stack_top(width, &[]);
+    Ok(StepControl::Continue)
+}
+
+#[cfg(test)]
+#[path = "../../../tests/static_fields.rs"]
+mod static_fields_tests;
