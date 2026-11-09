@@ -1,12 +1,12 @@
 use std::sync::OnceLock;
 
 use crate::{
-    class_parser::{FieldAccessFlags, FieldMemRef, MethodMemRef, MethodMemRefKind},
+    class_parser::{FieldMemRef, MethodMemRef, MethodMemRefKind},
     oops::{
         fields::Field,
         jvalue::{JDouble, JFloat, JInt, JLong},
         klass::Klass,
-        method::{Method, MethodAccessFlags},
+        method::Method,
         normal_klass::NormalKlass,
         oops_errors::{ResolveError, ResolveResult},
         symbol_table::{SymbolHandle, SymbolTable},
@@ -207,16 +207,16 @@ impl<'metadata> MethodRef<'metadata> {
         resolved: ResolvedMethod<'metadata>,
     ) -> ResolveResult<()> {
         let declaring = resolved.declaring_klass;
-        let flags = resolved.method.acc_flags;
-        let allowed = if flags.contains(MethodAccessFlags::PUBLIC) {
+        let method = resolved.method;
+        let allowed = if method.is_public() {
             true
-        } else if flags.contains(MethodAccessFlags::PRIVATE) {
+        } else if method.is_private() {
             std::ptr::eq(caller, declaring)
         } else {
             declaring.same_runtime_package(caller)
-                || (flags.contains(MethodAccessFlags::PROTECTED)
+                || (method.is_protected()
                     && caller.is_subclass_of(declaring)
-                    && (flags.contains(MethodAccessFlags::STATIC)
+                    && (method.is_static()
                         || caller.is_subclass_of(owner)
                         || owner.is_subclass_of(caller)))
         };
@@ -297,16 +297,16 @@ impl<'meta> FieldRef<'meta> {
             }
         };
         let declaring = resolved.declaring_klass;
-        let flags = resolved.field.acc_flags;
-        let allowed = if flags.contains(FieldAccessFlags::PUBLIC) {
+        let field = resolved.field;
+        let allowed = if field.is_public() {
             true
-        } else if flags.contains(FieldAccessFlags::PRIVATE) {
+        } else if field.is_private() {
             std::ptr::eq(caller, declaring)
         } else {
             declaring.same_runtime_package(caller)
-                || (flags.contains(FieldAccessFlags::PROTECTED)
+                || (field.is_protected()
                     && caller.is_subclass_of(declaring)
-                    && (flags.contains(FieldAccessFlags::STATIC)
+                    && (field.is_static()
                         || caller.is_subclass_of(owner)
                         || owner.is_subclass_of(caller)))
         };

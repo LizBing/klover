@@ -3,7 +3,7 @@ use crate::{
     oops::{
         constant_entries::{MethodRef, ResolvedMethod},
         jvalue::JValue,
-        method::{Method, MethodAccessFlags},
+        method::Method,
         normal_klass::NormalKlass,
     },
 };
@@ -80,7 +80,7 @@ impl<'exec, 'meta: 'exec> Invocation<'exec, 'meta> {
         bytecode: bool,
     ) -> ExecResult<Self> {
         let method = target.method;
-        let receiver_count = usize::from(!method.acc_flags.contains(MethodAccessFlags::STATIC));
+        let receiver_count = usize::from(!method.is_static());
         let expected = method.desc.args().len() + receiver_count;
         if args.len() != expected {
             return Err(ExecError::with_target(

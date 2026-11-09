@@ -7,13 +7,13 @@ use crate::{
     runtime::ms_api::MsBox,
 };
 
-pub(crate) use crate::class_parser::ClassAccessFlags;
+use crate::class_parser::ClassAccessFlags;
 
 use crate::{
     class_loader::class_loader_data::ClassLoaderData,
     oops::{
         fields::{Field, Fields},
-        method::{Method, MethodAccessFlags},
+        method::Method,
         symbol_table::{SymbolHandle, SymbolTable},
     },
 };
@@ -108,7 +108,7 @@ impl<'dc> NormalKlass<'dc> {
                     name: parent.name().utf8().into(),
                 });
             }
-            if parent.acc_flags.contains(ClassAccessFlags::FINAL) {
+            if parent.is_final() {
                 return Err(LinkageError::FinalSuperclass {
                     name: parent.name().utf8().into(),
                 });
@@ -169,6 +169,14 @@ impl<'meta> NormalKlass<'meta> {
         &self.name
     }
 
+    pub fn is_public(&self) -> bool {
+        self.acc_flags.contains(ClassAccessFlags::PUBLIC)
+    }
+
+    pub fn is_final(&self) -> bool {
+        self.acc_flags.contains(ClassAccessFlags::FINAL)
+    }
+
     pub fn is_interface(&self) -> bool {
         self.acc_flags.contains(ClassAccessFlags::INTERFACE)
     }
@@ -185,7 +193,7 @@ impl<'meta> NormalKlass<'meta> {
             name.rsplit_once('/').map_or("", |(package, _)| package)
         }
 
-        self.acc_flags.contains(ClassAccessFlags::PUBLIC)
+        self.is_public()
             || (std::ptr::eq(self.def_cld, accessing_cld)
                 && package_name(self.name.utf8()) == package_name(accessing_name))
     }
@@ -222,11 +230,10 @@ impl<'meta> NormalKlass<'meta> {
                 }
             }
             if klass.methods.iter().any(|method| {
-                !method.acc_flags.intersects(
-                    MethodAccessFlags::STATIC
-                        | MethodAccessFlags::ABSTRACT
-                        | MethodAccessFlags::PRIVATE,
-                ) && !method.name.utf8().starts_with('<')
+                !method.is_static()
+                    && !method.is_abstract()
+                    && !method.is_private()
+                    && !method.name.utf8().starts_with('<')
             }) && (klass.find_declared_method("<clinit>", "()V").is_some()
                 || klass
                     .fields

@@ -15,12 +15,36 @@ pub struct Field {
     pub(super) has_constant_value: bool,
     pub name: SymbolHandle,
     pub desc: FieldDesc,
-    pub acc_flags: FieldAccessFlags,
+    acc_flags: FieldAccessFlags,
     /// Set at link time, relative to the object or the declaring class's static block.
     pub offset: usize,
 }
 
 impl Field {
+    pub fn is_public(&self) -> bool {
+        self.acc_flags.contains(FieldAccessFlags::PUBLIC)
+    }
+
+    pub fn is_private(&self) -> bool {
+        self.acc_flags.contains(FieldAccessFlags::PRIVATE)
+    }
+
+    pub fn is_protected(&self) -> bool {
+        self.acc_flags.contains(FieldAccessFlags::PROTECTED)
+    }
+
+    pub fn is_static(&self) -> bool {
+        self.acc_flags.contains(FieldAccessFlags::STATIC)
+    }
+
+    pub fn is_final(&self) -> bool {
+        self.acc_flags.contains(FieldAccessFlags::FINAL)
+    }
+
+    pub fn is_volatile(&self) -> bool {
+        self.acc_flags.contains(FieldAccessFlags::VOLATILE)
+    }
+
     pub fn size(&self) -> usize {
         self.desc.field_group().size()
     }
@@ -98,10 +122,10 @@ impl<'dc> Fields<'dc> {
         let mut ptrs_count = 0;
         // Keep metadata in declaration order. Only the slot offsets are grouped.
         for group in [Reference, EightBytes, FourBytes, TwoBytes, OneByte] {
-            for field in declared.iter_mut().filter(|field| {
-                field.acc_flags.contains(FieldAccessFlags::STATIC) == is_static
-                    && field.desc.field_group() == group
-            }) {
+            for field in declared
+                .iter_mut()
+                .filter(|field| field.is_static() == is_static && field.desc.field_group() == group)
+            {
                 cursor = cursor.next_multiple_of(group.size());
                 field.offset = cursor;
                 cursor += group.size();

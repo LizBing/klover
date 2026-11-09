@@ -4,7 +4,7 @@ use crate::{
         interpreter::{interpreter_frame::InterpreterFrame, slot::Slot, step_outcome::StepControl},
         invocation::{CallTarget, Invocation},
     },
-    oops::{constant_entries::MethodRef, jvalue::JValue, method::MethodAccessFlags},
+    oops::{constant_entries::MethodRef, jvalue::JValue},
 };
 
 // A common lock gives volatile accesses across different declaring classes a
@@ -34,17 +34,17 @@ pub fn invoke_static<'exec, 'meta: 'exec>(
             "initialization methods cannot be called by invokestatic",
         ));
     }
-    if !method.acc_flags.contains(MethodAccessFlags::STATIC) {
+    if !method.is_static() {
         return Err(f.make_exec_error(ExecErrorKind::ExpectedStaticMethod {
             owner: target.declaring_class.name().utf8().into(),
             name: method.name.utf8().into(),
             desc: method.desc.raw().utf8().into(),
         }));
     }
-    if method.acc_flags.contains(MethodAccessFlags::NATIVE) {
+    if method.is_native() {
         return Err(unsupported("native methods are unsupported"));
     }
-    if method.acc_flags.contains(MethodAccessFlags::SYNCHRONIZED) {
+    if method.is_synchronized() {
         return Err(unsupported("synchronized methods are unsupported"));
     }
     if method.code.is_none() {
@@ -112,13 +112,12 @@ fn resolve_static<'meta>(
     fref: &crate::oops::constant_entries::FieldRef<'meta>,
     writing: bool,
 ) -> ExecResult<crate::oops::constant_entries::ResolvedField<'meta>> {
-    use crate::class_parser::FieldAccessFlags;
     let resolved = fref
         .resolve(f.target.declaring_class)
         .map_err(|e| f.make_exec_error(ExecErrorKind::Resolve(e)))?;
     let field = resolved.field;
     let owner = resolved.declaring_klass;
-    if !field.acc_flags.contains(FieldAccessFlags::STATIC) {
+    if !field.is_static() {
         return Err(f.make_exec_error(ExecErrorKind::ExpectedStaticField {
             owner: owner.name().utf8().into(),
             name: field.name.utf8().into(),
@@ -126,7 +125,7 @@ fn resolve_static<'meta>(
         }));
     }
     if writing
-        && field.acc_flags.contains(FieldAccessFlags::FINAL)
+        && field.is_final()
         && !(std::ptr::eq(owner, f.target.declaring_class)
             && f.target.method.name.utf8() == "<clinit>")
     {
@@ -153,10 +152,7 @@ pub fn get_static<'exec, 'meta: 'exec>(
     use crate::gc_bindings::oop_hierarchy::NObjPtr;
     let resolved = resolve_static(f, fref, false)?;
     let field = resolved.field;
-    let _volatile = field
-        .acc_flags
-        .contains(crate::class_parser::FieldAccessFlags::VOLATILE)
-        .then(|| VOLATILE_FIELDS.lock());
+    let _volatile = field.is_volatile().then(|| VOLATILE_FIELDS.lock());
     let storage = resolved.declaring_klass.fields().statics.bytes();
     let bytes = &storage[field.offset..field.offset + field.size()];
     match field.desc.raw().utf8().as_bytes()[0] {
@@ -215,10 +211,7 @@ pub fn put_static<'exec, 'meta: 'exec>(
         (b'L' | b'[', [Slot::Ref(v)]) => encoded[..4].copy_from_slice(&v.as_u32().to_ne_bytes()),
         _ => return Err(f.make_exec_error(ExecErrorKind::MismatchSlotType)),
     }
-    let _volatile = field
-        .acc_flags
-        .contains(crate::class_parser::FieldAccessFlags::VOLATILE)
-        .then(|| VOLATILE_FIELDS.lock());
+    let _volatile = field.is_volatile().then(|| VOLATILE_FIELDS.lock());
     let mut storage = resolved.declaring_klass.fields().statics.bytes();
     storage[field.offset..field.offset + field.size()].copy_from_slice(&encoded[..field.size()]);
     f.replace_stack_top(width, &[]);
