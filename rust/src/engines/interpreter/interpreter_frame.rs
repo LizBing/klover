@@ -8,7 +8,7 @@ use crate::{
         interpreter::{interpreter::Interpreter, slot::Slot},
         invocation::{CallTarget, Invocation},
         java_frame::JavaFrame,
-        protocol::{EngineExit, ExecBudget, MethodReturn},
+        protocol::{EngineExit, ExecBudget, ExecutionContext, MethodReturn},
     },
     oops::jvalue::{JDouble, JInt, JLong, JValue},
 };
@@ -20,6 +20,7 @@ pub struct InterpreterFrame<'exec, 'meta: 'exec> {
     oprand_stack: Vec<Slot>,
     locals: Box<[Slot]>,
 
+    pub(super) thread_id: Option<crate::runtime::java_thread::JavaThreadId>,
     pc: usize,
     last_pc: Option<usize>,
 }
@@ -95,6 +96,7 @@ impl<'exec, 'meta: 'exec> InterpreterFrame<'exec, 'meta> {
             code,
             oprand_stack,
             locals,
+            thread_id: None,
             pc: 0,
             last_pc: None,
         })
@@ -108,7 +110,24 @@ impl InterpreterFrame<'_, '_> {
 }
 
 impl<'exec, 'meta: 'exec> JavaFrame<'exec, 'meta> for InterpreterFrame<'exec, 'meta> {
-    fn resume(&mut self, budget: &mut ExecBudget) -> ExecResult<EngineExit<'exec, 'meta>> {
+    fn resume(
+        &mut self,
+        budget: &mut ExecBudget,
+        context: &ExecutionContext,
+    ) -> ExecResult<EngineExit<'exec, 'meta>> {
+        self.thread_id = Some(context.thread_id);
+        if !budget.is_startable() {
+            return Ok(EngineExit::BudgetExhausted);
+        }
+        if self.target.method.is_static()
+            && self.target.method.name.utf8() != "<clinit>"
+            && !self
+                .target
+                .declaring_class
+                .initialization_ready(self.thread_id)
+        {
+            return Ok(EngineExit::Initialize(self.target.declaring_class));
+        }
         Interpreter::execute(self, budget)
     }
 
@@ -135,6 +154,12 @@ impl<'exec, 'meta: 'exec> JavaFrame<'exec, 'meta> for InterpreterFrame<'exec, 'm
 }
 
 impl<'exec, 'meta: 'exec> InterpreterFrame<'exec, 'meta> {
+    pub(super) fn retry_last_inst(&mut self) {
+        self.pc = self
+            .last_pc
+            .expect("initialization requested by an instruction");
+    }
+
     pub fn next_inst(&mut self) -> Option<Instruction<'meta>> {
         let res = self.code.insts.get(self.pc).cloned();
         if res.is_some() {

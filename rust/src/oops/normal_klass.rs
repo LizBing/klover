@@ -1,3 +1,4 @@
+use crate::runtime::{class_initialization::InitializationState, java_thread::JavaThreadId};
 use std::ops::Deref;
 
 use crate::{
@@ -62,6 +63,7 @@ impl<'dc> UnlinkedNormalKlass<'dc> {
 
 #[derive(Debug)]
 pub struct NormalKlass<'dc> {
+    pub(crate) initialization: parking_lot::Mutex<InitializationState>,
     name: SymbolHandle,
     acc_flags: ClassAccessFlags,
     pub(super) def_cld: &'dc ClassLoaderData,
@@ -149,6 +151,7 @@ impl<'dc> NormalKlass<'dc> {
 
         let begin_offs = super_klass.map_or(OBJECT_HEADER_SIZE, |parent| parent.instance_size());
         Ok(Self {
+            initialization: parking_lot::Mutex::new(InitializationState::Uninitialized),
             name: unlinked.name,
             acc_flags: unlinked.acc_flags,
             def_cld: unlinked.def_cld,
@@ -218,52 +221,37 @@ impl<'meta> NormalKlass<'meta> {
         false
     }
 
-    /// Initialization is not executable yet. Find an initializer that an active
-    /// use would need, including superinterfaces that declare default methods.
-    pub(crate) fn required_initializer(&self) -> Option<&NormalKlass<'meta>> {
-        fn default_initializer<'a, 'meta>(
-            klass: &'a NormalKlass<'meta>,
-        ) -> Option<&'a NormalKlass<'meta>> {
-            for interface in klass.interfaces.iter() {
-                if let Some(found) = default_initializer(interface) {
-                    return Some(found);
-                }
+    pub(crate) fn initialization_ready(&self, thread: Option<JavaThreadId>) -> bool {
+        match &*self.initialization.lock() {
+            InitializationState::Initialized => true,
+            InitializationState::Initializing(owner) => Some(*owner) == thread,
+            _ => false,
+        }
+    }
+
+    pub(crate) fn initialization_dependencies(&self) -> Vec<&NormalKlass<'meta>> {
+        fn collect<'a, 'm>(interface: &'a NormalKlass<'m>, out: &mut Vec<&'a NormalKlass<'m>>) {
+            for parent in interface.interfaces.iter() {
+                collect(parent, out);
             }
-            if klass.methods.iter().any(|method| {
+            if interface.methods.iter().any(|method| {
                 !method.is_static()
                     && !method.is_abstract()
                     && !method.is_private()
                     && !method.name.utf8().starts_with('<')
-            }) && (klass.find_declared_method("<clinit>", "()V").is_some()
-                || klass
-                    .fields
-                    .declared()
-                    .iter()
-                    .any(|field| field.has_constant_value))
+            }) && !out.iter().any(|seen| std::ptr::eq(*seen, interface))
             {
-                return Some(klass);
+                out.push(interface);
             }
-            None
         }
+        let mut dependencies = Vec::new();
         if !self.is_interface() {
-            if let Some(parent) = self.super_klass {
-                if let Some(found) = parent.required_initializer() {
-                    return Some(found);
-                }
-            }
+            dependencies.extend(self.super_klass);
             for interface in self.interfaces.iter() {
-                if let Some(found) = default_initializer(interface) {
-                    return Some(found);
-                }
+                collect(interface, &mut dependencies);
             }
         }
-        (self.find_declared_method("<clinit>", "()V").is_some()
-            || self
-                .fields
-                .declared()
-                .iter()
-                .any(|field| field.has_constant_value))
-        .then_some(self)
+        dependencies
     }
 
     pub(super) fn has_interfaces(&self) -> bool {

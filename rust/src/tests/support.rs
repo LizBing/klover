@@ -260,6 +260,9 @@ pub fn run_method(
             .unwrap_or_else(|e| panic!("{name}{desc} args={args:?} slice={slice}: {e:?}"))
         {
             DispatchOutcome::Yielded => assert_eq!(budget.remaining(), 0),
+            DispatchOutcome::BlockedOnInitialization => {
+                panic!("unexpected initialization contention")
+            }
             DispatchOutcome::Completed(value) => return value,
         }
     }

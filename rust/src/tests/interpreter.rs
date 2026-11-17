@@ -717,24 +717,25 @@ fn budget_zero_and_instruction_cost_preserve_resumption() {
     let cld = ClassLoaderData::new(None);
     with_code(&cld, &[0x04, 0x05, 0x60, 0xac], |f| {
         assert!(matches!(
-            f.resume(&mut ExecBudget::new(0)).unwrap(),
+            Interpreter::execute(f, &mut ExecBudget::new(0)).unwrap(),
             EngineExit::BudgetExhausted
         ));
         assert_stack(f, &[]);
         assert!(matches!(
-            f.resume(&mut ExecBudget::new(2)).unwrap(),
+            Interpreter::execute(f, &mut ExecBudget::new(2)).unwrap(),
             EngineExit::BudgetExhausted
         ));
         assert_stack(f, &[Slot::Int(1), Slot::Int(2)]);
         // iadd currently costs two but may start with one unit remaining.
         let mut budget = ExecBudget::new(1);
         assert!(matches!(
-            f.resume(&mut budget).unwrap(),
+            Interpreter::execute(f, &mut budget).unwrap(),
             EngineExit::BudgetExhausted
         ));
         assert_eq!(budget.remaining(), 0);
         assert_stack(f, &[Slot::Int(3)]);
-        let EngineExit::Return(value) = f.resume(&mut ExecBudget::new(1)).unwrap() else {
+        let EngineExit::Return(value) = Interpreter::execute(f, &mut ExecBudget::new(1)).unwrap()
+        else {
             panic!("return lost after yield")
         };
         assert_value(value, JValue::Int(3));
@@ -756,7 +757,10 @@ fn unsupported_instruction_and_unexpected_eof_are_errors() {
     });
     with_code(&cld, &[0x00], |f| {
         assert!(matches!(
-            f.resume(&mut ExecBudget::new(2)).err().unwrap().kind,
+            Interpreter::execute(f, &mut ExecBudget::new(2))
+                .err()
+                .unwrap()
+                .kind,
             ExecErrorKind::UnexpectedEOF
         ));
     });

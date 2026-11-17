@@ -62,7 +62,27 @@ impl<'exec, 'meta: 'exec> Invocation<'exec, 'meta> {
     /// Reference checks, including the receiver, do not inspect the referenced object.
     /// Bytecode availability and local-slot capacity are checked by the interpreter.
     pub fn try_new(target: CallTarget<'exec, 'meta>, args: Box<[JValue]>) -> ExecResult<Self> {
+        if target.method.name.utf8() == "<clinit>" {
+            return Err(ExecError::with_target(
+                &target,
+                None,
+                ExecErrorKind::UnsupportedInvocation {
+                    owner: target.declaring_class.name().utf8().into(),
+                    name: "<clinit>".into(),
+                    desc: target.method.desc.raw().utf8().into(),
+                    reason: "class initializers are invoked by the VM",
+                },
+            ));
+        }
         Self::validate(target, args, false)
+    }
+
+    pub(super) fn class_initializer(owner: &'exec NormalKlass<'meta>) -> ExecResult<Self> {
+        Self::validate(
+            CallTarget::lookup_declared(owner, "<clinit>", "()V")?,
+            Box::new([]),
+            false,
+        )
     }
 
     /// Bytecode represents boolean, byte, char and short parameters as ints.

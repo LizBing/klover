@@ -4,3 +4,4 @@ mod interpreter;
 pub mod invocation;
 pub mod java_frame;
 pub mod protocol;
+mod initialization_frame;

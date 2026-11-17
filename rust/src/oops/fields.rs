@@ -1,3 +1,4 @@
+use crate::class_parser::LoadableConstant;
 use crate::{
     class_parser::{FieldAccessFlags, FieldInfo},
     gc_bindings::obj_layout::{OBJECT_ALIGNMENT, ObjLayout},
@@ -9,10 +10,11 @@ use crate::{
 };
 use parking_lot::{MappedMutexGuard, Mutex, MutexGuard};
 use std::mem::MaybeUninit;
+use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct Field {
-    pub(super) has_constant_value: bool,
+    constant_value: Option<Arc<LoadableConstant>>,
     pub name: SymbolHandle,
     pub desc: FieldDesc,
     acc_flags: FieldAccessFlags,
@@ -56,8 +58,7 @@ impl Field {
         let mut declared = MsBox::new_uninit_slice(msa, infos.len());
         for (slot, info) in declared.iter_mut().zip(infos) {
             slot.write(Field {
-                has_constant_value: info.access_flags.contains(FieldAccessFlags::STATIC)
-                    && info.attributes.constant_value.is_some(),
+                constant_value: info.attributes.constant_value.clone(),
                 name: SymbolTable::intern(&info.name),
                 desc: FieldDesc::from(&info.descriptor),
                 acc_flags: info.access_flags,
@@ -140,6 +141,33 @@ impl<'dc> Fields<'dc> {
             byte_size: cursor.next_multiple_of(OBJECT_ALIGNMENT),
             ptrs_count,
         }
+    }
+
+    pub(crate) fn initialize_constants(&self) -> Result<(), &Field> {
+        let mut storage = self.statics.bytes();
+        for field in self.declared.iter().filter(|field| field.is_static()) {
+            let Some(value) = field.constant_value.as_deref() else {
+                continue;
+            };
+            let mut encoded = [0u8; 8];
+            match value {
+                LoadableConstant::Integer(value) => match field.size() {
+                    1 => encoded[0] = *value as u8,
+                    2 => encoded[..2].copy_from_slice(&(*value as u16).to_ne_bytes()),
+                    4 => encoded[..4].copy_from_slice(&value.to_ne_bytes()),
+                    _ => unreachable!("validated integer constant"),
+                },
+                LoadableConstant::Float(value) => {
+                    encoded[..4].copy_from_slice(&value.to_ne_bytes())
+                }
+                LoadableConstant::Long(value) => encoded.copy_from_slice(&value.to_ne_bytes()),
+                LoadableConstant::Double(value) => encoded.copy_from_slice(&value.to_ne_bytes()),
+                _ => return Err(field),
+            }
+            storage[field.offset..field.offset + field.size()]
+                .copy_from_slice(&encoded[..field.size()]);
+        }
+        Ok(())
     }
 
     pub fn declared(&self) -> &[Field] {

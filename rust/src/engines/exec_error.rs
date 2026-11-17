@@ -5,6 +5,14 @@ use crate::{
 
 #[derive(Debug)]
 pub enum ExecErrorKind {
+    InitializationFailed {
+        owner: String,
+        reason: String,
+    },
+    UnsupportedConstantInitialization {
+        owner: String,
+        field: String,
+    },
     ExpectedStaticField {
         owner: String,
         name: String,
@@ -75,10 +83,6 @@ pub enum ExecErrorKind {
         name: String,
         desc: String,
         reason: &'static str,
-    },
-
-    UnsupportedClassInitialization {
-        owner: String,
     },
 
     ThreadTerminated,

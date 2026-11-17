@@ -54,12 +54,8 @@ pub fn invoke_static<'exec, 'meta: 'exec>(
             desc: method.desc.raw().utf8().into(),
         }));
     }
-    if let Some(klass) = target.declaring_class.required_initializer() {
-        return Err(
-            f.make_exec_error(ExecErrorKind::UnsupportedClassInitialization {
-                owner: klass.name().utf8().into(),
-            }),
-        );
+    if !target.declaring_class.initialization_ready(f.thread_id) {
+        return Ok(StepControl::Initialize(target.declaring_class));
     }
 
     // Read the entire argument suffix before mutating it. A failed resolution,
@@ -135,13 +131,6 @@ fn resolve_static<'meta>(
             desc: field.desc.raw().utf8().into(),
         }));
     }
-    if let Some(klass) = owner.required_initializer() {
-        return Err(
-            f.make_exec_error(ExecErrorKind::UnsupportedClassInitialization {
-                owner: klass.name().utf8().into(),
-            }),
-        );
-    }
     Ok(resolved)
 }
 
@@ -151,6 +140,9 @@ pub fn get_static<'exec, 'meta: 'exec>(
 ) -> ExecResult<StepControl<'exec, 'meta>> {
     use crate::gc_bindings::oop_hierarchy::NObjPtr;
     let resolved = resolve_static(f, fref, false)?;
+    if !resolved.declaring_klass.initialization_ready(f.thread_id) {
+        return Ok(StepControl::Initialize(resolved.declaring_klass));
+    }
     let field = resolved.field;
     let _volatile = field.is_volatile().then(|| VOLATILE_FIELDS.lock());
     let storage = resolved.declaring_klass.fields().statics.bytes();
@@ -181,6 +173,9 @@ pub fn put_static<'exec, 'meta: 'exec>(
     fref: &crate::oops::constant_entries::FieldRef<'meta>,
 ) -> ExecResult<StepControl<'exec, 'meta>> {
     let resolved = resolve_static(f, fref, true)?;
+    if !resolved.declaring_klass.initialization_ready(f.thread_id) {
+        return Ok(StepControl::Initialize(resolved.declaring_klass));
+    }
     let field = resolved.field;
     let descriptor = field.desc.raw().utf8().as_bytes()[0];
     let width = if matches!(descriptor, b'J' | b'D') {

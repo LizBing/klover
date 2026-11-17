@@ -139,6 +139,7 @@ fn static_field_resolution_and_failures_preserve_storage_and_stack() {
                 Err(ResolveError::NoSuchField { .. })
             ));
 
+            assert_value(run_method(owner, "integer", "(I)I", &[Int(0)], 1), Int(0));
             let mut frame = InterpreterFrame::try_new(
                 Invocation::lookup_declared(owner, "integer", "(I)I", &[Int(0)]).unwrap(),
             )
@@ -167,11 +168,9 @@ fn static_field_resolution_and_failures_preserve_storage_and_stack() {
                 ("StaticFields$Constants", "CONSTANT"),
             ] {
                 assert!(matches!(
-                    get_static(&mut frame, &field_ref(class, name, "I"))
-                        .err()
-                        .unwrap()
-                        .kind,
-                    ExecErrorKind::UnsupportedClassInitialization { .. }
+                    get_static(&mut frame, &field_ref(class, name, "I")).unwrap_or_else(|e| panic!("{e:?}")),
+                    crate::engines::interpreter::step_outcome::StepControl::Initialize(klass)
+                        if klass.name().utf8() == class
                 ));
             }
             assert!(matches!(frame.operand_stack(), [Slot::Int(42)]));

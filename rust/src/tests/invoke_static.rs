@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use super::invoke_static;
+use super::invoke_static as invoke_static_step;
 use crate::{
     class_loader::class_loader_data::ClassLoaderData,
     class_parser::{ClassRef, MethodDescriptor, MethodMemRef, MethodMemRefKind},
@@ -16,6 +16,35 @@ use crate::{
     },
     tests::support::ensure_metaspace,
 };
+
+// Drive initialization requests so these tests continue to isolate call validation.
+fn invoke_static<'exec, 'meta: 'exec>(
+    f: &mut InterpreterFrame<'exec, 'meta>,
+    reference: &MethodRef<'meta>,
+) -> crate::engines::exec_error::ExecResult<StepControl<'exec, 'meta>> {
+    use crate::engines::{
+        exec_dispatcher::ExecDispatcher,
+        initialization_frame::InitializationFrame,
+        protocol::{DispatchOutcome, ExecBudget},
+    };
+    use crate::runtime::java_thread::JavaThread;
+    loop {
+        match invoke_static_step(f, reference)? {
+            StepControl::Initialize(klass) => {
+                let mut thread = JavaThread::new();
+                thread.start_with_frame(InitializationFrame::new(klass));
+                loop {
+                    match ExecDispatcher::poll(&mut thread, &mut ExecBudget::new(100))? {
+                        DispatchOutcome::Completed(_) => break,
+                        DispatchOutcome::Yielded => {}
+                        DispatchOutcome::BlockedOnInitialization => panic!("unexpected contention"),
+                    }
+                }
+            }
+            result => return Ok(result),
+        }
+    }
+}
 
 // Small explicit class files let these tests exercise access combinations that
 // javac deliberately refuses to emit, without relying on Java exception support.
@@ -427,7 +456,7 @@ fn rejects_bad_arguments_and_unsupported_targets_without_mutating_stack() {
 }
 
 #[test]
-fn rejects_required_initialization_and_handles_interface_static_calls() {
+fn requests_initialization_and_handles_interface_static_calls() {
     ensure_metaspace();
     let cld = ClassLoaderData::new(None);
     root(&cld);
@@ -486,8 +515,8 @@ fn rejects_required_initialization_and_handles_interface_static_calls() {
     );
     for (owner, expected) in [
         ("p/InitBase", "p/InitBase"),
-        ("p/InitChild", "p/InitBase"),
-        ("p/DefaultChild", "p/InitInterface"),
+        ("p/InitChild", "p/InitChild"),
+        ("p/DefaultChild", "p/DefaultChild"),
     ] {
         let name = if owner == "p/InitBase" {
             "inherited"
@@ -496,12 +525,10 @@ fn rejects_required_initialization_and_handles_interface_static_calls() {
         };
         let mut f = frame(caller);
         f.push_int(3);
-        let error = invoke_static(&mut f, &reference(owner, name, "()V", false))
-            .err()
-            .unwrap();
-        assert!(
-            matches!(error.kind, ExecErrorKind::UnsupportedClassInitialization { owner } if owner == expected)
-        );
+        assert!(matches!(
+            invoke_static_step(&mut f, &reference(owner, name, "()V", false)).unwrap(),
+            StepControl::Initialize(klass) if klass.name().utf8() == expected
+        ));
         assert!(matches!(f.operand_stack(), [Slot::Int(3)]));
     }
     for owner in ["p/I", "p/SubI"] {

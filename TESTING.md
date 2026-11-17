@@ -106,6 +106,8 @@ Examples covered by the suite include:
 - All legal `dup` forms, invalid stack shapes, wide local overlap, typed returns.
 - Taken/untaken branches, loops, dense/sparse switches, and budget resumption.
 - Loader errors, superclass loading, cache identity, and recovery from a missing superclass.
+- Class initialization order, numeric constants, recursive access, instruction retries,
+  tiny execution budgets, competing logical threads, cancellation, and persistent failure.
 - VM argument publication, rejection of repeated initialization, concurrent
   initialization, retry after failure, and reuse of independently initialized metaspace.
 - Heap payload zeroing, exact capacity, OOM state preservation, and concurrent non-overlap.
@@ -126,8 +128,7 @@ definitions are not copied or made public.
 
 See [README.md](README.md#current-capabilities) for the supported execution
 subset and its limits. Passing tests do not establish complete JVM conformance.
-Tracing/reclamation, object instructions, method-call bytecodes, class
-initialization, verification, and Java exceptions need tests as they become
+Tracing/reclamation, object instructions, verification, and Java exceptions need tests as they become
 implemented. Reference identity checks currently cover null references; the
 suite does not fabricate live Java objects. Reference-JVM comparisons, fuzzing,
 performance gates, and coverage-percentage targets are future additions.

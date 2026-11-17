@@ -26,8 +26,17 @@ impl Interpreter {
     ) -> ExecResult<EngineExit<'exec, 'meta>> {
         while budget.is_startable() {
             let StepOutcome { cost, result, .. } = Self::execute_one(frame);
+            let cost = if matches!(&result, Ok(StepControl::Initialize(_))) {
+                0
+            } else {
+                cost
+            };
             budget.charge(cost);
             match result? {
+                StepControl::Initialize(klass) => {
+                    frame.retry_last_inst();
+                    return Ok(EngineExit::Initialize(klass));
+                }
                 StepControl::Continue => {}
                 StepControl::Return(value) => return Ok(EngineExit::Return(value)),
                 StepControl::Invoke(invocation) => return Ok(EngineExit::Invoke(invocation)),

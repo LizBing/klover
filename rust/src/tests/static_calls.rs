@@ -34,6 +34,9 @@ fn execution_error(
         match ExecDispatcher::poll(&mut thread, &mut ExecBudget::new(fuel)) {
             Err(error) => return error,
             Ok(DispatchOutcome::Yielded) => (),
+            Ok(DispatchOutcome::BlockedOnInitialization) => {
+                panic!("unexpected initialization contention")
+            }
             Ok(DispatchOutcome::Completed(_)) => panic!("{name} should fail"),
         }
     }
@@ -162,17 +165,16 @@ fn invokestatic_reports_unsupported_targets_and_callee_context() {
             let cld = ClassLoaderData::new(None);
             let owner = load_normal_klass(&cld, &SymbolTable::intern("StaticCalls")).unwrap();
             for fuel in [1, 10000] {
-                for name in ["nativeProbe", "synchronizedProbe", "initializationProbe"] {
+                assert_value(
+                    run_method(owner, "initializationProbe", "()I", &[], fuel),
+                    Int(7),
+                );
+                for name in ["nativeProbe", "synchronizedProbe"] {
                     let error = execution_error(owner, name, "()I", &[], fuel);
-                    match name {
-                        "initializationProbe" => assert!(
-                            matches!(error.kind, ExecErrorKind::UnsupportedClassInitialization { owner } if owner == "StaticInitialized")
-                        ),
-                        _ => assert!(matches!(
-                            error.kind,
-                            ExecErrorKind::UnsupportedInvocation { .. }
-                        )),
-                    }
+                    assert!(matches!(
+                        error.kind,
+                        ExecErrorKind::UnsupportedInvocation { .. }
+                    ));
                     let brief = error.brief.unwrap();
                     assert_eq!(brief.klass, "StaticCalls");
                     assert_eq!(brief.method, name);

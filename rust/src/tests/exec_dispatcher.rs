@@ -31,7 +31,11 @@ struct Caller<'exec, 'meta: 'exec> {
 }
 
 impl<'exec, 'meta: 'exec> JavaFrame<'exec, 'meta> for Caller<'exec, 'meta> {
-    fn resume(&mut self, budget: &mut ExecBudget) -> ExecResult<EngineExit<'exec, 'meta>> {
+    fn resume(
+        &mut self,
+        budget: &mut ExecBudget,
+        _: &crate::engines::protocol::ExecutionContext,
+    ) -> ExecResult<EngineExit<'exec, 'meta>> {
         if !budget.is_startable() {
             return Ok(EngineExit::BudgetExhausted);
         }
@@ -193,6 +197,9 @@ fn interpreted_callers_accept_all_return_kinds_across_yields() {
                         yielded += 1;
                         assert!(yielded < 4);
                     }
+                    DispatchOutcome::BlockedOnInitialization => {
+                        panic!("unexpected initialization contention")
+                    }
                     DispatchOutcome::Completed(result) => {
                         assert_value(result, value);
                         break;
@@ -275,7 +282,11 @@ fn return_delivery_error_terminates_thread_and_is_not_retried() {
         deliveries: Rc<Cell<usize>>,
     }
     impl<'exec, 'meta: 'exec> JavaFrame<'exec, 'meta> for RejectReturn {
-        fn resume(&mut self, _: &mut ExecBudget) -> ExecResult<EngineExit<'exec, 'meta>> {
+        fn resume(
+            &mut self,
+            _: &mut ExecBudget,
+            _: &crate::engines::protocol::ExecutionContext,
+        ) -> ExecResult<EngineExit<'exec, 'meta>> {
             panic!("caller must not resume after rejecting the return")
         }
         fn accept_return(&mut self, _: MethodReturn) -> ExecResult<()> {

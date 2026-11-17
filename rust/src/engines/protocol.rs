@@ -1,4 +1,9 @@
 use crate::{engines::invocation::Invocation, oops::jvalue::JValue};
+use crate::{oops::normal_klass::NormalKlass, runtime::java_thread::JavaThreadId};
+
+pub struct ExecutionContext {
+    pub thread_id: JavaThreadId,
+}
 
 pub struct ExecBudget {
     remaining: u64,
@@ -33,6 +38,9 @@ pub enum MethodReturn {
 
 pub enum EngineExit<'exec, 'meta: 'exec> {
     BudgetExhausted,
+    Initialize(&'exec NormalKlass<'meta>),
+    InitializationComplete,
+    BlockedOnInitialization,
     Invoke(Invocation<'exec, 'meta>),
     Return(MethodReturn),
     // Throw(JavaException),
@@ -40,8 +48,8 @@ pub enum EngineExit<'exec, 'meta: 'exec> {
 
 pub enum DispatchOutcome {
     Yielded,
+    BlockedOnInitialization,
     Completed(MethodReturn),
     // Uncaught,
     // Blocked,
 }
-
