@@ -9,7 +9,10 @@ use crate::{
     },
     gc_bindings::oop_hierarchy::NObjPtr,
     oops::{
-        jvalue::JValue::{self, *},
+        jvalue::{
+            JBoolean, JDouble, JFloat, JInt, JLong,
+            JValue::{self, *},
+        },
         normal_klass::NormalKlass,
         oops_errors::ResolveError,
         symbol_table::SymbolTable,
@@ -56,32 +59,73 @@ fn invokestatic_java_calls_cover_resolution_arguments_and_returns() {
             let owner = load_normal_klass(&cld, &SymbolTable::intern("StaticCalls")).unwrap();
             let null = Ref(NObjPtr::null());
             let cases: &[(&str, &str, &[JValue], JValue)] = &[
-                ("sameClass", "(II)I", &[Int(7), Int(12)], Int(95)),
-                ("repeated", "(II)I", &[Int(7), Int(12)], Int(-10)),
-                ("crossClass", "(II)I", &[Int(7), Int(12)], Int(82)),
-                ("inherited", "(I)I", &[Int(9)], Int(14)),
-                ("interfaceCall", "(I)I", &[Int(-7)], Int(-21)),
-                ("overloaded", "(I)I", &[Int(i32::MIN)], Int(i32::MIN)),
+                (
+                    "sameClass",
+                    "(II)I",
+                    &[Int(JInt(7)), Int(JInt(12))],
+                    Int(JInt(95)),
+                ),
+                (
+                    "repeated",
+                    "(II)I",
+                    &[Int(JInt(7)), Int(JInt(12))],
+                    Int(JInt(-10)),
+                ),
+                (
+                    "crossClass",
+                    "(II)I",
+                    &[Int(JInt(7)), Int(JInt(12))],
+                    Int(JInt(82)),
+                ),
+                ("inherited", "(I)I", &[Int(JInt(9))], Int(JInt(14))),
+                ("interfaceCall", "(I)I", &[Int(JInt(-7))], Int(JInt(-21))),
+                (
+                    "overloaded",
+                    "(I)I",
+                    &[Int(JInt(i32::MIN))],
+                    Int(JInt(i32::MIN)),
+                ),
                 (
                     "overloaded",
                     "(J)J",
-                    &[Long(i64::MIN + 123)],
-                    Long(i64::MIN + 123),
+                    &[Long(JLong(i64::MIN + 123))],
+                    Long(JLong(i64::MIN + 123)),
                 ),
                 (
                     "mixed",
                     "(IJDFLjava/lang/Object;)J",
-                    &[Int(3), Long(1 << 40), Double(-2.75), Float(4.5), null],
-                    Long((1 << 40) + 112),
+                    &[
+                        Int(JInt(3)),
+                        Long(JLong(1 << 40)),
+                        Double(JDouble(-2.75)),
+                        Float(JFloat(4.5)),
+                        null,
+                    ],
+                    Long(JLong((1 << 40) + 112)),
                 ),
-                ("floatCall", "(F)F", &[Float(-0.0)], Float(-0.0)),
-                ("floatCall", "(F)F", &[Float(f32::NAN)], Float(f32::NAN)),
-                ("doubleCall", "(D)D", &[Double(-0.0)], Double(-0.0)),
+                (
+                    "floatCall",
+                    "(F)F",
+                    &[Float(JFloat(-0.0))],
+                    Float(JFloat(-0.0)),
+                ),
+                (
+                    "floatCall",
+                    "(F)F",
+                    &[Float(JFloat(f32::NAN))],
+                    Float(JFloat(f32::NAN)),
+                ),
                 (
                     "doubleCall",
                     "(D)D",
-                    &[Double(f64::INFINITY)],
-                    Double(f64::INFINITY),
+                    &[Double(JDouble(-0.0))],
+                    Double(JDouble(-0.0)),
+                ),
+                (
+                    "doubleCall",
+                    "(D)D",
+                    &[Double(JDouble(f64::INFINITY))],
+                    Double(JDouble(f64::INFINITY)),
                 ),
                 (
                     "referenceCall",
@@ -90,15 +134,25 @@ fn invokestatic_java_calls_cover_resolution_arguments_and_returns() {
                     null,
                 ),
                 ("arrayCall", "([I)[I", &[null], null),
-                ("narrow", "(I)I", &[Int(65535)], Int(65534)),
-                ("byteReturn", "(I)I", &[Int(255)], Int(-1)),
-                ("shortReturn", "(I)I", &[Int(65535)], Int(-1)),
-                ("charReturn", "(I)I", &[Int(-1)], Int(65535)),
-                ("booleanReturn", "(Z)Z", &[Boolean(1)], Int(1)),
-                ("booleanReturn", "(Z)Z", &[Boolean(0)], Int(0)),
-                ("voidCall", "(I)I", &[Int(33)], Int(33)),
-                ("recursive", "(I)I", &[Int(20)], Int(210)),
-                ("mutual", "(I)I", &[Int(20)], Int(20)),
+                ("narrow", "(I)I", &[Int(JInt(65535))], Int(JInt(65534))),
+                ("byteReturn", "(I)I", &[Int(JInt(255))], Int(JInt(-1))),
+                ("shortReturn", "(I)I", &[Int(JInt(65535))], Int(JInt(-1))),
+                ("charReturn", "(I)I", &[Int(JInt(-1))], Int(JInt(65535))),
+                (
+                    "booleanReturn",
+                    "(Z)Z",
+                    &[Boolean(JBoolean(1))],
+                    Int(JInt(1)),
+                ),
+                (
+                    "booleanReturn",
+                    "(Z)Z",
+                    &[Boolean(JBoolean(0))],
+                    Int(JInt(0)),
+                ),
+                ("voidCall", "(I)I", &[Int(JInt(33))], Int(JInt(33))),
+                ("recursive", "(I)I", &[Int(JInt(20))], Int(JInt(210))),
+                ("mutual", "(I)I", &[Int(JInt(20))], Int(JInt(20))),
             ];
             for &(name, desc, args, expected) in cases {
                 // Reuse the same metadata to exercise repeated calls and resolved caches.
@@ -145,7 +199,7 @@ fn invokestatic_budget_boundaries_preserve_caller_and_callee() {
             }
             assert!(matches!(
                 ExecDispatcher::poll(&mut thread, &mut ExecBudget::new(1)).unwrap(),
-                DispatchOutcome::Completed(MethodReturn::Value(Int(11)))
+                DispatchOutcome::Completed(MethodReturn::Value(Int(JInt(11))))
             ));
             assert!(thread.is_terminated());
             assert!(thread.current_frame().is_none());
@@ -167,7 +221,7 @@ fn invokestatic_reports_unsupported_targets_and_callee_context() {
             for fuel in [1, 10000] {
                 assert_value(
                     run_method(owner, "initializationProbe", "()I", &[], fuel),
-                    Int(7),
+                    Int(JInt(7)),
                 );
                 for name in ["nativeProbe", "synchronizedProbe"] {
                     let error = execution_error(owner, name, "()I", &[], fuel);
@@ -180,7 +234,13 @@ fn invokestatic_reports_unsupported_targets_and_callee_context() {
                     assert_eq!(brief.method, name);
                     assert_eq!(brief.instruction_index, Some(0));
                 }
-                let error = execution_error(owner, "divide", "(II)I", &[Int(1), Int(0)], fuel);
+                let error = execution_error(
+                    owner,
+                    "divide",
+                    "(II)I",
+                    &[Int(JInt(1)), Int(JInt(0))],
+                    fuel,
+                );
                 assert!(matches!(error.kind, ExecErrorKind::DivisionByZero));
                 let brief = error.brief.unwrap();
                 assert_eq!(brief.klass, "StaticCallee");

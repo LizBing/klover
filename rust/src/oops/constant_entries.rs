@@ -4,7 +4,7 @@ use crate::{
     class_parser::{FieldMemRef, MethodMemRef, MethodMemRefKind},
     oops::{
         fields::Field,
-        jvalue::{JDouble, JFloat, JInt, JLong},
+        jvalue::{JDouble, JFloat, JInt, JLong, JValue},
         klass::Klass,
         method::Method,
         normal_klass::NormalKlass,
@@ -237,6 +237,18 @@ impl<'metadata> MethodRef<'metadata> {
 pub struct ResolvedField<'meta> {
     pub declaring_klass: &'meta NormalKlass<'meta>,
     pub field: &'meta Field,
+}
+
+impl ResolvedField<'_> {
+    pub(crate) fn load_static(&self) -> JValue {
+        self.declaring_klass.fields().load_static(self.field)
+    }
+
+    pub(crate) fn store_static(&self, value: JValue) {
+        self.declaring_klass
+            .fields()
+            .store_static(self.field, value);
+    }
 }
 
 #[derive(Debug)]

@@ -11,7 +11,9 @@ use crate::{
     },
     gc_bindings::oop_hierarchy::NObjPtr,
     oops::{
-        constant_entries::MethodRef, jvalue::JValue, normal_klass::NormalKlass,
+        constant_entries::MethodRef,
+        jvalue::{JDouble, JFloat, JInt, JLong},
+        normal_klass::NormalKlass,
         oops_errors::ResolveError,
     },
     tests::support::ensure_metaspace,
@@ -171,13 +173,13 @@ fn transfers_arguments_in_descriptor_order_without_narrowing() {
         ],
     );
     let mut f = frame(owner);
-    f.push_int(99); // unrelated caller stack value
+    f.push_int(JInt(99)); // unrelated caller stack value
     for value in [7, 2, 256, 65536, -1] {
-        f.push_int(value);
+        f.push_int(JInt(value));
     }
-    f.push_long(i64::MIN + 123);
-    f.push_double(-0.0);
-    f.push_float(1.5);
+    f.push_long(JLong(i64::MIN + 123));
+    f.push_double(JDouble(-0.0));
+    f.push_float(JFloat(1.5));
     for _ in 0..3 {
         f.push_ref(NObjPtr::null());
     }
@@ -190,11 +192,11 @@ fn transfers_arguments_in_descriptor_order_without_narrowing() {
     let StepControl::Invoke(call) = invoke_static(&mut f, &mref).unwrap() else {
         panic!("expected call")
     };
-    assert!(matches!(f.operand_stack(), [Slot::Int(99)]));
+    assert!(matches!(f.operand_stack(), [Slot::Int(JInt(99))]));
     let callee = InterpreterFrame::try_new(call).unwrap();
     for (index, expected) in [7, 2, 256, 65536, -1].into_iter().enumerate() {
         assert!(
-            matches!(callee.get_local(index).unwrap(), Slot::Int(actual) if actual == expected)
+            matches!(callee.get_local(index).unwrap(), Slot::Int(JInt(actual)) if actual == expected)
         );
     }
     assert!(matches!(callee.get_local(5).unwrap(), Slot::LongHigh(_)));
@@ -207,7 +209,10 @@ fn transfers_arguments_in_descriptor_order_without_narrowing() {
         callee.get_local(8).unwrap(),
         Slot::DoubleLow([0, 0, 0, 0])
     ));
-    assert!(matches!(callee.get_local(9).unwrap(), Slot::Float(1.5)));
+    assert!(matches!(
+        callee.get_local(9).unwrap(),
+        Slot::Float(JFloat(1.5))
+    ));
     for index in 10..13 {
         assert!(matches!(callee.get_local(index).unwrap(), Slot::Ref(value) if value.is_null()));
     }
@@ -256,7 +261,7 @@ fn access_checks_include_cached_targets_and_inherited_declarations() {
         // Base resolves first, so subsequent callers exercise the cache path.
         for (caller, allowed) in [base, peer, child, stranger].into_iter().zip(allowed) {
             let mut f = frame(caller);
-            f.push_int(17);
+            f.push_int(JInt(17));
             f.next_inst();
             match invoke_static(&mut f, &mref) {
                 Ok(StepControl::Invoke(call)) if allowed => {
@@ -278,7 +283,7 @@ fn access_checks_include_cached_targets_and_inherited_declarations() {
                     caller.name().utf8()
                 ),
             }
-            assert!(matches!(f.operand_stack(), [Slot::Int(17)]));
+            assert!(matches!(f.operand_stack(), [Slot::Int(JInt(17))]));
         }
     }
     let mref = reference("q/Child", "protectedMethod", "()V", false);
@@ -406,12 +411,12 @@ fn rejects_bad_arguments_and_unsupported_targets_without_mutating_stack() {
         ],
     );
     for (name, desc, slots) in [
-        ("args", "(IJ)V", vec![Slot::Int(1)]),
+        ("args", "(IJ)V", vec![Slot::Int(JInt(1))]),
         (
             "args",
             "(IJ)V",
             vec![
-                Slot::Float(1.0),
+                Slot::Float(JFloat(1.0)),
                 Slot::LongHigh([0; 4]),
                 Slot::LongLow([0; 4]),
             ],
@@ -419,12 +424,16 @@ fn rejects_bad_arguments_and_unsupported_targets_without_mutating_stack() {
         (
             "args",
             "(IJ)V",
-            vec![Slot::Int(1), Slot::LongLow([0; 4]), Slot::LongHigh([0; 4])],
+            vec![
+                Slot::Int(JInt(1)),
+                Slot::LongLow([0; 4]),
+                Slot::LongHigh([0; 4]),
+            ],
         ),
-        ("instance", "()V", vec![Slot::Int(1)]),
-        ("nativeMethod", "()V", vec![Slot::Int(1)]),
-        ("synchronizedMethod", "()V", vec![Slot::Int(1)]),
-        ("missing", "()V", vec![Slot::Int(1)]),
+        ("instance", "()V", vec![Slot::Int(JInt(1))]),
+        ("nativeMethod", "()V", vec![Slot::Int(JInt(1))]),
+        ("synchronizedMethod", "()V", vec![Slot::Int(JInt(1))]),
+        ("missing", "()V", vec![Slot::Int(JInt(1))]),
     ] {
         let mut f = frame(owner);
         for slot in &slots {
@@ -524,12 +533,12 @@ fn requests_initialization_and_handles_interface_static_calls() {
             "target"
         };
         let mut f = frame(caller);
-        f.push_int(3);
+        f.push_int(JInt(3));
         assert!(matches!(
             invoke_static_step(&mut f, &reference(owner, name, "()V", false)).unwrap(),
             StepControl::Initialize(klass) if klass.name().utf8() == expected
         ));
-        assert!(matches!(f.operand_stack(), [Slot::Int(3)]));
+        assert!(matches!(f.operand_stack(), [Slot::Int(JInt(3))]));
     }
     for owner in ["p/I", "p/SubI"] {
         assert!(matches!(

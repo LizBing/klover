@@ -169,7 +169,10 @@ mod tests {
     use crate::{
         class_loader::class_loader_data::ClassLoaderData,
         gc_bindings::oop_hierarchy::NObjPtr,
-        oops::normal_klass::UnlinkedNormalKlass,
+        oops::{
+            jvalue::{JBoolean, JByte, JChar, JDouble, JFloat, JInt, JLong, JShort},
+            normal_klass::UnlinkedNormalKlass,
+        },
         runtime::ms_api::{self, MsBox},
     };
 
@@ -246,14 +249,14 @@ mod tests {
     fn validates_each_parameter_kind_including_arrays() {
         let cld = ClassLoaderData::new(None);
         let values = [
-            JValue::Boolean(1),
-            JValue::Byte(-1),
-            JValue::Char(65),
-            JValue::Short(-2),
-            JValue::Int(3),
-            JValue::Long(4),
-            JValue::Float(5.0),
-            JValue::Double(6.0),
+            JValue::Boolean(JBoolean(1)),
+            JValue::Byte(JByte(-1)),
+            JValue::Char(JChar(65)),
+            JValue::Short(JShort(-2)),
+            JValue::Int(JInt(3)),
+            JValue::Long(JLong(4)),
+            JValue::Float(JFloat(5.0)),
+            JValue::Double(JDouble(6.0)),
             JValue::Ref(NObjPtr::null()),
         ];
         for (descriptor, matching_index) in [
@@ -297,7 +300,11 @@ mod tests {
     fn checks_argument_count_and_counts_wide_values_once() {
         let cld = ClassLoaderData::new(None);
         let klass = owner(&cld, "(JD)V", true, true);
-        let values = [JValue::Long(1), JValue::Double(2.0), JValue::Int(3)];
+        let values = [
+            JValue::Long(JLong(1)),
+            JValue::Double(JDouble(2.0)),
+            JValue::Int(JInt(3)),
+        ];
         for actual in [0, 1, 3] {
             let error = Invocation::lookup_declared(&klass, "test", "(JD)V", &values[..actual])
                 .unwrap_err();
@@ -309,7 +316,7 @@ mod tests {
             Invocation::lookup_declared(&klass, "test", "(JD)V", &values[..2]).unwrap();
         assert!(matches!(
             &*invocation.args,
-            [JValue::Long(1), JValue::Double(2.0)]
+            [JValue::Long(JLong(1)), JValue::Double(JDouble(2.0))]
         ));
 
         let klass = owner(&cld, "()V", true, true);
@@ -329,7 +336,7 @@ mod tests {
         let cld = ClassLoaderData::new(None);
         let klass = owner(&cld, "(I)V", false, true);
         assert!(matches!(
-            Invocation::lookup_declared(&klass, "test", "(I)V", &[JValue::Int(1)])
+            Invocation::lookup_declared(&klass, "test", "(I)V", &[JValue::Int(JInt(1))])
                 .unwrap_err()
                 .kind,
             ExecErrorKind::ArgumentCountMismatch {
@@ -338,20 +345,30 @@ mod tests {
             }
         ));
         assert!(matches!(
-            Invocation::lookup_declared(&klass, "test", "(I)V", &[JValue::Int(0), JValue::Int(1)])
-                .unwrap_err()
-                .kind,
+            Invocation::lookup_declared(
+                &klass,
+                "test",
+                "(I)V",
+                &[JValue::Int(JInt(0)), JValue::Int(JInt(1))]
+            )
+            .unwrap_err()
+            .kind,
             ExecErrorKind::ArgumentTypeMismatch { index: 0, .. }
         ));
         let receiver = JValue::Ref(NObjPtr::null());
         assert!(
-            Invocation::lookup_declared(&klass, "test", "(I)V", &[receiver, JValue::Int(1)])
+            Invocation::lookup_declared(&klass, "test", "(I)V", &[receiver, JValue::Int(JInt(1))])
                 .is_ok()
         );
         assert!(matches!(
-            Invocation::lookup_declared(&klass, "test", "(I)V", &[receiver, JValue::Float(1.0)])
-                .unwrap_err()
-                .kind,
+            Invocation::lookup_declared(
+                &klass,
+                "test",
+                "(I)V",
+                &[receiver, JValue::Float(JFloat(1.0))]
+            )
+            .unwrap_err()
+            .kind,
             ExecErrorKind::ArgumentTypeMismatch { index: 1, .. }
         ));
         let klass = owner(&cld, "()V", false, true);
@@ -397,11 +414,11 @@ mod tests {
             target.method,
             klass.find_declared_method("test", "(I)V").unwrap()
         ));
-        let args: Box<[JValue]> = vec![JValue::Int(7)].into_boxed_slice();
+        let args: Box<[JValue]> = vec![JValue::Int(JInt(7))].into_boxed_slice();
         let address = args.as_ptr();
         let call = Invocation::try_new(target, args).unwrap();
         let (_, args) = call.into_parts();
         assert_eq!(args.as_ptr(), address);
-        assert!(matches!(&*args, [JValue::Int(7)]));
+        assert!(matches!(&*args, [JValue::Int(JInt(7))]));
     }
 }

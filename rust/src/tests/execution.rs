@@ -9,7 +9,10 @@ use crate::{
     },
     gc_bindings::oop_hierarchy::NObjPtr,
     oops::{
-        jvalue::JValue::{self, *},
+        jvalue::{
+            JDouble, JFloat, JInt, JLong,
+            JValue::{self, *},
+        },
         symbol_table::SymbolTable,
     },
     runtime::java_thread::JavaThread,
@@ -24,24 +27,59 @@ fn java_arithmetic_and_wide_arguments() {
             let cld = ClassLoaderData::new(None);
             let owner = load_normal_klass(&cld, &SymbolTable::intern("Cases")).unwrap();
             let cases: &[(&str, &str, &[JValue], JValue)] = &[
-                ("subtract", "(II)I", &[Int(7), Int(12)], Int(-5)),
-                ("add", "(II)I", &[Int(i32::MAX), Int(1)], Int(i32::MIN)),
+                (
+                    "subtract",
+                    "(II)I",
+                    &[Int(JInt(7)), Int(JInt(12))],
+                    Int(JInt(-5)),
+                ),
+                (
+                    "add",
+                    "(II)I",
+                    &[Int(JInt(i32::MAX)), Int(JInt(1))],
+                    Int(JInt(i32::MIN)),
+                ),
                 (
                     "multiply",
                     "(JJ)J",
-                    &[Long(1 << 40), Long(-3)],
-                    Long(-3_298_534_883_328),
+                    &[Long(JLong(1 << 40)), Long(JLong(-3))],
+                    Long(JLong(-3_298_534_883_328)),
                 ),
-                ("divide", "(II)I", &[Int(i32::MIN), Int(-1)], Int(i32::MIN)),
-                ("divide", "(II)I", &[Int(-7), Int(3)], Int(-2)),
-                ("remainder", "(II)I", &[Int(-7), Int(3)], Int(-1)),
-                ("shift", "(II)I", &[Int(-1), Int(33)], Int(i32::MAX)),
-                ("shiftLong", "(JI)J", &[Long(-1), Int(65)], Long(i64::MAX)),
+                (
+                    "divide",
+                    "(II)I",
+                    &[Int(JInt(i32::MIN)), Int(JInt(-1))],
+                    Int(JInt(i32::MIN)),
+                ),
+                (
+                    "divide",
+                    "(II)I",
+                    &[Int(JInt(-7)), Int(JInt(3))],
+                    Int(JInt(-2)),
+                ),
+                (
+                    "remainder",
+                    "(II)I",
+                    &[Int(JInt(-7)), Int(JInt(3))],
+                    Int(JInt(-1)),
+                ),
+                (
+                    "shift",
+                    "(II)I",
+                    &[Int(JInt(-1)), Int(JInt(33))],
+                    Int(JInt(i32::MAX)),
+                ),
+                (
+                    "shiftLong",
+                    "(JI)J",
+                    &[Long(JLong(-1)), Int(JInt(65))],
+                    Long(JLong(i64::MAX)),
+                ),
                 (
                     "mixedWide",
                     "(IJD)J",
-                    &[Int(3), Long(1 << 40), Double(-2.75)],
-                    Long(1_099_511_627_777),
+                    &[Int(JInt(3)), Long(JLong(1 << 40)), Double(JDouble(-2.75))],
+                    Long(JLong(1_099_511_627_777)),
                 ),
             ];
             for &(name, desc, args, expected) in cases {
@@ -67,20 +105,26 @@ fn java_branches_loops_and_switches_survive_yielding() {
             for slice in [1, 3, 10_000] {
                 for (n, expected) in [(0, 0), (1, 1), (100, 5050)] {
                     assert_value(
-                        run_method(owner, "sum", "(I)I", &[Int(n)], slice),
-                        Int(expected),
+                        run_method(owner, "sum", "(I)I", &[Int(JInt(n))], slice),
+                        Int(JInt(expected)),
                     );
                 }
                 for (a, b, expected) in [(1, 2, -1), (2, 2, 0), (3, 2, 1)] {
                     assert_value(
-                        run_method(owner, "compare", "(II)I", &[Int(a), Int(b)], slice),
-                        Int(expected),
+                        run_method(
+                            owner,
+                            "compare",
+                            "(II)I",
+                            &[Int(JInt(a)), Int(JInt(b))],
+                            slice,
+                        ),
+                        Int(JInt(expected)),
                     );
                 }
                 for (key, expected) in [(-2, 44), (-1, 11), (0, 22), (1, 33), (2, 44)] {
                     assert_value(
-                        run_method(owner, "denseSwitch", "(I)I", &[Int(key)], slice),
-                        Int(expected),
+                        run_method(owner, "denseSwitch", "(I)I", &[Int(JInt(key))], slice),
+                        Int(JInt(expected)),
                     );
                 }
                 for (key, expected) in [
@@ -92,8 +136,8 @@ fn java_branches_loops_and_switches_survive_yielding() {
                     (i32::MAX, 8),
                 ] {
                     assert_value(
-                        run_method(owner, "sparseSwitch", "(I)I", &[Int(key)], slice),
-                        Int(expected),
+                        run_method(owner, "sparseSwitch", "(I)I", &[Int(JInt(key))], slice),
+                        Int(JInt(expected)),
                     );
                 }
             }
@@ -116,26 +160,41 @@ fn java_conversions_floats_and_returns() {
                 (-3.75, -3),
             ] {
                 assert_value(
-                    run_method(owner, "toInt", "(D)I", &[Double(input)], 1),
-                    Int(expected),
+                    run_method(owner, "toInt", "(D)I", &[Double(JDouble(input))], 1),
+                    Int(JInt(expected)),
                 );
             }
-            assert_value(run_method(owner, "toByte", "(I)I", &[Int(255)], 1), Int(-1));
             assert_value(
-                run_method(owner, "toChar", "(I)I", &[Int(-1)], 1),
-                Int(65535),
+                run_method(owner, "toByte", "(I)I", &[Int(JInt(255))], 1),
+                Int(JInt(-1)),
             );
             assert_value(
-                run_method(owner, "divideFloat", "(FF)F", &[Float(1.0), Float(0.0)], 1),
-                Float(f32::INFINITY),
+                run_method(owner, "toChar", "(I)I", &[Int(JInt(-1))], 1),
+                Int(JInt(65535)),
             );
             assert_value(
-                run_method(owner, "divideFloat", "(FF)F", &[Float(0.0), Float(0.0)], 1),
-                Float(f32::NAN),
+                run_method(
+                    owner,
+                    "divideFloat",
+                    "(FF)F",
+                    &[Float(JFloat(1.0)), Float(JFloat(0.0))],
+                    1,
+                ),
+                Float(JFloat(f32::INFINITY)),
             );
             assert_value(
-                run_method(owner, "negateDouble", "(D)D", &[Double(0.0)], 1),
-                Double(-0.0),
+                run_method(
+                    owner,
+                    "divideFloat",
+                    "(FF)F",
+                    &[Float(JFloat(0.0)), Float(JFloat(0.0))],
+                    1,
+                ),
+                Float(JFloat(f32::NAN)),
+            );
+            assert_value(
+                run_method(owner, "negateDouble", "(D)D", &[Double(JDouble(0.0))], 1),
+                Double(JDouble(-0.0)),
             );
             let null = Ref(NObjPtr::null());
             assert_value(
@@ -150,17 +209,17 @@ fn java_conversions_floats_and_returns() {
             );
             assert_value(
                 run_method(owner, "isNull", "(Ljava/lang/Object;)I", &[null], 1),
-                Int(1),
+                Int(JInt(1)),
             );
             assert!(matches!(
                 run_method(owner, "nothing", "()V", &[], 1),
                 MethodReturn::Void
             ));
             for (name, desc, expected) in [
-                ("constantInt", "()I", Int(123456789)),
-                ("constantLong", "()J", Long(-81985529216486895)),
-                ("constantFloat", "()F", Float(1.25)),
-                ("constantDouble", "()D", Double(3.25)),
+                ("constantInt", "()I", Int(JInt(123456789))),
+                ("constantLong", "()J", Long(JLong(-81985529216486895))),
+                ("constantFloat", "()F", Float(JFloat(1.25))),
+                ("constantDouble", "()D", Double(JDouble(3.25))),
             ] {
                 assert_value(run_method(owner, name, desc, &[], 1), expected);
             }
@@ -179,8 +238,13 @@ fn java_division_error_preserves_invocation_context() {
             init_vm(fixture_dir());
             let cld = ClassLoaderData::new(None);
             let owner = load_normal_klass(&cld, &SymbolTable::intern("Cases")).unwrap();
-            let call =
-                Invocation::lookup_declared(owner, "divide", "(II)I", &[Int(7), Int(0)]).unwrap();
+            let call = Invocation::lookup_declared(
+                owner,
+                "divide",
+                "(II)I",
+                &[Int(JInt(7)), Int(JInt(0))],
+            )
+            .unwrap();
             let mut thread = JavaThread::new();
             ExecDispatcher::start(&mut thread, call).unwrap();
             let error = match ExecDispatcher::poll(&mut thread, &mut ExecBudget::new(100)) {

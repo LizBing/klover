@@ -15,7 +15,7 @@ use crate::{
         protocol::{DispatchOutcome, EngineExit, ExecBudget, MethodReturn},
     },
     gc_bindings::oop_hierarchy::NObjPtr,
-    oops::jvalue::JValue,
+    oops::jvalue::{JDouble, JFloat, JInt, JLong, JValue},
     runtime::java_thread::JavaThread,
     tests::support::{
         assert_value, class_bytes, ensure_metaspace, parse_class,
@@ -96,8 +96,8 @@ fn call_and_return_boundaries_preserve_budget_and_deliver_once() {
     assert!(matches!(
         received.borrow().as_slice(),
         [
-            MethodReturn::Value(JValue::Int(42)),
-            MethodReturn::Value(JValue::Int(42))
+            MethodReturn::Value(JValue::Int(JInt(42))),
+            MethodReturn::Value(JValue::Int(JInt(42)))
         ]
     ));
     let mut budget = ExecBudget::new(1);
@@ -128,20 +128,22 @@ fn nested_frames_return_to_their_immediate_caller() {
     let inner_returns = Rc::new(RefCell::new(Vec::new()));
     let mut thread = JavaThread::new();
     thread.start_with_frame(Caller {
-        exits: VecDeque::from([EngineExit::Return(MethodReturn::Value(JValue::Int(7)))]),
+        exits: VecDeque::from([EngineExit::Return(MethodReturn::Value(JValue::Int(JInt(
+            7,
+        ))))]),
         received: outer_returns.clone(),
     });
     thread.push_frame(Caller {
         exits: VecDeque::from([
             EngineExit::Invoke(Invocation::lookup_declared(&leaf, "test", "()V", &[]).unwrap()),
-            EngineExit::Return(MethodReturn::Value(JValue::Long(123))),
+            EngineExit::Return(MethodReturn::Value(JValue::Long(JLong(123)))),
         ]),
         received: inner_returns.clone(),
     });
     let mut budget = ExecBudget::new(20);
     assert!(matches!(
         ExecDispatcher::poll(&mut thread, &mut budget).unwrap(),
-        DispatchOutcome::Completed(MethodReturn::Value(JValue::Int(7)))
+        DispatchOutcome::Completed(MethodReturn::Value(JValue::Int(JInt(7))))
     ));
     assert_eq!(budget.remaining(), 16); // call, leaf return, inner return, entry return
     assert!(matches!(
@@ -150,7 +152,7 @@ fn nested_frames_return_to_their_immediate_caller() {
     ));
     assert!(matches!(
         outer_returns.borrow().as_slice(),
-        [MethodReturn::Value(JValue::Long(123))]
+        [MethodReturn::Value(JValue::Long(JLong(123)))]
     ));
     assert!(thread.is_terminated());
     assert!(thread.current_frame().is_none());
@@ -161,10 +163,10 @@ fn interpreted_callers_accept_all_return_kinds_across_yields() {
     ensure_metaspace();
     let cld = ClassLoaderData::new(None);
     let cases = [
-        ("I", 0x1a, 0xac, JValue::Int(-123)),
-        ("J", 0x1e, 0xad, JValue::Long(i64::MIN + 123)),
-        ("F", 0x22, 0xae, JValue::Float(-0.0)),
-        ("D", 0x26, 0xaf, JValue::Double(-0.0)),
+        ("I", 0x1a, 0xac, JValue::Int(JInt(-123))),
+        ("J", 0x1e, 0xad, JValue::Long(JLong(i64::MIN + 123))),
+        ("F", 0x22, 0xae, JValue::Float(JFloat(-0.0))),
+        ("D", 0x26, 0xaf, JValue::Double(JDouble(-0.0))),
         (
             "Ljava/lang/Object;",
             0x2a,
@@ -237,7 +239,7 @@ fn invocation_creation_and_callee_errors_keep_their_context() {
     let mut thread = JavaThread::new();
     thread.start_with_frame(Caller {
         exits: VecDeque::from([EngineExit::Invoke(
-            Invocation::lookup_declared(&invalid, "test", "(I)V", &[JValue::Int(1)]).unwrap(),
+            Invocation::lookup_declared(&invalid, "test", "(I)V", &[JValue::Int(JInt(1))]).unwrap(),
         )]),
         received: received.clone(),
     });

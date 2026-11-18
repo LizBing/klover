@@ -7,7 +7,11 @@ use crate::{
         invocation::Invocation,
         protocol::{DispatchOutcome, ExecBudget, MethodReturn},
     },
-    oops::{jvalue::JValue, normal_klass::NormalKlass, symbol_table::SymbolTable},
+    oops::{
+        jvalue::{JByte, JChar, JDouble, JFloat, JInt, JLong, JShort, JValue},
+        normal_klass::NormalKlass,
+        symbol_table::SymbolTable,
+    },
     runtime::{class_initialization::InitializationState, java_thread::JavaThread},
 };
 
@@ -48,32 +52,38 @@ fn initialization_orders_dependencies_and_retries_active_uses_once() {
                 for _ in 0..2 {
                     assert_value(
                         run_method(owner, "order", "()I", &[], fuel),
-                        JValue::Int(212),
+                        JValue::Int(JInt(212)),
                     );
                 }
                 assert_value(
                     run_method(owner, "recursive", "()I", &[], fuel),
-                    JValue::Int(309),
+                    JValue::Int(JInt(309)),
                 );
                 assert_value(
                     run_method(owner, "cycle", "()I", &[], fuel),
-                    JValue::Int(21),
+                    JValue::Int(JInt(21)),
                 );
                 assert_value(
-                    run_method(owner, "write", "(J)J", &[JValue::Long(i64::MIN + 17)], fuel),
-                    JValue::Long(i64::MIN + 17),
+                    run_method(
+                        owner,
+                        "write",
+                        "(J)J",
+                        &[JValue::Long(JLong(i64::MIN + 17))],
+                        fuel,
+                    ),
+                    JValue::Long(JLong(i64::MIN + 17)),
                 );
                 assert_value(
-                    run_method(owner, "call", "(J)J", &[JValue::Long(123)], fuel),
-                    JValue::Long(130),
+                    run_method(owner, "call", "(J)J", &[JValue::Long(JLong(123))], fuel),
+                    JValue::Long(JLong(130)),
                 );
                 assert_value(
                     run_method(owner, "defaults", "()I", &[], fuel),
-                    JValue::Int(6456),
+                    JValue::Int(JInt(6456)),
                 );
                 assert_value(
                     run_method(owner, "interfaceOnly", "()I", &[], fuel),
-                    JValue::Int(88),
+                    JValue::Int(JInt(88)),
                 );
                 let untouched = load_normal_klass(
                     &cld,
@@ -102,7 +112,7 @@ fn initialization_orders_dependencies_and_retries_active_uses_once() {
                 for _ in 0..2 {
                     assert_value(
                         run_method(direct, "read", "()I", &[], fuel),
-                        JValue::Int(117),
+                        JValue::Int(JInt(117)),
                     );
                 }
 
@@ -111,22 +121,21 @@ fn initialization_orders_dependencies_and_retries_active_uses_once() {
                         .unwrap();
                 assert_value(
                     run_method(constants, "entry", "()I", &[], fuel),
-                    JValue::Int(42),
+                    JValue::Int(JInt(42)),
                 );
                 for (name, desc, expected) in [
-                    ("B", "B", vec![(-7i8) as u8]),
-                    ("C", "C", 65535u16.to_ne_bytes().to_vec()),
-                    ("S", "S", (-300i16).to_ne_bytes().to_vec()),
-                    ("I", "I", 42i32.to_ne_bytes().to_vec()),
-                    ("J", "J", (-123456789123i64).to_ne_bytes().to_vec()),
-                    ("F", "F", (-0.0f32).to_ne_bytes().to_vec()),
-                    ("D", "D", 2.5f64.to_ne_bytes().to_vec()),
+                    ("B", "B", JValue::Byte(JByte(-7))),
+                    ("C", "C", JValue::Char(JChar(65535))),
+                    ("S", "S", JValue::Short(JShort(-300))),
+                    ("I", "I", JValue::Int(JInt(42))),
+                    ("J", "J", JValue::Long(JLong(-123456789123))),
+                    ("F", "F", JValue::Float(JFloat(-0.0))),
+                    ("D", "D", JValue::Double(JDouble(2.5))),
                 ] {
                     let field = constants.find_declared_field(name, desc).unwrap();
-                    assert_eq!(
-                        &constants.fields().statics.bytes()
-                            [field.offset..field.offset + field.size()],
-                        &expected
+                    assert_value(
+                        MethodReturn::Value(constants.fields().load_static(field)),
+                        expected,
                     );
                 }
             }
@@ -220,13 +229,13 @@ fn competing_threads_wait_and_abandoned_initialization_fails() {
                         ExecErrorKind::InitializationFailed { .. }
                     ));
                 } else {
-                    assert_value(finish(&mut first, 1).unwrap(), JValue::Int(4950));
-                    assert_value(finish(&mut second, 1).unwrap(), JValue::Int(4950));
+                    assert_value(finish(&mut first, 1).unwrap(), JValue::Int(JInt(4950)));
+                    assert_value(finish(&mut second, 1).unwrap(), JValue::Int(JInt(4950)));
                     let count = slow.find_declared_field("count", "I").unwrap();
-                    assert_eq!(
-                        &slow.fields().statics.bytes()[count.offset..count.offset + 4],
-                        &1i32.to_ne_bytes()
-                    );
+                    assert!(matches!(
+                        slow.fields().load_static(count),
+                        JValue::Int(JInt(1))
+                    ));
                 }
             }
         },

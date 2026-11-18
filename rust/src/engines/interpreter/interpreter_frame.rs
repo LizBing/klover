@@ -68,21 +68,21 @@ impl<'exec, 'meta: 'exec> InterpreterFrame<'exec, 'meta> {
         let mut idx = 0;
         for arg in args.iter() {
             match *arg {
-                JValue::Boolean(b) => locals[idx] = Slot::Int(b as JInt),
-                JValue::Byte(v) => locals[idx] = Slot::Int(v.into()),
-                JValue::Short(v) => locals[idx] = Slot::Int(v.into()),
-                JValue::Char(v) => locals[idx] = Slot::Int(v.into()),
+                JValue::Boolean(v) => locals[idx] = Slot::Int(JInt(i32::from(v.0))),
+                JValue::Byte(v) => locals[idx] = Slot::Int(JInt(i32::from(v.0))),
+                JValue::Short(v) => locals[idx] = Slot::Int(JInt(i32::from(v.0))),
+                JValue::Char(v) => locals[idx] = Slot::Int(JInt(i32::from(v.0))),
                 JValue::Int(v) => locals[idx] = Slot::Int(v),
                 JValue::Float(v) => locals[idx] = Slot::Float(v),
                 JValue::Ref(v) => locals[idx] = Slot::Ref(v),
                 JValue::Long(v) => {
-                    let bytes = v.to_be_bytes();
+                    let bytes = v.0.to_be_bytes();
                     locals[idx] = Slot::LongHigh([bytes[0], bytes[1], bytes[2], bytes[3]]);
                     locals[idx + 1] = Slot::LongLow([bytes[4], bytes[5], bytes[6], bytes[7]]);
                     idx += 1;
                 }
                 JValue::Double(v) => {
-                    let bytes = v.to_be_bytes();
+                    let bytes = v.0.to_be_bytes();
                     locals[idx] = Slot::DoubleHigh([bytes[0], bytes[1], bytes[2], bytes[3]]);
                     locals[idx + 1] = Slot::DoubleLow([bytes[4], bytes[5], bytes[6], bytes[7]]);
                     idx += 1;
@@ -137,17 +137,7 @@ impl<'exec, 'meta: 'exec> JavaFrame<'exec, 'meta> for InterpreterFrame<'exec, 'm
             MethodReturn::Value(v) => v,
         };
 
-        match jvalue {
-            JValue::Boolean(b) => self.push(Slot::Int(b as JInt)),
-            JValue::Byte(b) => self.push(Slot::Int(b as JInt)),
-            JValue::Char(c) => self.push(Slot::Int(c as JInt)),
-            JValue::Double(d) => self.push_double(d),
-            JValue::Float(f) => self.push(Slot::Float(f)),
-            JValue::Int(i) => self.push(Slot::Int(i)),
-            JValue::Long(l) => self.push_long(l),
-            JValue::Ref(r) => self.push(Slot::Ref(r)),
-            JValue::Short(s) => self.push(Slot::Int(s as JInt)),
-        }
+        self.push_value(jvalue);
 
         Ok(())
     }
@@ -172,6 +162,20 @@ impl<'exec, 'meta: 'exec> InterpreterFrame<'exec, 'meta> {
 }
 
 impl InterpreterFrame<'_, '_> {
+    pub fn push_value(&mut self, value: JValue) {
+        match value {
+            JValue::Boolean(b) => self.push_int(JInt(i32::from(b.0))),
+            JValue::Byte(b) => self.push_int(JInt(i32::from(b.0))),
+            JValue::Char(c) => self.push_int(JInt(i32::from(c.0))),
+            JValue::Double(d) => self.push_double(d),
+            JValue::Float(f) => self.push(Slot::Float(f)),
+            JValue::Int(i) => self.push(Slot::Int(i)),
+            JValue::Long(l) => self.push_long(l),
+            JValue::Ref(r) => self.push(Slot::Ref(r)),
+            JValue::Short(s) => self.push_int(JInt(i32::from(s.0))),
+        }
+    }
+
     pub fn push(&mut self, slot: Slot) {
         self.oprand_stack.push(slot);
     }
@@ -184,7 +188,7 @@ impl InterpreterFrame<'_, '_> {
     }
 
     pub fn push_long(&mut self, value: JLong) {
-        let bytes = value.to_be_bytes();
+        let bytes = value.0.to_be_bytes();
 
         self.oprand_stack
             .push(Slot::LongHigh([bytes[0], bytes[1], bytes[2], bytes[3]]));
@@ -201,13 +205,13 @@ impl InterpreterFrame<'_, '_> {
             return Err(self.make_exec_error(ExecErrorKind::MismatchSlotType));
         };
 
-        Ok(JLong::from_be_bytes([
+        Ok(JLong(i64::from_be_bytes([
             high[0], high[1], high[2], high[3], low[0], low[1], low[2], low[3],
-        ]))
+        ])))
     }
 
     pub fn push_double(&mut self, value: JDouble) {
-        let bytes = value.to_be_bytes();
+        let bytes = value.0.to_be_bytes();
 
         self.oprand_stack
             .push(Slot::DoubleHigh([bytes[0], bytes[1], bytes[2], bytes[3]]));
@@ -224,9 +228,9 @@ impl InterpreterFrame<'_, '_> {
             return Err(self.make_exec_error(ExecErrorKind::MismatchSlotType));
         };
 
-        Ok(JDouble::from_be_bytes([
+        Ok(JDouble(f64::from_be_bytes([
             high[0], high[1], high[2], high[3], low[0], low[1], low[2], low[3],
-        ]))
+        ])))
     }
 
     pub fn get_local(&self, idx: usize) -> ExecResult<Slot> {

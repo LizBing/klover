@@ -274,13 +274,17 @@ pub fn assert_value(actual: MethodReturn, expected: JValue) {
         panic!("expected {expected:?}, got void")
     };
     let equal = match (actual, expected) {
-        (JValue::Int(a), JValue::Int(b)) => a == b,
-        (JValue::Long(a), JValue::Long(b)) => a == b,
+        (JValue::Boolean(a), JValue::Boolean(b)) => a.0 == b.0,
+        (JValue::Byte(a), JValue::Byte(b)) => a.0 == b.0,
+        (JValue::Char(a), JValue::Char(b)) => a.0 == b.0,
+        (JValue::Short(a), JValue::Short(b)) => a.0 == b.0,
+        (JValue::Int(a), JValue::Int(b)) => a.0 == b.0,
+        (JValue::Long(a), JValue::Long(b)) => a.0 == b.0,
         (JValue::Float(a), JValue::Float(b)) => {
-            (a.is_nan() && b.is_nan()) || a.to_bits() == b.to_bits()
+            (a.0.is_nan() && b.0.is_nan()) || a.0.to_bits() == b.0.to_bits()
         }
         (JValue::Double(a), JValue::Double(b)) => {
-            (a.is_nan() && b.is_nan()) || a.to_bits() == b.to_bits()
+            (a.0.is_nan() && b.0.is_nan()) || a.0.to_bits() == b.0.to_bits()
         }
         (JValue::Ref(a), JValue::Ref(b)) => a.as_u32() == b.as_u32(),
         _ => false,

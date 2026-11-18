@@ -643,29 +643,29 @@ fn prepares_separate_static_blocks_in_the_defining_loaders_metaspace() {
         );
     }
 
-    let statics = &base.fields().statics;
-    assert_eq!(
-        (statics.layout.begin_offs, statics.layout.byte_size),
-        (0, 32)
-    );
-    assert_eq!(
-        statics.layout.reference_offsets().collect::<Vec<_>>(),
-        [0, 4, 8]
-    );
-    let offset = base.find_declared_field("sequence", "J").unwrap().offset;
-    {
-        let mut bytes = statics.bytes();
-        assert_eq!(&*bytes, &[0; 32]);
-        let address = bytes.as_ptr() as usize;
-        assert_eq!(address % 8, 0);
-        bytes[offset..offset + 8].copy_from_slice(&42i64.to_ne_bytes());
-    }
+    use crate::oops::jvalue::{JLong, JValue};
+    let fields = base.fields();
+    let layout = fields.static_layout();
+    assert_eq!((layout.begin_offs, layout.byte_size), (0, 32));
+    assert_eq!(layout.reference_offsets().collect::<Vec<_>>(), [0, 4, 8]);
+
+    let sequence = base.find_declared_field("sequence", "J").unwrap();
+    assert!(matches!(
+        fields.load_static(sequence),
+        JValue::Long(JLong(0))
+    ));
+    fields.store_static(sequence, JValue::Long(JLong(42)));
+
     let reloaded = first.load_klass(&name).unwrap().as_normal().unwrap();
-    assert_eq!(
-        &reloaded.fields().statics.bytes()[offset..offset + 8],
-        &42i64.to_ne_bytes()
-    );
-    assert_eq!(&*other.fields().statics.bytes(), &[0; 32]);
+    assert!(matches!(
+        reloaded.fields().load_static(sequence),
+        JValue::Long(JLong(42))
+    ));
+    let other_sequence = other.find_declared_field("sequence", "J").unwrap();
+    assert!(matches!(
+        other.fields().load_static(other_sequence),
+        JValue::Long(JLong(0))
+    ));
 
     let define = |name: &str| {
         first
@@ -677,15 +677,17 @@ fn prepares_separate_static_blocks_in_the_defining_loaders_metaspace() {
     let middle = define("FieldLayout$Middle");
     let child = define("FieldLayout$Child");
     for klass in [middle, child] {
-        assert!(klass.fields().statics.bytes().is_empty());
-        assert_eq!(klass.fields().statics.layout.reference_offsets().count(), 0);
+        assert_eq!(klass.fields().static_layout().byte_size, 0);
+        assert_eq!(
+            klass.fields().static_layout().reference_offsets().count(),
+            0
+        );
     }
     let leaf = define("FieldLayout$Empty");
-    assert_eq!(&*leaf.fields().statics.bytes(), &[0; 8]);
+    assert_eq!(leaf.fields().static_layout().byte_size, 8);
     assert_eq!(
         leaf.fields()
-            .statics
-            .layout
+            .static_layout()
             .reference_offsets()
             .collect::<Vec<_>>(),
         [0]

@@ -4,19 +4,20 @@ use crate::engines::{
     exec_error::ExecResult,
     interpreter::{interpreter_frame::InterpreterFrame, step_outcome::StepControl},
 };
+use crate::oops::jvalue::JInt;
 
 pub fn lcmp<'exec, 'meta: 'exec>(
     f: &mut InterpreterFrame<'exec, 'meta>,
 ) -> ExecResult<StepControl<'exec, 'meta>> {
-    let right = f.pop_long()?;
-    let left = f.pop_long()?;
-    f.push_int(if left < right {
+    let right = f.pop_long()?.0;
+    let left = f.pop_long()?.0;
+    f.push_int(JInt(if left < right {
         -1
     } else if left > right {
         1
     } else {
         0
-    });
+    }));
     Ok(StepControl::Continue)
 }
 
@@ -26,8 +27,8 @@ macro_rules! float_compare {
             f: &mut InterpreterFrame<'exec, 'meta>,
             nan: i32,
         ) -> ExecResult<StepControl<'exec, 'meta>> {
-            let right = f.$pop()?;
-            let left = f.$pop()?;
+            let right = f.$pop()?.0;
+            let left = f.$pop()?.0;
             let result = if left.is_nan() || right.is_nan() {
                 nan
             } else if left < right {
@@ -37,7 +38,7 @@ macro_rules! float_compare {
             } else {
                 0
             };
-            f.push_int(result);
+            f.push_int(JInt(result));
             Ok(StepControl::Continue)
         }
     };
@@ -48,12 +49,12 @@ float_compare!(dcmp, pop_double);
 macro_rules! int_branch {
     ($zero:ident, $pair:ident, $op:tt) => {
         pub fn $zero<'exec, 'meta: 'exec>(f: &mut InterpreterFrame<'exec, 'meta>, target: InstIdx) -> ExecResult<StepControl<'exec, 'meta>> {
-            let value = f.pop_int()?;
+            let value = f.pop_int()?.0;
             branch(f, target, value $op 0)
         }
         pub fn $pair<'exec, 'meta: 'exec>(f: &mut InterpreterFrame<'exec, 'meta>, target: InstIdx) -> ExecResult<StepControl<'exec, 'meta>> {
-            let right = f.pop_int()?;
-            let left = f.pop_int()?;
+            let right = f.pop_int()?.0;
+            let left = f.pop_int()?.0;
             branch(f, target, left $op right)
         }
     };

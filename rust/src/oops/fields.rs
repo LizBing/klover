@@ -1,19 +1,23 @@
-use crate::class_parser::LoadableConstant;
 use crate::{
-    class_parser::{FieldAccessFlags, FieldInfo},
-    gc_bindings::obj_layout::{OBJECT_ALIGNMENT, ObjLayout},
+    class_parser::{FieldAccessFlags, FieldInfo, LoadableConstant},
+    gc_bindings::{
+        obj_layout::{OBJECT_ALIGNMENT, ObjLayout},
+        oop_hierarchy::NObjPtr,
+    },
     oops::{
         desc::{FieldDesc, FieldGroup},
+        jvalue::{
+            JBoolean, JByte, JChar, JDouble, JFloat, JInt, JLong, JPrimitive, JShort, JValue,
+        },
         symbol_table::{SymbolHandle, SymbolTable},
     },
     runtime::ms_api::{MsAllocator, MsBox},
 };
-use parking_lot::{MappedMutexGuard, Mutex, MutexGuard};
-use std::mem::MaybeUninit;
-use std::sync::Arc;
+use std::{cell::UnsafeCell, sync::Arc};
 
 #[derive(Debug)]
 pub struct Field {
+    index: usize,
     constant_value: Option<Arc<LoadableConstant>>,
     pub name: SymbolHandle,
     pub desc: FieldDesc,
@@ -56,8 +60,9 @@ impl Field {
         msa: &'dc MsAllocator,
     ) -> MsBox<'dc, [Field]> {
         let mut declared = MsBox::new_uninit_slice(msa, infos.len());
-        for (slot, info) in declared.iter_mut().zip(infos) {
+        for (index, (slot, info)) in declared.iter_mut().zip(infos).enumerate() {
             slot.write(Field {
+                index,
                 constant_value: info.attributes.constant_value.clone(),
                 name: SymbolTable::intern(&info.name),
                 desc: FieldDesc::from(&info.descriptor),
@@ -74,31 +79,80 @@ impl Field {
 pub struct Fields<'dc> {
     declared: MsBox<'dc, [Field]>,
     pub instance: ObjLayout,
-    pub statics: StaticFields<'dc>,
+    statics: StaticFields<'dc>,
 }
 
 #[derive(Debug)]
-pub struct StaticFields<'dc> {
-    pub layout: ObjLayout,
-    storage: Mutex<MsBox<'dc, [u8]>>,
+struct StaticFields<'dc> {
+    layout: ObjLayout,
+    storage: MsBox<'dc, [UnsafeCell<u64>]>,
 }
+
+// SAFETY: Only the immutable layout and owning Fields metadata are exposed.
+// Each published slot is accessed atomically with its declared width. Padding
+// is private, and no u64 reference into a storage word is ever created.
+unsafe impl Sync for StaticFields<'_> {}
 
 impl<'dc> StaticFields<'dc> {
     fn new(layout: ObjLayout, msa: &'dc MsAllocator) -> Self {
-        // Metaspace aligns every allocation to at least eight bytes. An empty
-        // slice consumes no arena space.
-        let mut bytes = MsBox::new_uninit_slice(msa, layout.byte_size);
-        bytes.fill(MaybeUninit::new(0));
+        let mut storage = MsBox::new_uninit_slice(msa, layout.byte_size / size_of::<u64>());
+        for word in storage.iter_mut() {
+            word.write(UnsafeCell::new(0));
+        }
         Self {
             layout,
-            // Every byte, including alignment padding, was initialized above.
-            storage: Mutex::new(unsafe { bytes.assume_init() }),
+            // SAFETY: Every storage word was initialized above.
+            storage: unsafe { storage.assume_init() },
         }
     }
 
-    /// Borrow the live bytes under the block's lock for field access or root scanning.
-    pub fn bytes(&self) -> MappedMutexGuard<'_, [u8]> {
-        MutexGuard::map(self.storage.lock(), |bytes| bytes.as_mut())
+    fn slot_address(&self, field: &Field) -> *mut u8 {
+        let word_size = size_of::<u64>();
+        let word = &self.storage[field.offset / word_size];
+        word.get()
+            .cast::<u8>()
+            .wrapping_add(field.offset % word_size)
+    }
+
+    // SAFETY: The caller must pass a declared static field from this block.
+    unsafe fn load<const VOLATILE: bool>(&self, field: &Field) -> JValue {
+        let addr = self.slot_address(field);
+        // SAFETY: Linking assigns nonoverlapping slots aligned for their width.
+        unsafe {
+            match field.desc.raw().utf8().as_bytes()[0] {
+                b'Z' => JValue::Boolean(JBoolean::load::<VOLATILE>(addr.cast())),
+                b'B' => JValue::Byte(JByte::load::<VOLATILE>(addr.cast())),
+                b'C' => JValue::Char(JChar::load::<VOLATILE>(addr.cast())),
+                b'S' => JValue::Short(JShort::load::<VOLATILE>(addr.cast())),
+                b'I' => JValue::Int(JInt::load::<VOLATILE>(addr.cast())),
+                b'F' => JValue::Float(JFloat::load::<VOLATILE>(addr.cast())),
+                b'J' => JValue::Long(JLong::load::<VOLATILE>(addr.cast())),
+                b'D' => JValue::Double(JDouble::load::<VOLATILE>(addr.cast())),
+                b'L' | b'[' => JValue::Ref(NObjPtr::load::<VOLATILE>(addr.cast())),
+                _ => unreachable!("validated field descriptor"),
+            }
+        }
+    }
+
+    // SAFETY: The field must belong to this block and the value must match its type.
+    unsafe fn store<const VOLATILE: bool>(&self, field: &Field, value: JValue) {
+        let addr = self.slot_address(field);
+        // SAFETY: Linking assigns nonoverlapping slots aligned for their width.
+        unsafe {
+            match value {
+                JValue::Boolean(JBoolean(value)) => {
+                    JBoolean::store::<VOLATILE>(addr.cast(), JBoolean(value & 1));
+                }
+                JValue::Byte(value) => JByte::store::<VOLATILE>(addr.cast(), value),
+                JValue::Char(value) => JChar::store::<VOLATILE>(addr.cast(), value),
+                JValue::Short(value) => JShort::store::<VOLATILE>(addr.cast(), value),
+                JValue::Int(value) => JInt::store::<VOLATILE>(addr.cast(), value),
+                JValue::Float(value) => JFloat::store::<VOLATILE>(addr.cast(), value),
+                JValue::Long(value) => JLong::store::<VOLATILE>(addr.cast(), value),
+                JValue::Double(value) => JDouble::store::<VOLATILE>(addr.cast(), value),
+                JValue::Ref(value) => NObjPtr::store::<VOLATILE>(addr.cast(), value),
+            }
+        }
     }
 }
 
@@ -143,31 +197,71 @@ impl<'dc> Fields<'dc> {
         }
     }
 
+    fn check_static_field(&self, field: &Field) {
+        assert!(
+            field.is_static()
+                && self
+                    .declared
+                    .get(field.index)
+                    .is_some_and(|declared| std::ptr::eq(declared, field)),
+            "static field must belong to this class"
+        );
+    }
+
+    pub(crate) fn load_static(&self, field: &Field) -> JValue {
+        self.check_static_field(field);
+        // SAFETY: The owner and kind check above identifies a slot in this block.
+        unsafe {
+            if field.is_volatile() {
+                self.statics.load::<true>(field)
+            } else {
+                self.statics.load::<false>(field)
+            }
+        }
+    }
+
+    pub(crate) fn store_static(&self, field: &Field, value: JValue) {
+        self.check_static_field(field);
+        assert!(
+            field.desc.matches_value(&value),
+            "value must match field type"
+        );
+        // SAFETY: The checks above identify the slot and its exact storage type.
+        unsafe {
+            if field.is_volatile() {
+                self.statics.store::<true>(field, value);
+            } else {
+                self.statics.store::<false>(field, value);
+            }
+        }
+    }
+
     pub(crate) fn initialize_constants(&self) -> Result<(), &Field> {
-        let mut storage = self.statics.bytes();
         for field in self.declared.iter().filter(|field| field.is_static()) {
             let Some(value) = field.constant_value.as_deref() else {
                 continue;
             };
-            let mut encoded = [0u8; 8];
-            match value {
-                LoadableConstant::Integer(value) => match field.size() {
-                    1 => encoded[0] = *value as u8,
-                    2 => encoded[..2].copy_from_slice(&(*value as u16).to_ne_bytes()),
-                    4 => encoded[..4].copy_from_slice(&value.to_ne_bytes()),
+            let value = match value {
+                LoadableConstant::Integer(value) => match field.desc.raw().utf8().as_bytes()[0] {
+                    b'Z' => JValue::Boolean(JBoolean((*value & 1) as u8)),
+                    b'B' => JValue::Byte(JByte(*value as i8)),
+                    b'C' => JValue::Char(JChar(*value as u16)),
+                    b'S' => JValue::Short(JShort(*value as i16)),
+                    b'I' => JValue::Int(JInt(*value)),
                     _ => unreachable!("validated integer constant"),
                 },
-                LoadableConstant::Float(value) => {
-                    encoded[..4].copy_from_slice(&value.to_ne_bytes())
-                }
-                LoadableConstant::Long(value) => encoded.copy_from_slice(&value.to_ne_bytes()),
-                LoadableConstant::Double(value) => encoded.copy_from_slice(&value.to_ne_bytes()),
+                LoadableConstant::Float(value) => JValue::Float(JFloat(*value)),
+                LoadableConstant::Long(value) => JValue::Long(JLong(*value)),
+                LoadableConstant::Double(value) => JValue::Double(JDouble(*value)),
                 _ => return Err(field),
-            }
-            storage[field.offset..field.offset + field.size()]
-                .copy_from_slice(&encoded[..field.size()]);
+            };
+            self.store_static(field, value);
         }
         Ok(())
+    }
+
+    pub fn static_layout(&self) -> &ObjLayout {
+        &self.statics.layout
     }
 
     pub fn declared(&self) -> &[Field] {

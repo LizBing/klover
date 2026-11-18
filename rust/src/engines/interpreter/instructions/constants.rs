@@ -24,7 +24,7 @@ pub fn iconst<'exec, 'meta: 'exec>(
     f: &mut InterpreterFrame<'exec, 'meta>,
     value: JInt,
 ) -> ExecResult<StepControl<'exec, 'meta>> {
-    f.push_int(value.into());
+    f.push_int(value);
     Ok(StepControl::Continue)
 }
 
@@ -32,7 +32,7 @@ pub fn lconst<'exec, 'meta: 'exec>(
     f: &mut InterpreterFrame<'exec, 'meta>,
     value: JLong,
 ) -> ExecResult<StepControl<'exec, 'meta>> {
-    f.push_long(value.into());
+    f.push_long(value);
     Ok(StepControl::Continue)
 }
 
@@ -40,7 +40,7 @@ pub fn fconst<'exec, 'meta: 'exec>(
     f: &mut InterpreterFrame<'exec, 'meta>,
     value: JFloat,
 ) -> ExecResult<StepControl<'exec, 'meta>> {
-    f.push_float(value.into());
+    f.push_float(value);
     Ok(StepControl::Continue)
 }
 
@@ -48,7 +48,7 @@ pub fn dconst<'exec, 'meta: 'exec>(
     f: &mut InterpreterFrame<'exec, 'meta>,
     value: JDouble,
 ) -> ExecResult<StepControl<'exec, 'meta>> {
-    f.push_double(value.into());
+    f.push_double(value);
     Ok(StepControl::Continue)
 }
 
@@ -56,7 +56,7 @@ pub fn bipush<'exec, 'meta: 'exec>(
     f: &mut InterpreterFrame<'exec, 'meta>,
     value: JByte,
 ) -> ExecResult<StepControl<'exec, 'meta>> {
-    f.push_int(value.into());
+    f.push_int(JInt(i32::from(value.0)));
     Ok(StepControl::Continue)
 }
 
@@ -64,7 +64,7 @@ pub fn sipush<'exec, 'meta: 'exec>(
     f: &mut InterpreterFrame<'exec, 'meta>,
     value: JShort,
 ) -> ExecResult<StepControl<'exec, 'meta>> {
-    f.push_int(value.into());
+    f.push_int(JInt(i32::from(value.0)));
     Ok(StepControl::Continue)
 }
 

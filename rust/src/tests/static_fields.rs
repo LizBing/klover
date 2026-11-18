@@ -19,7 +19,10 @@ use crate::{
     gc_bindings::oop_hierarchy::NObjPtr,
     oops::{
         constant_entries::FieldRef,
-        jvalue::JValue::{self, *},
+        jvalue::{
+            JBoolean, JDouble, JFloat, JInt, JLong,
+            JValue::{self, *},
+        },
         oops_errors::ResolveError,
         symbol_table::SymbolTable,
     },
@@ -45,20 +48,35 @@ fn static_fields_execute_through_lowering_and_dispatch() {
             let cld = ClassLoaderData::new(None);
             let owner = load_normal_klass(&cld, &SymbolTable::intern("StaticFields")).unwrap();
             let cases: &[(&str, &str, JValue, JValue)] = &[
-                ("bool", "(Z)Z", Boolean(1), Int(1)),
-                ("bool", "(Z)Z", Boolean(0), Int(0)),
-                ("narrow", "(I)I", Int(65535), Int(65533)),
-                ("integer", "(I)I", Int(i32::MIN), Int(i32::MIN)),
-                ("wide", "(J)J", Long(i64::MIN + 37), Long(i64::MIN + 37)),
-                ("floating", "(F)F", Float(-0.0), Float(-0.0)),
-                ("floating", "(F)F", Float(f32::NAN), Float(f32::NAN)),
+                ("bool", "(Z)Z", Boolean(JBoolean(1)), Int(JInt(1))),
+                ("bool", "(Z)Z", Boolean(JBoolean(0)), Int(JInt(0))),
+                ("narrow", "(I)I", Int(JInt(65535)), Int(JInt(65533))),
+                ("integer", "(I)I", Int(JInt(i32::MIN)), Int(JInt(i32::MIN))),
+                (
+                    "wide",
+                    "(J)J",
+                    Long(JLong(i64::MIN + 37)),
+                    Long(JLong(i64::MIN + 37)),
+                ),
+                ("floating", "(F)F", Float(JFloat(-0.0)), Float(JFloat(-0.0))),
+                (
+                    "floating",
+                    "(F)F",
+                    Float(JFloat(f32::NAN)),
+                    Float(JFloat(f32::NAN)),
+                ),
                 (
                     "precise",
                     "(D)D",
-                    Double(f64::INFINITY),
-                    Double(f64::INFINITY),
+                    Double(JDouble(f64::INFINITY)),
+                    Double(JDouble(f64::INFINITY)),
                 ),
-                ("precise", "(D)D", Double(-0.0), Double(-0.0)),
+                (
+                    "precise",
+                    "(D)D",
+                    Double(JDouble(-0.0)),
+                    Double(JDouble(-0.0)),
+                ),
                 (
                     "reference",
                     "(Ljava/lang/Object;)Ljava/lang/Object;",
@@ -71,7 +89,7 @@ fn static_fields_execute_through_lowering_and_dispatch() {
                     Ref(NObjPtr::null()),
                     Ref(NObjPtr::null()),
                 ),
-                ("inherited", "(I)I", Int(917), Int(917)),
+                ("inherited", "(I)I", Int(JInt(917)), Int(JInt(917))),
             ];
             for &(name, desc, input, expected) in cases {
                 for fuel in [1, 10000] {
@@ -139,12 +157,15 @@ fn static_field_resolution_and_failures_preserve_storage_and_stack() {
                 Err(ResolveError::NoSuchField { .. })
             ));
 
-            assert_value(run_method(owner, "integer", "(I)I", &[Int(0)], 1), Int(0));
+            assert_value(
+                run_method(owner, "integer", "(I)I", &[Int(JInt(0))], 1),
+                Int(JInt(0)),
+            );
             let mut frame = InterpreterFrame::try_new(
-                Invocation::lookup_declared(owner, "integer", "(I)I", &[Int(0)]).unwrap(),
+                Invocation::lookup_declared(owner, "integer", "(I)I", &[Int(JInt(0))]).unwrap(),
             )
             .unwrap();
-            frame.push(Slot::Int(42));
+            frame.push(Slot::Int(JInt(42)));
             assert!(matches!(
                 put_static(&mut frame, &field_ref("StaticFields", "instance", "I"))
                     .err()
@@ -152,7 +173,7 @@ fn static_field_resolution_and_failures_preserve_storage_and_stack() {
                     .kind,
                 ExecErrorKind::ExpectedStaticField { .. }
             ));
-            assert!(matches!(frame.operand_stack(), [Slot::Int(42)]));
+            assert!(matches!(frame.operand_stack(), [Slot::Int(JInt(42))]));
             assert!(matches!(
                 put_static(
                     &mut frame,
@@ -173,8 +194,8 @@ fn static_field_resolution_and_failures_preserve_storage_and_stack() {
                         if klass.name().utf8() == class
                 ));
             }
-            assert!(matches!(frame.operand_stack(), [Slot::Int(42)]));
-            frame.replace_stack_top(1, &[Slot::Float(4.0)]);
+            assert!(matches!(frame.operand_stack(), [Slot::Int(JInt(42))]));
+            frame.replace_stack_top(1, &[Slot::Float(JFloat(4.0))]);
             assert!(matches!(
                 put_static(&mut frame, &field_ref("StaticFields", "i", "I"))
                     .err()
@@ -182,10 +203,8 @@ fn static_field_resolution_and_failures_preserve_storage_and_stack() {
                     .kind,
                 ExecErrorKind::MismatchSlotType
             ));
-            assert_eq!(
-                &*owner.fields().statics.bytes(),
-                &vec![0; owner.fields().statics.layout.byte_size]
-            );
+            let int = owner.find_declared_field("i", "I").unwrap();
+            assert!(matches!(owner.fields().load_static(int), Int(JInt(0))));
             assert!(matches!(frame.operand_stack(), [Slot::Float(_)]));
             frame.replace_stack_top(1, &[]);
             assert!(matches!(
@@ -196,12 +215,12 @@ fn static_field_resolution_and_failures_preserve_storage_and_stack() {
                 ExecErrorKind::StackUnderflow
             ));
             for (value, expected) in [(2, 0), (3, 1)] {
-                frame.push(Slot::Int(value));
+                frame.push(Slot::Int(JInt(value)));
                 put_static(&mut frame, &field_ref("StaticFields", "z", "Z"))
                     .unwrap_or_else(|e| panic!("{e:?}"));
                 get_static(&mut frame, &field_ref("StaticFields", "z", "Z"))
                     .unwrap_or_else(|e| panic!("{e:?}"));
-                assert!(matches!(frame.operand_stack(), [Slot::Int(v)] if *v == expected));
+                assert!(matches!(frame.operand_stack(), [Slot::Int(JInt(v))] if *v == expected));
                 frame.replace_stack_top(1, &[]);
             }
 
@@ -228,6 +247,72 @@ fn static_field_resolution_and_failures_preserve_storage_and_stack() {
             field_ref("FieldAccess$Sibling", "shared", "I")
                 .resolve(subclass)
                 .unwrap();
+        },
+    );
+}
+
+#[test]
+fn volatile_static_accesses_order_across_declaring_classes() {
+    use crate::engines::protocol::MethodReturn;
+    use std::{sync::Barrier, thread};
+
+    isolated(
+        concat!(
+            module_path!(),
+            "::volatile_static_accesses_order_across_declaring_classes"
+        ),
+        || {
+            init_vm(fixture_dir());
+            let cld = ClassLoaderData::new(None);
+            let owner = load_normal_klass(&cld, &SymbolTable::intern("StaticFields")).unwrap();
+            // Initialize both declaring classes before the two workers start.
+            assert_value(
+                run_method(owner, "writeLeftReadRight", "()I", &[], 100),
+                Int(JInt(0)),
+            );
+            let left = field_ref("StaticFields$Left", "value", "I")
+                .resolve(owner)
+                .unwrap();
+            let right = field_ref("StaticFields$Right", "value", "I")
+                .resolve(owner)
+                .unwrap();
+            const ROUNDS: usize = 256;
+            let barrier = Barrier::new(3);
+
+            let both_zero = thread::scope(|scope| {
+                let worker = |name| {
+                    let mut reads = Vec::with_capacity(ROUNDS);
+                    for _ in 0..ROUNDS {
+                        barrier.wait();
+                        reads.push(run_method(owner, name, "()I", &[], 100));
+                        barrier.wait();
+                    }
+                    reads
+                };
+                let first = scope.spawn(move || worker("writeLeftReadRight"));
+                let second = scope.spawn(move || worker("writeRightReadLeft"));
+                for _ in 0..ROUNDS {
+                    left.store_static(Int(JInt(0)));
+                    right.store_static(Int(JInt(0)));
+                    barrier.wait();
+                    barrier.wait();
+                }
+                first
+                    .join()
+                    .unwrap()
+                    .into_iter()
+                    .zip(second.join().unwrap())
+                    .any(|pair| {
+                        matches!(
+                            pair,
+                            (
+                                MethodReturn::Value(Int(JInt(0))),
+                                MethodReturn::Value(Int(JInt(0)))
+                            )
+                        )
+                    })
+            });
+            assert!(!both_zero, "both volatile reads observed the initial value");
         },
     );
 }

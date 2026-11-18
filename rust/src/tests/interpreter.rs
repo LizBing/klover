@@ -20,7 +20,7 @@ use crate::{
         protocol::{EngineExit, ExecBudget, MethodReturn},
     },
     gc_bindings::oop_hierarchy::NObjPtr,
-    oops::jvalue::JValue,
+    oops::jvalue::{JBoolean, JByte, JChar, JDouble, JFloat, JInt, JLong, JShort, JValue},
     runtime::java_thread::JavaThread,
 };
 
@@ -54,8 +54,8 @@ fn assert_stack(frame: &InterpreterFrame<'_, '_>, expected: &[Slot]) {
     );
     for (actual, expected) in actual.iter().zip(expected) {
         let equal = match (actual, expected) {
-            (Slot::Int(a), Slot::Int(b)) => a == b,
-            (Slot::Float(a), Slot::Float(b)) => a.to_bits() == b.to_bits(),
+            (Slot::Int(JInt(a)), Slot::Int(JInt(b))) => a == b,
+            (Slot::Float(JFloat(a)), Slot::Float(JFloat(b))) => a.to_bits() == b.to_bits(),
             (Slot::Ref(a), Slot::Ref(b)) => a.as_u32() == b.as_u32(),
             (Slot::LongHigh(a), Slot::LongHigh(b))
             | (Slot::LongLow(a), Slot::LongLow(b))
@@ -74,14 +74,14 @@ fn frame_initializes_arguments_with_their_local_slot_widths() {
     let cld = ClassLoaderData::new(None);
     let desc = "(ZBSCIJDFLjava/lang/Object;)V";
     let args = [
-        JValue::Boolean(1),
-        JValue::Byte(-2),
-        JValue::Short(-300),
-        JValue::Char(65535),
-        JValue::Int(42),
-        JValue::Long(i64::MIN + 123),
-        JValue::Double(-0.0),
-        JValue::Float(1.5),
+        JValue::Boolean(JBoolean(1)),
+        JValue::Byte(JByte(-2)),
+        JValue::Short(JShort(-300)),
+        JValue::Char(JChar(65535)),
+        JValue::Int(JInt(42)),
+        JValue::Long(JLong(i64::MIN + 123)),
+        JValue::Double(JDouble(-0.0)),
+        JValue::Float(JFloat(1.5)),
         JValue::Ref(NObjPtr::null()),
     ];
     for max_locals in [11, 12] {
@@ -89,13 +89,16 @@ fn frame_initializes_arguments_with_their_local_slot_widths() {
         let call = Invocation::lookup_declared(&owner, "test", desc, &args).unwrap();
         let mut frame = InterpreterFrame::try_new(call).unwrap();
         for (idx, expected) in [1, -2, -300, 65535, 42].into_iter().enumerate() {
-            assert!(matches!(frame.get_local(idx).unwrap(), Slot::Int(v) if v == expected));
+            assert!(matches!(frame.get_local(idx).unwrap(), Slot::Int(JInt(v)) if v == expected));
         }
         step(&mut frame, LLoad(LocalIdx(5)));
-        assert_eq!(frame.pop_long().unwrap(), i64::MIN + 123);
+        assert_eq!(frame.pop_long().unwrap().0, i64::MIN + 123);
         step(&mut frame, DLoad(LocalIdx(7)));
-        assert_eq!(frame.pop_double().unwrap().to_bits(), (-0.0f64).to_bits());
-        assert!(matches!(frame.get_local(9).unwrap(), Slot::Float(1.5)));
+        assert_eq!(frame.pop_double().unwrap().0.to_bits(), (-0.0f64).to_bits());
+        assert!(matches!(
+            frame.get_local(9).unwrap(),
+            Slot::Float(JFloat(1.5))
+        ));
         assert!(matches!(frame.get_local(10).unwrap(), Slot::Ref(r) if r.is_null()));
         if max_locals == 12 {
             assert!(matches!(frame.get_local(11).unwrap(), Slot::Unused));
@@ -112,11 +115,16 @@ fn frame_rejects_arguments_that_exceed_max_locals() {
     ensure_metaspace();
     let cld = ClassLoaderData::new(None);
     for (desc, args, required, available) in [
-        ("(I)V", vec![JValue::Int(1)], 1, 0),
-        ("(J)V", vec![JValue::Long(1)], 2, 0),
-        ("(J)V", vec![JValue::Long(1)], 2, 1),
-        ("(D)V", vec![JValue::Double(1.0)], 2, 1),
-        ("(JD)V", vec![JValue::Long(1), JValue::Double(2.0)], 4, 3),
+        ("(I)V", vec![JValue::Int(JInt(1))], 1, 0),
+        ("(J)V", vec![JValue::Long(JLong(1))], 2, 0),
+        ("(J)V", vec![JValue::Long(JLong(1))], 2, 1),
+        ("(D)V", vec![JValue::Double(JDouble(1.0))], 2, 1),
+        (
+            "(JD)V",
+            vec![JValue::Long(JLong(1)), JValue::Double(JDouble(2.0))],
+            4,
+            3,
+        ),
     ] {
         let owner = crate::tests::support::parse_class_with_runtime_max_locals(
             &cld,
@@ -169,7 +177,7 @@ fn frame_counts_the_receiver_as_one_local_slot() {
         let bytes = class_bytes_with_flags("(J)V", &[0xb1], 2, 3, 0x1);
         let owner =
             crate::tests::support::parse_class_with_runtime_max_locals(&cld, &bytes, max_locals);
-        let args = [JValue::Ref(NObjPtr::null()), JValue::Long(42)];
+        let args = [JValue::Ref(NObjPtr::null()), JValue::Long(JLong(42))];
         let call = Invocation::lookup_declared(&owner, "test", "(J)V", &args).unwrap();
         let result = InterpreterFrame::try_new(call);
         if max_locals == 2 {
@@ -184,7 +192,7 @@ fn frame_counts_the_receiver_as_one_local_slot() {
             let mut frame = result.unwrap();
             assert!(matches!(frame.get_local(0).unwrap(), Slot::Ref(r) if r.is_null()));
             step(&mut frame, LLoad(LocalIdx(1)));
-            assert_eq!(frame.pop_long().unwrap(), 42);
+            assert_eq!(frame.pop_long().unwrap().0, 42);
         }
     }
 }
@@ -212,10 +220,10 @@ fn integer_binary_operations_cover_boundaries_and_operand_order() {
     ];
     for (inst, left, right, expected) in cases {
         with_frame(&cld, |frame| {
-            frame.push_int(left);
-            frame.push_int(right);
+            frame.push_int(JInt(left));
+            frame.push_int(JInt(right));
             step(frame, inst);
-            assert_eq!(frame.pop_int().unwrap(), expected);
+            assert_eq!(frame.pop_int().unwrap().0, expected);
             assert_stack(frame, &[]);
         });
     }
@@ -238,10 +246,10 @@ fn long_binary_operations_cover_boundaries_and_operand_order() {
         (LXor, 12, 10, 6),
     ] {
         with_frame(&cld, |frame| {
-            frame.push_long(left);
-            frame.push_long(right);
+            frame.push_long(JLong(left));
+            frame.push_long(JLong(right));
             step(frame, inst);
-            assert_eq!(frame.pop_long().unwrap(), expected);
+            assert_eq!(frame.pop_long().unwrap().0, expected);
             assert_stack(frame, &[]);
         });
     }
@@ -253,10 +261,10 @@ fn long_binary_operations_cover_boundaries_and_operand_order() {
         (LUShR, -1, 65, i64::MAX),
     ] {
         with_frame(&cld, |frame| {
-            frame.push_long(value);
-            frame.push_int(distance);
+            frame.push_long(JLong(value));
+            frame.push_int(JInt(distance));
             step(frame, inst);
-            assert_eq!(frame.pop_long().unwrap(), expected);
+            assert_eq!(frame.pop_long().unwrap().0, expected);
         });
     }
 }
@@ -268,11 +276,11 @@ fn division_and_remainder_by_zero_are_structured_errors() {
     for inst in [IDiv, IRem, LDiv, LRem] {
         with_frame(&cld, |frame| {
             if matches!(inst, LDiv | LRem) {
-                frame.push_long(1);
-                frame.push_long(0);
+                frame.push_long(JLong(1));
+                frame.push_long(JLong(0));
             } else {
-                frame.push_int(1);
-                frame.push_int(0);
+                frame.push_int(JInt(1));
+                frame.push_int(JInt(0));
             }
             let error = Interpreter::execute_instruction(frame, inst).err().unwrap();
             assert!(matches!(error.kind, ExecErrorKind::DivisionByZero));
@@ -293,10 +301,10 @@ fn floating_arithmetic_and_signed_zero() {
         (FRem, 1.0),
     ] {
         with_frame(&cld, |f| {
-            f.push_float(7.0);
-            f.push_float(2.0);
+            f.push_float(JFloat(7.0));
+            f.push_float(JFloat(2.0));
             step(f, inst);
-            assert_eq!(f.pop_float().unwrap(), expected);
+            assert_eq!(f.pop_float().unwrap().0, expected);
         });
     }
     for (inst, expected) in [
@@ -307,25 +315,25 @@ fn floating_arithmetic_and_signed_zero() {
         (DRem, 1.0),
     ] {
         with_frame(&cld, |f| {
-            f.push_double(7.0);
-            f.push_double(2.0);
+            f.push_double(JDouble(7.0));
+            f.push_double(JDouble(2.0));
             step(f, inst);
-            assert_eq!(f.pop_double().unwrap(), expected);
+            assert_eq!(f.pop_double().unwrap().0, expected);
         });
     }
     with_frame(&cld, |f| {
-        f.push_float(0.0);
+        f.push_float(JFloat(0.0));
         step(f, FNeg);
-        assert_eq!(f.pop_float().unwrap().to_bits(), (-0.0f32).to_bits());
-        f.push_double(0.0);
+        assert_eq!(f.pop_float().unwrap().0.to_bits(), (-0.0f32).to_bits());
+        f.push_double(JDouble(0.0));
         step(f, DNeg);
-        assert_eq!(f.pop_double().unwrap().to_bits(), (-0.0f64).to_bits());
-        f.push_int(i32::MIN);
+        assert_eq!(f.pop_double().unwrap().0.to_bits(), (-0.0f64).to_bits());
+        f.push_int(JInt(i32::MIN));
         step(f, INeg);
-        assert_eq!(f.pop_int().unwrap(), i32::MIN);
-        f.push_long(i64::MIN);
+        assert_eq!(f.pop_int().unwrap().0, i32::MIN);
+        f.push_long(JLong(i64::MIN));
         step(f, LNeg);
-        assert_eq!(f.pop_long().unwrap(), i64::MIN);
+        assert_eq!(f.pop_long().unwrap().0, i64::MIN);
     });
 }
 
@@ -346,26 +354,26 @@ fn numeric_conversions_preserve_java_rules() {
     let cld = ClassLoaderData::new(None);
     use JValue::{Double, Float, Int, Long};
     let cases = [
-        (I2L, Int(-3), Long(-3)),
-        (I2F, Int(-3), Float(-3.0)),
-        (I2D, Int(-3), Double(-3.0)),
-        (L2I, Long(0x1_0000_0001), Int(1)),
-        (L2F, Long(-3), Float(-3.0)),
-        (L2D, Long(-3), Double(-3.0)),
-        (F2I, Float(-3.75), Int(-3)),
-        (F2L, Float(-3.75), Long(-3)),
-        (F2D, Float(1.5), Double(1.5)),
-        (D2I, Double(-3.75), Int(-3)),
-        (D2L, Double(-3.75), Long(-3)),
-        (D2F, Double(1.5), Float(1.5)),
-        (I2B, Int(255), Int(-1)),
-        (I2C, Int(-1), Int(65535)),
-        (I2S, Int(65535), Int(-1)),
-        (F2I, Float(f32::NAN), Int(0)),
-        (F2I, Float(f32::INFINITY), Int(i32::MAX)),
-        (D2I, Double(f64::NEG_INFINITY), Int(i32::MIN)),
-        (D2L, Double(f64::INFINITY), Long(i64::MAX)),
-        (D2L, Double(f64::NAN), Long(0)),
+        (I2L, Int(JInt(-3)), Long(JLong(-3))),
+        (I2F, Int(JInt(-3)), Float(JFloat(-3.0))),
+        (I2D, Int(JInt(-3)), Double(JDouble(-3.0))),
+        (L2I, Long(JLong(0x1_0000_0001)), Int(JInt(1))),
+        (L2F, Long(JLong(-3)), Float(JFloat(-3.0))),
+        (L2D, Long(JLong(-3)), Double(JDouble(-3.0))),
+        (F2I, Float(JFloat(-3.75)), Int(JInt(-3))),
+        (F2L, Float(JFloat(-3.75)), Long(JLong(-3))),
+        (F2D, Float(JFloat(1.5)), Double(JDouble(1.5))),
+        (D2I, Double(JDouble(-3.75)), Int(JInt(-3))),
+        (D2L, Double(JDouble(-3.75)), Long(JLong(-3))),
+        (D2F, Double(JDouble(1.5)), Float(JFloat(1.5))),
+        (I2B, Int(JInt(255)), Int(JInt(-1))),
+        (I2C, Int(JInt(-1)), Int(JInt(65535))),
+        (I2S, Int(JInt(65535)), Int(JInt(-1))),
+        (F2I, Float(JFloat(f32::NAN)), Int(JInt(0))),
+        (F2I, Float(JFloat(f32::INFINITY)), Int(JInt(i32::MAX))),
+        (D2I, Double(JDouble(f64::NEG_INFINITY)), Int(JInt(i32::MIN))),
+        (D2L, Double(JDouble(f64::INFINITY)), Long(JLong(i64::MAX))),
+        (D2L, Double(JDouble(f64::NAN)), Long(JLong(0))),
     ];
     for (inst, input, expected) in cases {
         with_frame(&cld, |f| {
@@ -396,10 +404,10 @@ fn comparisons_cover_nan_ordering_and_equal_zero() {
         (FCmpG, 1.0, 2.0, -1),
     ] {
         with_frame(&cld, |f| {
-            f.push_float(left);
-            f.push_float(right);
+            f.push_float(JFloat(left));
+            f.push_float(JFloat(right));
             step(f, inst);
-            assert_eq!(f.pop_int().unwrap(), expected);
+            assert_eq!(f.pop_int().unwrap().0, expected);
         });
     }
     for (inst, left, right, expected) in [
@@ -410,18 +418,18 @@ fn comparisons_cover_nan_ordering_and_equal_zero() {
         (DCmpG, 1.0, 2.0, -1),
     ] {
         with_frame(&cld, |f| {
-            f.push_double(left);
-            f.push_double(right);
+            f.push_double(JDouble(left));
+            f.push_double(JDouble(right));
             step(f, inst);
-            assert_eq!(f.pop_int().unwrap(), expected);
+            assert_eq!(f.pop_int().unwrap().0, expected);
         });
     }
     for (left, right, expected) in [(i64::MIN, i64::MAX, -1), (4, 4, 0), (5, 4, 1)] {
         with_frame(&cld, |f| {
-            f.push_long(left);
-            f.push_long(right);
+            f.push_long(JLong(left));
+            f.push_long(JLong(right));
             step(f, LCmp);
-            assert_eq!(f.pop_int().unwrap(), expected);
+            assert_eq!(f.pop_int().unwrap().0, expected);
         });
     }
 }
@@ -432,12 +440,12 @@ fn constants_and_typed_returns() {
     let cld = ClassLoaderData::new(None);
     use JValue::{Double, Float, Int, Long, Ref};
     for (inst, ret, expected) in [
-        (IConst(-1), IReturn, Int(-1)),
-        (BIPush(-128), IReturn, Int(-128)),
-        (SIPush(-32768), IReturn, Int(-32768)),
-        (LConst(1), LReturn, Long(1)),
-        (FConst(2.0), FReturn, Float(2.0)),
-        (DConst(1.0), DReturn, Double(1.0)),
+        (IConst(JInt(-1)), IReturn, Int(JInt(-1))),
+        (BIPush(JByte(-128)), IReturn, Int(JInt(-128))),
+        (SIPush(JShort(-32768)), IReturn, Int(JInt(-32768))),
+        (LConst(JLong(1)), LReturn, Long(JLong(1))),
+        (FConst(JFloat(2.0)), FReturn, Float(JFloat(2.0))),
+        (DConst(JDouble(1.0)), DReturn, Double(JDouble(1.0))),
         (AConstNull, AReturn, Ref(NObjPtr::null())),
     ] {
         with_frame(&cld, |f| {
@@ -469,46 +477,75 @@ fn stack_forms_preserve_value_order() {
     let dh = DoubleHigh([0, 0, 0, 3]);
     let dl = DoubleLow([0, 0, 0, 4]);
     let cases: Vec<(Instruction<'_>, Vec<Slot>, Vec<Slot>)> = vec![
-        (Pop, vec![Int(1), Int(2)], vec![Int(1)]),
-        (Pop2, vec![Int(1), Int(2)], vec![]),
+        (Pop, vec![Int(JInt(1)), Int(JInt(2))], vec![Int(JInt(1))]),
+        (Pop2, vec![Int(JInt(1)), Int(JInt(2))], vec![]),
         (Pop2, vec![h, l], vec![]),
-        (Dup, vec![Int(1)], vec![Int(1), Int(1)]),
-        (DupX1, vec![Int(1), Int(2)], vec![Int(2), Int(1), Int(2)]),
+        (Dup, vec![Int(JInt(1))], vec![Int(JInt(1)), Int(JInt(1))]),
+        (
+            DupX1,
+            vec![Int(JInt(1)), Int(JInt(2))],
+            vec![Int(JInt(2)), Int(JInt(1)), Int(JInt(2))],
+        ),
         (
             DupX2,
-            vec![Int(1), Int(2), Int(3)],
-            vec![Int(3), Int(1), Int(2), Int(3)],
+            vec![Int(JInt(1)), Int(JInt(2)), Int(JInt(3))],
+            vec![Int(JInt(3)), Int(JInt(1)), Int(JInt(2)), Int(JInt(3))],
         ),
-        (DupX2, vec![h, l, Int(3)], vec![Int(3), h, l, Int(3)]),
+        (
+            DupX2,
+            vec![h, l, Int(JInt(3))],
+            vec![Int(JInt(3)), h, l, Int(JInt(3))],
+        ),
         (
             Dup2,
-            vec![Int(1), Int(2)],
-            vec![Int(1), Int(2), Int(1), Int(2)],
+            vec![Int(JInt(1)), Int(JInt(2))],
+            vec![Int(JInt(1)), Int(JInt(2)), Int(JInt(1)), Int(JInt(2))],
         ),
         (Dup2, vec![h, l], vec![h, l, h, l]),
         (
             Dup2X1,
-            vec![Int(1), Int(2), Int(3)],
-            vec![Int(2), Int(3), Int(1), Int(2), Int(3)],
-        ),
-        (Dup2X1, vec![Int(1), h, l], vec![h, l, Int(1), h, l]),
-        (
-            Dup2X2,
-            vec![Int(1), Int(2), Int(3), Int(4)],
-            vec![Int(3), Int(4), Int(1), Int(2), Int(3), Int(4)],
-        ),
-        (
-            Dup2X2,
-            vec![Int(1), Int(2), h, l],
-            vec![h, l, Int(1), Int(2), h, l],
+            vec![Int(JInt(1)), Int(JInt(2)), Int(JInt(3))],
+            vec![
+                Int(JInt(2)),
+                Int(JInt(3)),
+                Int(JInt(1)),
+                Int(JInt(2)),
+                Int(JInt(3)),
+            ],
         ),
         (
+            Dup2X1,
+            vec![Int(JInt(1)), h, l],
+            vec![h, l, Int(JInt(1)), h, l],
+        ),
+        (
             Dup2X2,
-            vec![h, l, Int(1), Int(2)],
-            vec![Int(1), Int(2), h, l, Int(1), Int(2)],
+            vec![Int(JInt(1)), Int(JInt(2)), Int(JInt(3)), Int(JInt(4))],
+            vec![
+                Int(JInt(3)),
+                Int(JInt(4)),
+                Int(JInt(1)),
+                Int(JInt(2)),
+                Int(JInt(3)),
+                Int(JInt(4)),
+            ],
+        ),
+        (
+            Dup2X2,
+            vec![Int(JInt(1)), Int(JInt(2)), h, l],
+            vec![h, l, Int(JInt(1)), Int(JInt(2)), h, l],
+        ),
+        (
+            Dup2X2,
+            vec![h, l, Int(JInt(1)), Int(JInt(2))],
+            vec![Int(JInt(1)), Int(JInt(2)), h, l, Int(JInt(1)), Int(JInt(2))],
         ),
         (Dup2X2, vec![h, l, dh, dl], vec![dh, dl, h, l, dh, dl]),
-        (Swap, vec![Int(1), Int(2)], vec![Int(2), Int(1)]),
+        (
+            Swap,
+            vec![Int(JInt(1)), Int(JInt(2))],
+            vec![Int(JInt(2)), Int(JInt(1))],
+        ),
     ];
     for (inst, before, expected) in cases {
         with_frame(&cld, |f| {
@@ -531,9 +568,9 @@ fn invalid_stack_forms_fail_without_partial_mutation() {
         (Pop, vec![h, l]),
         (Dup, vec![h, l]),
         (Swap, vec![h, l]),
-        (Pop2, vec![Slot::Int(1), l]),
+        (Pop2, vec![Slot::Int(JInt(1)), l]),
         (Dup2, vec![l, h]),
-        (DupX1, vec![Slot::Int(1)]),
+        (DupX1, vec![Slot::Int(JInt(1))]),
         (Dup2X2, vec![h, l]),
     ] {
         with_frame(&cld, |f| {
@@ -555,26 +592,26 @@ fn local_loads_stores_and_signed_increment() {
     ensure_metaspace();
     let cld = ClassLoaderData::new(None);
     with_frame(&cld, |f| {
-        f.push_int(i32::MAX);
+        f.push_int(JInt(i32::MAX));
         step(f, IStore(LocalIdx(3)));
-        step(f, IInc(LocalIdx(3), 1));
+        step(f, IInc(LocalIdx(3), JShort(1)));
         step(f, ILoad(LocalIdx(3)));
-        assert_eq!(f.pop_int().unwrap(), i32::MIN);
-        step(f, IInc(LocalIdx(3), -1));
+        assert_eq!(f.pop_int().unwrap().0, i32::MIN);
+        step(f, IInc(LocalIdx(3), JShort(-1)));
         step(f, ILoad(LocalIdx(3)));
-        assert_eq!(f.pop_int().unwrap(), i32::MAX);
-        f.push_long(i64::MIN);
+        assert_eq!(f.pop_int().unwrap().0, i32::MAX);
+        f.push_long(JLong(i64::MIN));
         step(f, LStore(LocalIdx(4)));
         step(f, LLoad(LocalIdx(4)));
-        assert_eq!(f.pop_long().unwrap(), i64::MIN);
-        f.push_double(-0.0);
+        assert_eq!(f.pop_long().unwrap().0, i64::MIN);
+        f.push_double(JDouble(-0.0));
         step(f, DStore(LocalIdx(6)));
         step(f, DLoad(LocalIdx(6)));
-        assert_eq!(f.pop_double().unwrap().to_bits(), (-0.0f64).to_bits());
-        f.push_float(1.5);
+        assert_eq!(f.pop_double().unwrap().0.to_bits(), (-0.0f64).to_bits());
+        f.push_float(JFloat(1.5));
         step(f, FStore(LocalIdx(8)));
         step(f, FLoad(LocalIdx(8)));
-        assert_eq!(f.pop_float().unwrap(), 1.5);
+        assert_eq!(f.pop_float().unwrap().0, 1.5);
         f.push_ref(NObjPtr::null());
         step(f, AStore(LocalIdx(9)));
         step(f, ALoad(LocalIdx(9)));
@@ -589,20 +626,20 @@ fn overwriting_either_wide_local_half_invalidates_its_partner() {
     let cld = ClassLoaderData::new(None);
     for idx in [4, 5] {
         with_frame(&cld, |f| {
-            f.push_long(42);
+            f.push_long(JLong(42));
             step(f, LStore(LocalIdx(4)));
-            f.set_local(idx, Slot::Int(7)).unwrap();
+            f.set_local(idx, Slot::Int(JInt(7))).unwrap();
             assert!(matches!(
                 f.get_local(if idx == 4 { 5 } else { 4 }).unwrap(),
                 Slot::Unused
             ));
-            f.push_double(3.0);
+            f.push_double(JDouble(3.0));
             step(f, DStore(LocalIdx(4)));
-            f.push_long(99);
+            f.push_long(JLong(99));
             step(f, LStore(LocalIdx(5)));
             assert!(matches!(f.get_local(4).unwrap(), Slot::Unused));
             step(f, LLoad(LocalIdx(5)));
-            assert_eq!(f.pop_long().unwrap(), 99);
+            assert_eq!(f.pop_long().unwrap().0, 99);
         });
     }
 }
@@ -620,17 +657,17 @@ fn invalid_locals_and_types_report_structured_errors() {
             .err()
             .unwrap();
         assert!(matches!(error.kind, ExecErrorKind::MismatchSlotType));
-        f.set_local(15, Slot::Int(42)).unwrap();
+        f.set_local(15, Slot::Int(JInt(42))).unwrap();
         let error = f
             .set_wide_local(15, Slot::LongHigh([0; 4]), Slot::LongLow([0; 4]))
             .unwrap_err();
         assert!(matches!(error.kind, ExecErrorKind::InvalidLocalIndex(16)));
-        assert!(matches!(f.get_local(15).unwrap(), Slot::Int(42)));
+        assert!(matches!(f.get_local(15).unwrap(), Slot::Int(JInt(42))));
         assert!(matches!(
             f.pop_int().unwrap_err().kind,
             ExecErrorKind::StackUnderflow
         ));
-        f.push_float(1.0);
+        f.push_float(JFloat(1.0));
         assert!(matches!(
             f.pop_int().unwrap_err().kind,
             ExecErrorKind::MismatchSlotType
@@ -652,9 +689,9 @@ fn conditional_branches_cover_taken_and_untaken_paths() {
         for (branch, taken, untaken) in branches {
             for (value, expected) in [(taken, 2), (untaken, 1)] {
                 with_code(&cld, &[0x04, 0x05, 0xb1], |f| {
-                    f.push_int(value);
+                    f.push_int(JInt(value));
                     step(f, branch(InstIdx(1)));
-                    assert!(matches!(f.next_inst(), Some(IConst(v)) if v == expected));
+                    assert!(matches!(f.next_inst(), Some(IConst(JInt(v))) if v == expected));
                 });
             }
         }
@@ -669,10 +706,10 @@ fn conditional_branches_cover_taken_and_untaken_paths() {
         for (branch, taken, untaken) in pairs {
             for (left, expected) in [(taken, 2), (untaken, 1)] {
                 with_code(&cld, &[0x04, 0x05, 0xb1], |f| {
-                    f.push_int(left);
-                    f.push_int(5);
+                    f.push_int(JInt(left));
+                    f.push_int(JInt(5));
                     step(f, branch(InstIdx(1)));
-                    assert!(matches!(f.next_inst(), Some(IConst(v)) if v == expected));
+                    assert!(matches!(f.next_inst(), Some(IConst(JInt(v))) if v == expected));
                 });
             }
         }
@@ -690,7 +727,7 @@ fn reference_branches_and_invalid_targets() {
         with_code(&cld, &[0x04, 0x05, 0xb1], |f| {
             f.push_ref(NObjPtr::null());
             step(f, inst);
-            assert!(matches!(f.next_inst(), Some(IConst(v)) if v == expected));
+            assert!(matches!(f.next_inst(), Some(IConst(JInt(v))) if v == expected));
         });
     }
     for (inst, expected) in [(IfACmpEq(InstIdx(1)), 2), (IfACmpNe(InstIdx(1)), 1)] {
@@ -698,7 +735,7 @@ fn reference_branches_and_invalid_targets() {
             f.push_ref(NObjPtr::null());
             f.push_ref(NObjPtr::null());
             step(f, inst);
-            assert!(matches!(f.next_inst(), Some(IConst(v)) if v == expected));
+            assert!(matches!(f.next_inst(), Some(IConst(JInt(v))) if v == expected));
         });
     }
     with_frame(&cld, |f| {
@@ -725,7 +762,7 @@ fn budget_zero_and_instruction_cost_preserve_resumption() {
             Interpreter::execute(f, &mut ExecBudget::new(2)).unwrap(),
             EngineExit::BudgetExhausted
         ));
-        assert_stack(f, &[Slot::Int(1), Slot::Int(2)]);
+        assert_stack(f, &[Slot::Int(JInt(1)), Slot::Int(JInt(2))]);
         // iadd currently costs two but may start with one unit remaining.
         let mut budget = ExecBudget::new(1);
         assert!(matches!(
@@ -733,12 +770,12 @@ fn budget_zero_and_instruction_cost_preserve_resumption() {
             EngineExit::BudgetExhausted
         ));
         assert_eq!(budget.remaining(), 0);
-        assert_stack(f, &[Slot::Int(3)]);
+        assert_stack(f, &[Slot::Int(JInt(3))]);
         let EngineExit::Return(value) = Interpreter::execute(f, &mut ExecBudget::new(1)).unwrap()
         else {
             panic!("return lost after yield")
         };
-        assert_value(value, JValue::Int(3));
+        assert_value(value, JValue::Int(JInt(3)));
     });
 }
 
@@ -794,8 +831,8 @@ fn wide_bytecode_survives_parsing_lowering_and_execution() {
         ),
     );
     assert_value(
-        run_method(&owner, "test", "(I)I", &[JValue::Int(10)], 1),
-        JValue::Int(-990),
+        run_method(&owner, "test", "(I)I", &[JValue::Int(JInt(10))], 1),
+        JValue::Int(JInt(-990)),
     );
     // lload_0; wide lstore 400; wide lload 400; lreturn.
     let owner = parse_class(
@@ -808,8 +845,8 @@ fn wide_bytecode_survives_parsing_lowering_and_execution() {
         ),
     );
     assert_value(
-        run_method(&owner, "test", "(J)J", &[JValue::Long(1 << 40)], 1),
-        JValue::Long(1 << 40),
+        run_method(&owner, "test", "(J)J", &[JValue::Long(JLong(1 << 40))], 1),
+        JValue::Long(JLong(1 << 40)),
     );
 }
 

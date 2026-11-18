@@ -25,6 +25,11 @@ public class StaticFields {
     public static int inherited(int v) { Child.shared = v; return Base.shared; }
     public static int initialized() { return Initialized.value; }
 
+    static class Left { static volatile int value; }
+    static class Right { static volatile int value; }
+    public static int writeLeftReadRight() { Left.value = 1; return Right.value; }
+    public static int writeRightReadLeft() { Right.value = 1; return Left.value; }
+
     public static class Base { public static int shared; }
     public static class Child extends Base { static int unrelated = 7; }
     public static class Initialized { static int value = 7; }

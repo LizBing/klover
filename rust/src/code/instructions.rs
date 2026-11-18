@@ -23,9 +23,9 @@ pub struct RangeTable<'inst> {
 }
 
 impl RangeTable<'_> {
-    pub fn get_inst_idx(&self, index: JInt) -> InstIdx {
-        if self.low <= index && index <= self.high {
-            let idx = (index - self.low) as usize;
+    pub fn get_inst_idx(&self, JInt(index): JInt) -> InstIdx {
+        if self.low.0 <= index && index <= self.high.0 {
+            let idx = (index - self.low.0) as usize;
             self.jumps[idx]
         } else {
             self.default
@@ -40,11 +40,10 @@ pub struct LookupTable<'inst> {
 }
 
 impl LookupTable<'_> {
-    pub fn get_inst_idx(&self, key: JInt) -> InstIdx {
-        for iter in self.pairs.iter() {
-            let match_value = iter.0;
+    pub fn get_inst_idx(&self, JInt(key): JInt) -> InstIdx {
+        for &(JInt(match_value), target) in self.pairs {
             if key == match_value {
-                return iter.1;
+                return target;
             } else if key < match_value {
                 break;
             }
@@ -217,20 +216,22 @@ impl<'metadata> Instruction<'metadata> {
         match opcode {
             Opcode::Nop => Self::NOp,
             Opcode::AconstNull => Self::AConstNull,
-            Opcode::Iconst(value) => Self::IConst(*value),
-            Opcode::Lconst(value) => Self::LConst(*value),
-            Opcode::Fconst(value) => Self::FConst(*value),
-            Opcode::Dconst(value) => Self::DConst(*value),
-            Opcode::Bipush(value) => Self::BIPush(*value),
-            Opcode::Sipush(value) => Self::SIPush(*value),
+            Opcode::Iconst(value) => Self::IConst(JInt(*value)),
+            Opcode::Lconst(value) => Self::LConst(JLong(*value)),
+            Opcode::Fconst(value) => Self::FConst(JFloat(*value)),
+            Opcode::Dconst(value) => Self::DConst(JDouble(*value)),
+            Opcode::Bipush(value) => Self::BIPush(JByte(*value)),
+            Opcode::Sipush(value) => Self::SIPush(JShort(*value)),
             Opcode::Ldc(loadable) | Opcode::LdcW(loadable) => match loadable.as_ref() {
-                LoadableConstant::Integer(value) => Self::LdC(LdCLoadable::Integer(*value)),
-                LoadableConstant::Float(value) => Self::LdC(LdCLoadable::Float(*value)),
+                LoadableConstant::Integer(value) => Self::LdC(LdCLoadable::Integer(JInt(*value))),
+                LoadableConstant::Float(value) => Self::LdC(LdCLoadable::Float(JFloat(*value))),
                 _ => Self::Unsupported,
             },
             Opcode::Ldc2W(loadable) => match loadable.as_ref() {
-                LoadableConstant::Long(value) => Self::LdC2(LdC2Loadable::Long(*value)),
-                LoadableConstant::Double(value) => Self::LdC2(LdC2Loadable::Double(*value)),
+                LoadableConstant::Long(value) => Self::LdC2(LdC2Loadable::Long(JLong(*value))),
+                LoadableConstant::Double(value) => {
+                    Self::LdC2(LdC2Loadable::Double(JDouble(*value)))
+                }
                 _ => Self::Unsupported,
             },
             Opcode::Iload(index) => Self::ILoad(LocalIdx(*index as usize)),
@@ -288,7 +289,7 @@ impl<'metadata> Instruction<'metadata> {
             Opcode::LOr => Self::LOr,
             Opcode::IXor => Self::IXor,
             Opcode::LXor => Self::LXor,
-            Opcode::IInc(index, amount) => Self::IInc(LocalIdx(*index as usize), *amount),
+            Opcode::IInc(index, amount) => Self::IInc(LocalIdx(*index as usize), JShort(*amount)),
             Opcode::I2L => Self::I2L,
             Opcode::I2F => Self::I2F,
             Opcode::I2D => Self::I2D,
@@ -333,8 +334,8 @@ impl<'metadata> Instruction<'metadata> {
                 }
                 Self::TableSwitch(RangeTable {
                     default: target(table.default),
-                    low: table.low,
-                    high: table.high,
+                    low: JInt(table.low),
+                    high: JInt(table.high),
                     // Every slot is initialized; targets contain no resources.
                     jumps: unsafe { jumps.assume_init() }.leak(),
                 })
@@ -342,7 +343,7 @@ impl<'metadata> Instruction<'metadata> {
             Opcode::LookupSwitch(table) => {
                 let mut pairs = MsBox::new_uninit_slice(msa, table.match_offsets.len());
                 for (slot, (key, offset)) in pairs.iter_mut().zip(&table.match_offsets) {
-                    slot.write((*key, target(*offset)));
+                    slot.write((JInt(*key), target(*offset)));
                 }
                 Self::LookUpSwitch(LookupTable {
                     default: target(table.default),
@@ -452,7 +453,7 @@ mod tests {
         };
         assert!(matches!(
             Instruction::lower(&code, 0, msa, &mut tmp_cp, storage),
-            Instruction::IInc(LocalIdx(300), -1000)
+            Instruction::IInc(LocalIdx(300), JShort(-1000))
         ));
         assert!(matches!(
             Instruction::lower(&code, 1, msa, &mut tmp_cp, storage),
