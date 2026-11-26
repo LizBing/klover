@@ -9,10 +9,10 @@ use crate::{
     },
     oops::{
         jvalue::{JByte, JChar, JDouble, JFloat, JInt, JLong, JShort, JValue},
-        normal_klass::NormalKlass,
+        normal_klass::{KlassInitState, NormalKlass},
         symbol_table::SymbolTable,
     },
-    runtime::{class_initialization::InitializationState, java_thread::JavaThread},
+    runtime::java_thread::JavaThread,
 };
 
 fn start<'a>(owner: &'a NormalKlass<'a>, method: &str) -> JavaThread<'a, 'a> {
@@ -92,7 +92,7 @@ fn initialization_orders_dependencies_and_retries_active_uses_once() {
                 .unwrap();
                 assert!(matches!(
                     *untouched.initialization.lock(),
-                    InitializationState::Uninitialized
+                    KlassInitState::Uninitialized
                 ));
 
                 let clinit =
@@ -208,13 +208,13 @@ fn competing_threads_wait_and_abandoned_initialization_fails() {
                     ));
                     if matches!(
                         *slow.initialization.lock(),
-                        InitializationState::Initializing(_)
+                        KlassInitState::Initializing(_)
                     ) {
                         break;
                     }
                 }
                 assert!(
-                    matches!(*slow.initialization.lock(), InitializationState::Initializing(id) if id == first.id())
+                    matches!(*slow.initialization.lock(), KlassInitState::Initializing(id) if id == first.id())
                 );
                 let mut second = start(owner, "slow");
                 assert_ne!(first.id(), second.id());

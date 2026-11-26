@@ -1,4 +1,4 @@
-use crate::runtime::{class_initialization::InitializationState, java_thread::JavaThreadId};
+use crate::runtime::java_thread::JavaThreadId;
 use std::ops::Deref;
 
 use crate::{
@@ -62,8 +62,16 @@ impl<'dc> UnlinkedNormalKlass<'dc> {
 }
 
 #[derive(Debug)]
+pub(crate) enum KlassInitState {
+    Uninitialized,
+    Initializing(JavaThreadId),
+    Initialized,
+    Failed(String),
+}
+
+#[derive(Debug)]
 pub struct NormalKlass<'dc> {
-    pub(crate) initialization: parking_lot::Mutex<InitializationState>,
+    pub(crate) initialization: parking_lot::Mutex<KlassInitState>,
     name: SymbolHandle,
     acc_flags: ClassAccessFlags,
     pub(super) def_cld: &'dc ClassLoaderData,
@@ -151,7 +159,7 @@ impl<'dc> NormalKlass<'dc> {
 
         let begin_offs = super_klass.map_or(OBJECT_HEADER_SIZE, |parent| parent.instance_size());
         Ok(Self {
-            initialization: parking_lot::Mutex::new(InitializationState::Uninitialized),
+            initialization: parking_lot::Mutex::new(KlassInitState::Uninitialized),
             name: unlinked.name,
             acc_flags: unlinked.acc_flags,
             def_cld: unlinked.def_cld,
@@ -223,8 +231,8 @@ impl<'meta> NormalKlass<'meta> {
 
     pub(crate) fn initialization_ready(&self, thread: Option<JavaThreadId>) -> bool {
         match &*self.initialization.lock() {
-            InitializationState::Initialized => true,
-            InitializationState::Initializing(owner) => Some(*owner) == thread,
+            KlassInitState::Initialized => true,
+            KlassInitState::Initializing(owner) => Some(*owner) == thread,
             _ => false,
         }
     }

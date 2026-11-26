@@ -5,8 +5,8 @@ use crate::{
         java_frame::JavaFrame,
         protocol::{EngineExit, ExecBudget, ExecutionContext, MethodReturn},
     },
-    oops::normal_klass::NormalKlass,
-    runtime::{class_initialization::InitializationState, java_thread::JavaThreadId},
+    oops::normal_klass::{KlassInitState, NormalKlass},
+    runtime::java_thread::JavaThreadId,
 };
 
 enum Phase {
@@ -38,8 +38,8 @@ impl<'exec, 'meta> InitializationFrame<'exec, 'meta> {
     fn fail(&mut self, reason: &str) {
         if let Some(owner) = self.owner.take() {
             let mut state = self.klass.initialization.lock();
-            if matches!(*state, InitializationState::Initializing(id) if id == owner) {
-                *state = InitializationState::Failed(reason.into());
+            if matches!(*state, KlassInitState::Initializing(id) if id == owner) {
+                *state = KlassInitState::Failed(reason.into());
             }
         }
     }
@@ -65,24 +65,24 @@ impl<'exec, 'meta: 'exec> JavaFrame<'exec, 'meta> for InitializationFrame<'exec,
                 Phase::Claim => {
                     let mut state = self.klass.initialization.lock();
                     match &*state {
-                        InitializationState::Initialized => {
+                        KlassInitState::Initialized => {
                             return Ok(EngineExit::InitializationComplete);
                         }
-                        InitializationState::Initializing(owner) if *owner == context.thread_id => {
+                        KlassInitState::Initializing(owner) if *owner == context.thread_id => {
                             return Ok(EngineExit::InitializationComplete);
                         }
-                        InitializationState::Initializing(_) => {
+                        KlassInitState::Initializing(_) => {
                             return Ok(EngineExit::BlockedOnInitialization);
                         }
-                        InitializationState::Failed(reason) => {
+                        KlassInitState::Failed(reason) => {
                             return Err(ExecError::new(ExecErrorKind::InitializationFailed {
                                 owner: self.klass.name().utf8().into(),
                                 reason: reason.clone(),
                             }));
                         }
-                        InitializationState::Uninitialized => {}
+                        KlassInitState::Uninitialized => {}
                     }
-                    *state = InitializationState::Initializing(context.thread_id);
+                    *state = KlassInitState::Initializing(context.thread_id);
                     self.owner = Some(context.thread_id);
                     self.phase = Phase::Constants;
                 }
@@ -114,7 +114,7 @@ impl<'exec, 'meta: 'exec> JavaFrame<'exec, 'meta> for InitializationFrame<'exec,
                     }
                 }
                 Phase::Complete => {
-                    *self.klass.initialization.lock() = InitializationState::Initialized;
+                    *self.klass.initialization.lock() = KlassInitState::Initialized;
                     self.owner = None;
                     return Ok(EngineExit::InitializationComplete);
                 }

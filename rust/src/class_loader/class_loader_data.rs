@@ -19,6 +19,13 @@ use crate::{
 #[derive(Debug)]
 struct KlassPtr(usize);
 
+
+
+#[derive(Debug)]
+struct KlassSlot {
+    klass_ptr: KlassPtr,
+}
+
 #[derive(Debug)]
 pub struct ClassLoaderData {
     name: Option<String>,
