@@ -45,7 +45,7 @@ impl JavaThreadId {
     }
 }
 
-pub enum JavaThreadState {
+enum JavaThreadState {
     New,
     Runnable,
     Terminated,
